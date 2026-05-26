@@ -1,8 +1,9 @@
-const CACHE_NAME = 'clickaclick-v1'
+const CACHE_NAME = 'clickaclick-v3'
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/favicon.svg',
 ]
 
 self.addEventListener('install', event => {
@@ -24,19 +25,22 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return
   const url = new URL(event.request.url)
-  // Skip external requests and Supabase
+  // Skip external requests (Supabase, Google APIs, etc.)
   if (url.origin !== self.location.origin) return
 
   event.respondWith(
     caches.match(event.request).then(cached => {
-      const network = fetch(event.request).then(response => {
-        if (response.ok) {
+      const networkFetch = fetch(event.request).then(response => {
+        if (response && response.ok) {
           const clone = response.clone()
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone))
         }
         return response
-      }).catch(() => cached)
-      return cached || network
+      }).catch(() => {
+        if (cached) return cached
+        return new Response('Network unavailable', { status: 503, statusText: 'Service Unavailable' })
+      })
+      return cached || networkFetch
     })
   )
 })
