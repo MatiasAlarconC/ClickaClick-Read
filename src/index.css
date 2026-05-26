@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --bg: #FFFFFF;
+  --bg-secondary: #F5F5F3;
+  --bg-elevated: #FFFFFF;
+  --fg: #0A0A0A;
+  --fg-dim: #1A1A1A;
+  --muted: #888888;
+  --border: #E8E8E6;
+  --accent: #0A0A0A;
+  --accent-fg: #FFFFFF;
+  --blob-fill: #E8E8E6;
+  --card-bg: #F5F5F3;
+}
+
+.dark {
+  --bg: #0A0A0A;
+  --bg-secondary: #141414;
+  --bg-elevated: #1E1E1E;
+  --fg: #FFFFFF;
+  --fg-dim: rgba(255,255,255,0.85);
+  --muted: #888888;
+  --border: #2A2A2A;
+  --accent: #FFFFFF;
+  --accent-fg: #0A0A0A;
+  --blob-fill: #1A1A1A;
+  --card-bg: #141414;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, 'SF Pro', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: var(--bg);
+  color: var(--fg);
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+::-webkit-scrollbar { display: none; }
+* { scrollbar-width: none; -ms-overflow-style: none; }
+
+input, textarea, button, select {
+  font-family: inherit;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+input::placeholder, textarea::placeholder { color: var(--muted); }
+input:focus, textarea:focus { outline: none; }
+button { -webkit-tap-highlight-color: transparent; cursor: pointer; }
+
+.serif { font-family: Georgia, "Times New Roman", serif; }
+.mono  { font-family: "SF Mono", "Courier New", monospace; }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes float { 0%,100% { transform: translateY(0px); } 50% { transform: translateY(-8px); } }
