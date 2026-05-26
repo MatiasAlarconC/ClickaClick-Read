@@ -57,7 +57,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signUp(email: string, password: string, username: string) {
-    const { data, error } = await supabase.auth.signUp({ email, password })
+    const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: appUrl },
+    })
     if (error) return { error: error.message }
     if (data.user) {
       await supabase.from('profiles').insert({
