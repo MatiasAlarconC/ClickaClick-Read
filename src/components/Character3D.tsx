@@ -4,10 +4,11 @@
  * • Colorises gray Meshy-draft geometry with per-character PBR materials
  * • Drag / swipe to orbit (OrbitControls, no zoom, no pan)
  * • Tap / click triggers a character-specific bounce animation
+ * • Locked characters show greyed-out model (not sphere)
  * • Graceful SVG-ball fallback when the GLB is missing
  */
 
-import { Suspense, useRef, useEffect, useState, Component, type ReactNode } from 'react'
+import { Suspense, useRef, useEffect, useMemo, useState, Component, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, Environment, ContactShadows, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
@@ -22,7 +23,7 @@ const MODEL_PATH: Record<CharacterId, string> = {
   knight:  '/models/knight.glb',
   cosmic:  '/models/cosmic.glb',
   phoenix: '/models/phoenix.glb',
-  shadow:  '/models/shadow.glb',
+  shadow:  '/models/void.glb',  // file was saved as void.glb
 }
 
 const CHARACTER_COLOR: Record<CharacterId, string> = {
@@ -48,11 +49,13 @@ const CHARACTER_SECONDARY: Record<CharacterId, string> = {
 }
 
 // ─── Fit loaded GLB into a normalised ±1 bounding box ─────────────────────────
+// Uses useFrame so it retries every frame until geometry is ready (fixes timing issues)
 function FitToBox({ children }: { children: ReactNode }) {
   const ref = useRef<THREE.Group>(null!)
+  const fitted = useRef(false)
 
-  useEffect(() => {
-    if (!ref.current) return
+  useFrame(() => {
+    if (fitted.current || !ref.current) return
     const box = new THREE.Box3().setFromObject(ref.current)
     const size = new THREE.Vector3(); box.getSize(size)
     const maxDim = Math.max(size.x, size.y, size.z)
@@ -62,23 +65,38 @@ function FitToBox({ children }: { children: ReactNode }) {
       const box2 = new THREE.Box3().setFromObject(ref.current)
       const center = new THREE.Vector3(); box2.getCenter(center)
       ref.current.position.sub(center)
+      fitted.current = true
     }
-  }, [])
+  })
 
   return <group ref={ref}>{children}</group>
 }
 
 // ─── GLB model — colorised ─────────────────────────────────────────────────────
-function CharacterModel({ id }: { id: CharacterId }) {
+function CharacterModel({ id, primaryColor, locked }: { id: CharacterId; primaryColor?: string; locked?: boolean }) {
   const { scene } = useGLTF(MODEL_PATH[id])
-  const cloned = useRef(scene.clone(true))
+  const cloned = useMemo(() => scene.clone(true), [scene])
 
   useEffect(() => {
-    const primary   = new THREE.Color(CHARACTER_COLOR[id])
+    if (locked) {
+      // Show greyed-out model for locked characters (not a sphere)
+      cloned.traverse(node => {
+        if ((node as THREE.Mesh).isMesh) {
+          const mesh = node as THREE.Mesh
+          mesh.castShadow = false
+          mesh.material = new THREE.MeshStandardMaterial({
+            color: '#555555', roughness: 0.9, metalness: 0.0,
+          })
+        }
+      })
+      return
+    }
+
+    const primary   = new THREE.Color(primaryColor ?? CHARACTER_COLOR[id])
     const secondary = new THREE.Color(CHARACTER_SECONDARY[id])
 
     const meshes: { mesh: THREE.Mesh; centerY: number }[] = []
-    cloned.current.traverse(node => {
+    cloned.traverse(node => {
       if ((node as THREE.Mesh).isMesh) {
         const mesh = node as THREE.Mesh
         mesh.castShadow = true; mesh.receiveShadow = true
@@ -113,9 +131,9 @@ function CharacterModel({ id }: { id: CharacterId }) {
                   : 0.04,
       })
     })
-  }, [id])
+  }, [id, primaryColor, locked, cloned])
 
-  return <FitToBox><primitive object={cloned.current} /></FitToBox>
+  return <FitToBox><primitive object={cloned} /></FitToBox>
 }
 
 // Pre-warm GLTF cache
@@ -169,17 +187,17 @@ const ANIM_PROFILE: Record<CharacterId, { height: number; spins: number; squash:
 }
 
 function AnimGroup({
-  id, locked, tapped, children,
+  id, locked, tapCount, children,
 }: {
-  id: CharacterId; locked?: boolean; tapped: boolean; children: ReactNode
+  id: CharacterId; locked?: boolean; tapCount: number; children: ReactNode
 }) {
   const ref = useRef<THREE.Group>(null!)
   const anim = useRef({ active: false, t: 0 })
   const { height, spins, squash } = ANIM_PROFILE[id]
 
   useEffect(() => {
-    if (tapped && !locked) anim.current = { active: true, t: 0 }
-  }, [tapped, locked])
+    if (tapCount > 0 && !locked) anim.current = { active: true, t: 0 }
+  }, [tapCount, locked])
 
   useFrame((_, dt) => {
     if (!ref.current || !anim.current.active) return
@@ -201,24 +219,35 @@ function AnimGroup({
   return <group ref={ref}>{children}</group>
 }
 
+// ─── Auto-rotate group for thumbnail mode ────────────────────────────────────
+function AutoRotateGroup({ locked, children }: { locked?: boolean; children: ReactNode }) {
+  const ref = useRef<THREE.Group>(null!)
+  useFrame((_, dt) => { if (ref.current && !locked) ref.current.rotation.y += dt * 0.45 })
+  return <group ref={ref}>{children}</group>
+}
+
 // ─── Full scene ───────────────────────────────────────────────────────────────
-function CharacterScene({ id, locked, interactive }: { id: CharacterId; locked?: boolean; interactive?: boolean }) {
+function CharacterScene({
+  id, locked, interactive, tapCount, primaryColor,
+}: {
+  id: CharacterId; locked?: boolean; interactive?: boolean; tapCount: number; primaryColor?: string
+}) {
   const { gl } = useThree()
-  const [tapped, setTapped] = useState(false)
-  const pointerDown = useRef<number | null>(null)
 
   useEffect(() => {
     gl.shadowMap.enabled = true
     gl.shadowMap.type = THREE.PCFSoftShadowMap
   }, [gl])
 
-  const onPointerDown = () => { pointerDown.current = Date.now() }
-  const onPointerUp   = () => {
-    if (pointerDown.current && Date.now() - pointerDown.current < 220) {
-      setTapped(t => !t) // toggle triggers useEffect in AnimGroup
-    }
-    pointerDown.current = null
-  }
+  const modelContent = (
+    <AnimGroup id={id} locked={locked} tapCount={tapCount}>
+      <ModelErrorBoundary id={id} locked={locked}>
+        <Suspense fallback={<Placeholder id={id} locked={locked} />}>
+          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} />
+        </Suspense>
+      </ModelErrorBoundary>
+    </AnimGroup>
+  )
 
   return (
     <>
@@ -241,37 +270,10 @@ function CharacterScene({ id, locked, interactive }: { id: CharacterId; locked?:
         />
       )}
 
-      {!interactive && !locked && (() => {
-        // Simple auto-rotate when not interactive (thumbnail mode)
-        function AutoRotate() {
-          const ref = useRef<THREE.Group>(null!)
-          useFrame((_, dt) => { ref.current && (ref.current.rotation.y += dt * 0.45) })
-          return (
-            <group ref={ref} onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
-              <AnimGroup id={id} locked={locked} tapped={tapped}>
-                <ModelErrorBoundary id={id} locked={locked}>
-                  <Suspense fallback={<Placeholder id={id} locked={locked} />}>
-                    <CharacterModel id={id} />
-                  </Suspense>
-                </ModelErrorBoundary>
-              </AnimGroup>
-            </group>
-          )
-        }
-        return <AutoRotate />
-      })()}
-
-      {(interactive || locked) && (
-        <group onPointerDown={onPointerDown} onPointerUp={onPointerUp}>
-          <AnimGroup id={id} locked={locked} tapped={tapped}>
-            <ModelErrorBoundary id={id} locked={locked}>
-              <Suspense fallback={<Placeholder id={id} locked={locked} />}>
-                {locked ? <Placeholder id={id} locked /> : <CharacterModel id={id} />}
-              </Suspense>
-            </ModelErrorBoundary>
-          </AnimGroup>
-        </group>
-      )}
+      {interactive
+        ? <group>{modelContent}</group>
+        : <AutoRotateGroup locked={locked}>{modelContent}</AutoRotateGroup>
+      }
 
       {!locked && (
         <ContactShadows position={[0, -1.2, 0]} opacity={0.3} scale={3} blur={2.5} far={2} />
@@ -289,27 +291,43 @@ interface Character3DProps {
   size?: number
   /** Enable drag-to-rotate and tap animation (default true for large views) */
   interactive?: boolean
-  /** Ignored — GLB carries its own geometry; colours applied in code */
   primaryColor?: string
   secondaryColor?: string
 }
 
 export default function Character3D({
-  characterId, character, locked, size = 160, interactive,
+  characterId, character, locked, size = 160, interactive, primaryColor,
 }: Character3DProps) {
   const id: CharacterId = characterId ?? character ?? 'lion'
-  // Default interactive=true for large sizes, false for thumbnails
   const isInteractive = interactive ?? size >= 120
 
+  // Tap detection on the outer div — avoids OrbitControls pointer event conflict
+  const tapStart = useRef<number | null>(null)
+  const [tapCount, setTapCount] = useState(0)
+
+  const handlePointerDown = () => { tapStart.current = Date.now() }
+  const handlePointerUp = () => {
+    if (tapStart.current && Date.now() - tapStart.current < 220 && !locked) {
+      setTapCount(c => c + 1)
+    }
+    tapStart.current = null
+  }
+
   return (
-    <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden',
-      cursor: isInteractive && !locked ? 'grab' : 'default' }}>
+    <div
+      style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden',
+        cursor: isInteractive && !locked ? 'grab' : 'default' }}
+      onMouseDown={handlePointerDown}
+      onMouseUp={handlePointerUp}
+      onTouchStart={handlePointerDown}
+      onTouchEnd={handlePointerUp}
+    >
       <Canvas
         gl={{ antialias: true, alpha: true, outputColorSpace: THREE.SRGBColorSpace }}
         camera={{ position: [0, 0.1, 3.2], fov: 42 }}
         style={{ width: '100%', height: '100%' }}
       >
-        <CharacterScene id={id} locked={locked} interactive={isInteractive} />
+        <CharacterScene id={id} locked={locked} interactive={isInteractive} tapCount={tapCount} primaryColor={primaryColor} />
       </Canvas>
     </div>
   )

@@ -30,6 +30,7 @@ export default function BookDetailScreen() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState(false)
   const [customPages, setCustomPages] = useState<string>('')
+  const [pagesSaved, setPagesSaved] = useState(false)
   const [bookDbId, setBookDbId] = useState<string | null>(null)
   // synopsis may come from nav state OR the DB books record — prefer DB
   const [synopsis, setSynopsis] = useState<string | null>(book?.synopsis ?? null)
@@ -40,10 +41,13 @@ export default function BookDetailScreen() {
     const externalId = book.google_books_id ?? book.id
 
     // First find the book's UUID in the DB, then load user data
-    supabase.from('books').select('id')
+    supabase.from('books').select('id, synopsis')
       .eq('google_books_id', externalId)
       .maybeSingle()
       .then(({ data: bookRow }) => {
+        // Update synopsis from DB book record if available
+        if (bookRow?.synopsis) setSynopsis(bookRow.synopsis)
+
         if (!bookRow) return
         const dbId = bookRow.id
         setBookDbId(dbId)
@@ -77,6 +81,18 @@ export default function BookDetailScreen() {
           .order('started_at', { ascending: false })
           .then(({ data }) => { if (data) setSessions(data as ReadingSession[]) })
       })
+
+    // Fetch synopsis from Google Books if not already available
+    const googleId = book.google_books_id ?? book.id
+    if (!book.synopsis && googleId && !googleId.startsWith('OL')) {
+      fetch(`https://www.googleapis.com/books/v1/volumes/${googleId}`)
+        .then(r => r.json())
+        .then(data => {
+          const desc = data.volumeInfo?.description
+          if (desc) setSynopsis(desc)
+        })
+        .catch(() => { /* ignore — synopsis just stays null */ })
+    }
   }, [user, book])
 
   const ensureBookInDb = async (): Promise<string | null> => {
@@ -172,6 +188,8 @@ export default function BookDetailScreen() {
     if (!userBook) return
     const pages = customPages ? parseInt(customPages) : null
     await supabase.from('user_books').update({ custom_pages: pages }).eq('id', userBook.id)
+    setPagesSaved(true)
+    setTimeout(() => setPagesSaved(false), 2000)
   }
 
   const fetchAiSummary = async () => {
@@ -238,21 +256,33 @@ export default function BookDetailScreen() {
           {statusLabel ? (
             <div style={{ padding: '8px 14px', background: theme.bgSecondary, borderRadius: 10, fontSize: 13, color: theme.fg, fontWeight: 500 }}>{statusLabel}</div>
           ) : null}
-          {!userBook || userBook.status !== 'reading' ? (
-            <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
-              {addingToLib ? '…' : '📖 Start Reading'}
-            </button>
-          ) : null}
-          {!userBook || userBook.status !== 'want_to_read' ? (
-            <button onClick={() => addToLibrary('want_to_read')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
-              🔖 Want to Read
-            </button>
-          ) : null}
-          {userBook?.status === 'reading' ? (
+          {/* Only show add-to-library buttons when book is NOT already in library */}
+          {!userBook && (
+            <>
+              <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
+                {addingToLib ? '…' : '📖 Start Reading'}
+              </button>
+              <button onClick={() => addToLibrary('want_to_read')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
+                🔖 Want to Read
+              </button>
+            </>
+          )}
+          {/* Book is in library — show contextual actions */}
+          {userBook?.status === 'reading' && (
             <button onClick={() => navigate('/session', { state: { book: userBook } })} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
               ▶ Start Session
             </button>
-          ) : null}
+          )}
+          {userBook?.status === 'want_to_read' && (
+            <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
+              {addingToLib ? '…' : '📖 Start Reading'}
+            </button>
+          )}
+          {userBook?.status === 'reading' && (
+            <button onClick={() => addToLibrary('finished')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
+              {addingToLib ? '…' : '✅ Mark Finished'}
+            </button>
+          )}
         </div>
 
         {/* Tabs */}
@@ -319,7 +349,10 @@ export default function BookDetailScreen() {
               <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 0', borderBottom: i < arr.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
                 <span style={{ fontSize: 14, color: theme.muted }}>{row.label}</span>
                 {row.editable && row.label === 'Pages' ? (
-                  <input value={customPages} onChange={e => setCustomPages(e.target.value)} onBlur={saveCustomPages} style={{ textAlign: 'right', background: 'none', border: 'none', fontSize: 14, color: theme.fg, fontWeight: 500, width: 80 }} placeholder={row.value} />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input value={customPages} onChange={e => { setCustomPages(e.target.value); setPagesSaved(false) }} onBlur={saveCustomPages} style={{ textAlign: 'right', background: 'none', border: 'none', fontSize: 14, color: theme.fg, fontWeight: 500, width: 80 }} placeholder={row.value} />
+                    {pagesSaved && <span style={{ fontSize: 11, color: '#22C55E' }}>✓ Saved</span>}
+                  </div>
                 ) : (
                   <span style={{ fontSize: 14, color: theme.fg, fontWeight: 500 }}>{row.value}</span>
                 )}

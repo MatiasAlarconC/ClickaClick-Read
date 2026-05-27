@@ -26,7 +26,7 @@ async function getConfig(): Promise<GeminiConfig> {
 
     configCache = {
       enabled: map['gemini_enabled'] !== 'false',
-      model: map['gemini_model'] ?? 'gemini-1.5-flash',
+      model: map['gemini_model'] ?? 'gemini-2.0-flash',
       summary_enabled: map['gemini_summary_enabled'] !== 'false',
       recommendations_enabled: map['gemini_recommendations_enabled'] !== 'false',
       wrapped_enabled: map['gemini_wrapped_enabled'] !== 'false',
@@ -34,7 +34,7 @@ async function getConfig(): Promise<GeminiConfig> {
     }
   } catch {
     configCache = {
-      enabled: true, model: 'gemini-1.5-flash',
+      enabled: true, model: 'gemini-2.0-flash',
       summary_enabled: true, recommendations_enabled: true,
       wrapped_enabled: true, monthly_token_budget: 500000,
     }
@@ -45,20 +45,35 @@ async function getConfig(): Promise<GeminiConfig> {
 
 async function callGemini(prompt: string, model: string): Promise<{ text: string; tokens: number }> {
   if (!GEMINI_API_KEY) throw new Error('No Gemini API key')
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
-    }),
-  })
-  if (!res.ok) throw new Error(`Gemini ${res.status}`)
-  const data = await res.json()
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-  const tokens = data.usageMetadata?.totalTokenCount ?? 0
-  return { text, tokens }
+
+  // If the configured model is deprecated (404/400), retry with gemini-2.0-flash
+  const candidates = [model, 'gemini-2.0-flash'].filter((m, i, a) => a.indexOf(m) === i)
+
+  let lastError: Error = new Error('Gemini unreachable')
+  for (const m of candidates) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${GEMINI_API_KEY}`
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: 1024, temperature: 0.7 },
+      }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      const tokens = data.usageMetadata?.totalTokenCount ?? 0
+      return { text, tokens }
+    }
+    if (res.status === 429 || res.status >= 500) {
+      // Rate-limited or server error — no point retrying with different model
+      throw new Error(`Gemini ${res.status}`)
+    }
+    // 404 / 400 likely means deprecated model — try next candidate
+    lastError = new Error(`Gemini ${res.status}`)
+  }
+  throw lastError
 }
 
 async function logUsage(feature: string, tokens: number, model: string, userId: string | null) {

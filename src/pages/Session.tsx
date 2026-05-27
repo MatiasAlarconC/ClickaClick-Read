@@ -142,20 +142,26 @@ export default function SessionScreen() {
     return `${hh}:${mm}:${ss}`
   }
 
-  // ─── Music toggle ──────────────────────────────────────────────────────────
+  // ─── Music play / pause ───────────────────────────────────────────────────
 
   const toggleMusic = async () => {
-    if (musicOn) {
-      if (audioRef.current) {
+    if (musicLoading) return
+
+    // If track is already loaded, just toggle play / pause (no re-fetch)
+    if (audioRef.current) {
+      if (musicOn) {
         audioRef.current.pause()
-        audioRef.current.src = ''
-        audioRef.current = null
+        setMusicOn(false)
+      } else {
+        try {
+          await audioRef.current.play()
+          setMusicOn(true)
+        } catch { /* blocked — user needs to interact again */ }
       }
-      setMusicOn(false)
-      setMusicTrackName(null)
       return
     }
 
+    // First time: fetch track and start
     setMusicLoading(true)
     const tag = genreToMusicTag(userBook?.book?.genres ?? undefined)
     let track = await fetchJamendoTrack(tag)
@@ -165,13 +171,14 @@ export default function SessionScreen() {
       const audio = new Audio(track.url)
       audio.loop = true
       audio.volume = 0.4
+      audioRef.current = audio
+      setMusicTrackName(track.name)
       try {
         await audio.play()
-        audioRef.current = audio
         setMusicOn(true)
-        setMusicTrackName(track.name)
       } catch {
-        /* autoplay blocked or other error — silent */
+        // Autoplay was blocked — track is loaded, user can tap again to play
+        setMusicOn(false)
       }
     }
     setMusicLoading(false)
@@ -276,16 +283,19 @@ export default function SessionScreen() {
         {/* Music button */}
         <button
           onClick={toggleMusic}
-          title={musicOn ? 'Stop music' : 'Start reading music'}
+          title={musicOn ? 'Pause music' : musicTrackName ? 'Resume music' : 'Start reading music'}
           style={{ width: 34, height: 34, borderRadius: '50%', background: musicOn ? fg : (dark ? '#1E1E1E' : '#F5F5F3'), border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
         >
           {musicLoading
             ? <Spinner color={musicOn ? bg : muted} />
             : musicOn
-              ? /* speaker ON */
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 9v6h4l5 5V4L7 9H3z" fill={bg}/><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill={bg}/><path d="M19.5 12c0 3.04-1.73 5.67-4.25 7l1.26 1.74C19.44 18.87 21.5 15.68 21.5 12s-2.06-6.87-5-8.74L15.25 5C17.77 6.33 19.5 8.96 19.5 12z" fill={bg}/></svg>
-              : /* speaker OFF / note icon */
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={fg} strokeWidth="1.5"/><circle cx="18" cy="16" r="3" stroke={fg} strokeWidth="1.5"/></svg>
+              ? /* pause icon */
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="4" height="18" rx="1" fill={bg}/><rect x="15" y="3" width="4" height="18" rx="1" fill={bg}/></svg>
+              : musicTrackName
+                ? /* play icon (resume) */
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={fg}/></svg>
+                : /* music note (not started) */
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={fg} strokeWidth="1.5"/><circle cx="18" cy="16" r="3" stroke={fg} strokeWidth="1.5"/></svg>
           }
         </button>
       </div>
