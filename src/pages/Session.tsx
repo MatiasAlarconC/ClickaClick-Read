@@ -21,7 +21,11 @@ export default function SessionScreen() {
   const [endPage, setEndPage] = useState('')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
-  const startTime = useRef<Date>(new Date())
+
+  // Time-based timer refs (survive tab switches / browser throttling)
+  const sessionStartTs = useRef<number | null>(null)  // ms timestamp of first play
+  const pausedMs = useRef<number>(0)                   // total ms spent paused
+  const pauseStartTs = useRef<number | null>(null)     // when current pause began
   const wakeLock = useRef<WakeLockSentinel | null>(null)
 
   // WakeLock
@@ -36,11 +40,32 @@ export default function SessionScreen() {
     return () => { wakeLock.current?.release(); wakeLock.current = null }
   }, [playing])
 
-  // Timer
+  // Pause / resume accounting
+  useEffect(() => {
+    if (playing) {
+      if (sessionStartTs.current === null) sessionStartTs.current = Date.now() // first press
+      if (pauseStartTs.current !== null) {
+        pausedMs.current += Date.now() - pauseStartTs.current
+        pauseStartTs.current = null
+      }
+    } else {
+      pauseStartTs.current = Date.now()
+    }
+  }, [playing])
+
+  // Interval — uses Date.now() so it's correct even after tab was in background
   useEffect(() => {
     if (!playing) return
-    const id = setInterval(() => setSecs(s => s + 1), 1000)
-    return () => clearInterval(id)
+    const tick = () => {
+      if (sessionStartTs.current === null) return
+      const activeMs = Date.now() - sessionStartTs.current - pausedMs.current
+      setSecs(Math.max(0, Math.floor(activeMs / 1000)))
+    }
+    const id = setInterval(tick, 500)
+    // Immediate update when user returns to the tab
+    const onVisible = () => { if (!document.hidden) tick() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
   }, [playing])
 
   const fmt = (s: number) => {
@@ -54,24 +79,28 @@ export default function SessionScreen() {
     if (!user || !userBook) { navigate('/home'); return }
     setSaving(true)
 
-    const endedAt = new Date()
-    const pagesRead = endPage ? Math.max(0, parseInt(endPage) - parseInt(startPage)) : 0
+    const now = Date.now()
+    const totalPausedMs = pausedMs.current + (pauseStartTs.current !== null ? now - pauseStartTs.current : 0)
+    const effectiveSecs = sessionStartTs.current
+      ? Math.max(0, Math.floor((now - sessionStartTs.current - totalPausedMs) / 1000))
+      : secs
+
+    const resolvedEndPage = endPage || page  // fall back to current page if user didn't type
+    const pagesRead = Math.max(0, parseInt(resolvedEndPage) - parseInt(startPage))
 
     await supabase.from('reading_sessions').insert({
       user_id: user.id,
       book_id: userBook.book_id,
-      started_at: startTime.current.toISOString(),
-      ended_at: endedAt.toISOString(),
-      duration_seconds: secs,
+      started_at: sessionStartTs.current ? new Date(sessionStartTs.current).toISOString() : new Date().toISOString(),
+      ended_at: new Date(now).toISOString(),
+      duration_seconds: effectiveSecs,
       start_page: parseInt(startPage),
-      end_page: endPage ? parseInt(endPage) : null,
+      end_page: parseInt(resolvedEndPage),
       pages_read: pagesRead,
     })
 
     // Update current page so Library shows real progress
-    if (endPage) {
-      await supabase.from('user_books').update({ current_page: parseInt(endPage) }).eq('id', userBook.id)
-    }
+    await supabase.from('user_books').update({ current_page: parseInt(resolvedEndPage) }).eq('id', userBook.id)
 
     // Save note if provided
     if (note.trim() && endPage) {
@@ -94,7 +123,7 @@ export default function SessionScreen() {
     <div style={{ minHeight: '100%', background: bg, display: 'flex', flexDirection: 'column', padding: '64px 28px 40px' }}>
       {/* Top bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 36 }}>
-        <button onClick={() => { setPlaying(false); setShowEndModal(true) }} style={{ width: 34, height: 34, borderRadius: '50%', background: dark ? '#1E1E1E' : '#F5F5F3', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <button onClick={() => { setPlaying(false); setEndPage(page); setShowEndModal(true) }} style={{ width: 34, height: 34, borderRadius: '50%', background: dark ? '#1E1E1E' : '#F5F5F3', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1L11 11M11 1L1 11" stroke={fg} strokeWidth="1.5" strokeLinecap="round"/></svg>
         </button>
         <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.2, textTransform: 'uppercase', color: muted }}>Focus Mode</span>
@@ -133,7 +162,7 @@ export default function SessionScreen() {
             : <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M7 4.5L18 11L7 17.5V4.5Z" fill={bg}/></svg>
           }
         </button>
-        <button onClick={() => { setPlaying(false); setShowEndModal(true) }} style={{ background: 'none', border: 'none', fontSize: 13, color: muted, letterSpacing: 0.2 }}>End Session</button>
+        <button onClick={() => { setPlaying(false); setEndPage(page); setShowEndModal(true) }} style={{ background: 'none', border: 'none', fontSize: 13, color: muted, letterSpacing: 0.2 }}>End Session</button>
       </div>
 
       {/* End session modal */}

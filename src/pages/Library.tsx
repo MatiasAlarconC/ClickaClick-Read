@@ -156,7 +156,7 @@ function SwipeableBookRow({ book, index, total, tab, theme, onPress, onDelete, o
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                 <button
                   onClick={e => { e.stopPropagation(); setEditingPage(true) }}
-                  style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, color: theme.muted, cursor: 'pointer', textAlign: 'left' }}>
+                  style={{ background: theme.bgSecondary, border: `1px solid ${theme.border}`, padding: '3px 9px', borderRadius: 8, fontSize: 11, color: theme.fg, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
                   {editingPage ? (
                     <input
                       autoFocus
@@ -166,10 +166,13 @@ function SwipeableBookRow({ book, index, total, tab, theme, onPress, onDelete, o
                       onKeyDown={e => e.key === 'Enter' && saveCurrentPage()}
                       onClick={e => e.stopPropagation()}
                       type="number"
-                      style={{ width: 52, padding: '2px 6px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 6, fontSize: 11, color: theme.fg }}
+                      style={{ width: 52, padding: '2px 4px', background: 'none', border: 'none', fontSize: 11, color: theme.fg, outline: 'none' }}
                     />
                   ) : (
-                    <span>p. {book.current_page ?? '?'} of {totalPages || '?'} ✎</span>
+                    <>
+                      <span>p. {book.current_page ?? '?'} of {totalPages || '?'}</span>
+                      <span style={{ fontSize: 10, color: theme.muted }}>✎</span>
+                    </>
                   )}
                 </button>
                 <span style={{ fontSize: 11, color: theme.fg, fontWeight: 600 }}>{Math.round(progress * 100)}%</span>
