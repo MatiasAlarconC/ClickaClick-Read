@@ -4,7 +4,10 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { TabBar } from '../components/UI'
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
-import { AvatarCharacter, CHARACTERS, type CharacterId } from '../components/AvatarCharacter'
+import { CHARACTERS, type CharacterId } from '../components/AvatarCharacter'
+import Character3D from '../components/Character3D'
+import { getUnlockedCharacters } from '../data/achievements'
+import type { AchievementStats } from '../data/achievements'
 import AvatarCreator from '../components/AvatarCreator'
 import { FlameIcon, BookOpenIcon, ClockIcon, LightningIcon, MoonIcon, SunIcon } from '../components/Icons'
 import type { AvatarConfig } from '../types'
@@ -32,16 +35,20 @@ export default function ProfileScreen() {
 
   // ── Profile stats ──────────────────────────────────────────────────────────
   const [profileStats, setProfileStats] = useState({ booksFinished: 0, pagesRead: 0, hours: 0, streak: 0 })
+  const [achievementStats, setAchievementStats] = useState<AchievementStats | null>(null)
 
   useEffect(() => {
     if (!user) return
     const startOfYear = new Date(new Date().getFullYear(), 0, 1).toISOString()
     Promise.all([
-      supabase.from('user_books').select('status').eq('user_id', user.id),
-      supabase.from('reading_sessions').select('pages_read, duration_seconds, started_at').eq('user_id', user.id).gte('started_at', startOfYear),
-    ]).then(([booksRes, sessRes]) => {
+      supabase.from('user_books').select('status, book:books(genres)').eq('user_id', user.id),
+      supabase.from('reading_sessions').select('pages_read, duration_seconds, started_at, is_manual').eq('user_id', user.id).gte('started_at', startOfYear),
+      supabase.from('reading_sessions').select('pages_read, duration_seconds, started_at, is_manual').eq('user_id', user.id),
+      supabase.from('book_notes').select('id').eq('user_id', user.id),
+    ]).then(([booksRes, sessYearRes, allSessRes, notesRes]) => {
       const booksFinished = (booksRes.data ?? []).filter((b: any) => b.status === 'finished').length
-      const sessions = sessRes.data ?? []
+      const sessions = sessYearRes.data ?? []
+      const allSessions = (allSessRes.data ?? []).filter((s: any) => !s.is_manual)
       const pagesRead = sessions.reduce((s: number, r: any) => s + (r.pages_read ?? 0), 0)
       const totalSeconds = sessions.reduce((s: number, r: any) => s + (r.duration_seconds ?? 0), 0)
       const hours = Math.round(totalSeconds / 3600)
@@ -54,6 +61,22 @@ export default function ProfileScreen() {
         else if (i > 0) break
       }
       setProfileStats({ booksFinished, pagesRead, hours, streak })
+
+      // Build achievement stats for unlocked characters
+      const genreCounts: Record<string, number> = {}
+      for (const ub of (booksRes.data ?? []) as any[]) {
+        for (const g of ub.book?.genres ?? []) genreCounts[g] = (genreCounts[g] ?? 0) + 1
+      }
+      setAchievementStats({
+        booksFinished,
+        totalBooks: (booksRes.data ?? []).length,
+        totalPages: allSessions.reduce((s: number, r: any) => s + (r.pages_read ?? 0), 0),
+        totalHours: allSessions.reduce((s: number, r: any) => s + ((r.duration_seconds ?? 0) / 3600), 0),
+        streak,
+        genreCounts,
+        sessionCount: allSessions.length,
+        notesCount: (notesRes.data ?? []).length,
+      })
     })
   }, [user])
 
@@ -93,7 +116,9 @@ export default function ProfileScreen() {
     navigate('/')
   }
 
+  const unlockedCharacters = achievementStats ? getUnlockedCharacters(achievementStats) : undefined
   const memberYear = user?.created_at ? new Date(user.created_at).getFullYear() : null
+  const profileTitle: string | null = (profile as any)?.title ?? null
   const heroStats = [
     { icon: <BookOpenIcon size={14} color={primaryColor}/>, label: 'Books', value: String(profileStats.booksFinished) },
     { icon: <FlameIcon size={14} color={primaryColor}/>, label: 'Streak', value: `${profileStats.streak}d` },
@@ -110,13 +135,16 @@ export default function ProfileScreen() {
 
         <div style={{ textAlign: 'center', marginBottom: 8, zIndex: 1 }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, color: theme.fg, letterSpacing: -0.5 }}>{profile?.username ?? 'Reader'}</div>
+          {profileTitle && (
+            <div style={{ fontSize: 12, color: '#FFD700', fontWeight: 600, marginTop: 2 }}>{profileTitle}</div>
+          )}
           <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{charDef.description}{memberYear ? ` · since ${memberYear}` : ''}</div>
         </div>
 
         {/* Character — tap to customize */}
         <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
           style={{ zIndex: 1, cursor: 'pointer', position: 'relative' }} onClick={() => setShowCreator(true)}>
-          <AvatarCharacter character={char} primaryColor={primaryColor} secondaryColor={secondaryColor} size={180}/>
+          <Character3D character={char} primaryColor={primaryColor} secondaryColor={secondaryColor} size={180}/>
           <div style={{ position: 'absolute', bottom: 8, right: -8, background: primaryColor, color: '#FFF', fontSize: 10, fontWeight: 600, padding: '4px 9px', borderRadius: 999, boxShadow: `0 2px 10px ${primaryColor}60` }}>Customize ✶</div>
         </motion.div>
 
@@ -147,6 +175,17 @@ export default function ProfileScreen() {
 
       {/* ── Settings ─────────────────────────────────────────────────────── */}
       <div style={{ flex: 1, padding: '0 22px', paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
+        {/* Achievements entry */}
+        <button onClick={() => navigate('/achievements')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '14px 16px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 20, cursor: 'pointer' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 20 }}>🏆</span>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: theme.fg }}>Achievements</div>
+              <div style={{ fontSize: 11, color: theme.muted }}>Medals, titles & unlockable characters</div>
+            </div>
+          </div>
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1L6 6L1 11" stroke={theme.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
         <div style={{ height: 1, background: theme.border, marginBottom: 24 }}/>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -198,7 +237,8 @@ export default function ProfileScreen() {
       <AnimatePresence>
         {showCreator && (
           <AvatarCreator onClose={() => setShowCreator(false)} onSave={handleSaveAvatar}
-            initialCharacter={char} initialPrimary={primaryColor} initialSecondary={secondaryColor} theme={theme}/>
+            initialCharacter={char} initialPrimary={primaryColor} initialSecondary={secondaryColor} theme={theme}
+            unlockedCharacters={unlockedCharacters}/>
         )}
       </AnimatePresence>
 

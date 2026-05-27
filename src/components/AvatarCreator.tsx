@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { AvatarCharacter, CHARACTERS, type CharacterId } from './AvatarCharacter'
+import { CHARACTERS, type CharacterId } from './AvatarCharacter'
+import Character3D from './Character3D'
 import type { Theme } from '../types'
 
 // ─── Color palettes per character class ───────────────────────────────────────
@@ -20,15 +21,19 @@ interface AvatarCreatorProps {
   initialPrimary?: string
   initialSecondary?: string
   theme: Theme
+  unlockedCharacters?: Set<CharacterId>
 }
 
-export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lion', initialPrimary, initialSecondary, theme }: AvatarCreatorProps) {
+export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lion', initialPrimary, initialSecondary, theme, unlockedCharacters }: AvatarCreatorProps) {
   const [selected, setSelected] = useState<CharacterId>(initialCharacter)
   const def = CHARACTERS.find(c => c.id === selected)!
   const [primary, setPrimary] = useState(initialPrimary ?? def.defaultPrimary)
   const [secondary, setSecondary] = useState(initialSecondary ?? def.defaultSecondary)
 
+  const isUnlocked = (id: CharacterId) => !unlockedCharacters || unlockedCharacters.has(id)
+
   const handleSelectCharacter = (id: CharacterId) => {
+    if (!isUnlocked(id)) return
     const d = CHARACTERS.find(c => c.id === id)!
     setSelected(id)
     setPrimary(d.defaultPrimary)
@@ -71,7 +76,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
           {/* Live preview */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0 8px', gap: 6 }}>
             <motion.div key={selected} initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', damping: 20 }}>
-              <AvatarCharacter character={selected} primaryColor={primary} secondaryColor={secondary} size={140}/>
+              <Character3D character={selected} primaryColor={primary} secondaryColor={secondary} size={140}/>
             </motion.div>
             <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.fg }}>{def.name}</div>
             <div style={{ fontSize: 12, color: theme.muted }}>{def.description}</div>
@@ -81,13 +86,17 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
           <div style={{ padding: '8px 16px 12px' }}>
             <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10 }}>Choose your character</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              {CHARACTERS.map(c => (
+              {CHARACTERS.map(c => {
+                const locked = !isUnlocked(c.id)
+                return (
                 <button key={c.id} onClick={() => handleSelectCharacter(c.id)}
-                  style={{ padding: 8, borderRadius: 14, border: `2px solid ${selected === c.id ? primary : theme.border}`, background: selected === c.id ? `${primary}18` : theme.bgSecondary, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 0.2s' }}>
-                  <AvatarCharacter character={c.id} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} size={52}/>
+                  style={{ padding: 8, borderRadius: 14, border: `2px solid ${selected === c.id ? primary : theme.border}`, background: selected === c.id ? `${primary}18` : theme.bgSecondary, cursor: locked ? 'default' : 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 0.2s', opacity: locked ? 0.4 : 1, position: 'relative' }}>
+                  <Character3D character={c.id} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} size={52} locked={locked}/>
                   <span style={{ fontSize: 11, color: selected === c.id ? theme.fg : theme.muted, fontWeight: selected === c.id ? 600 : 400 }}>{c.name}</span>
+                  {locked && <div style={{ position: 'absolute', top: 4, right: 4, fontSize: 10 }}>🔒</div>}
                 </button>
-              ))}
+                )
+              })}
             </div>
           </div>
 

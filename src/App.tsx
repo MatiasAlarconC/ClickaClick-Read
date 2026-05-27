@@ -15,6 +15,7 @@ import StatsScreen from './pages/Stats'
 import ProfileScreen from './pages/Profile'
 import YearInReviewScreen from './pages/YearInReview'
 import AIRecommendationsScreen from './pages/AIRecommendations'
+import AchievementsScreen from './pages/Achievements'
 import AdminPanel from './pages/admin/AdminPanel'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -59,6 +60,7 @@ function AppRoutes() {
         <Route path="/profile" element={<ProtectedRoute><ProfileScreen /></ProtectedRoute>} />
         <Route path="/yearreview" element={<ProtectedRoute><YearInReviewScreen /></ProtectedRoute>} />
         <Route path="/ai" element={<ProtectedRoute><AIRecommendationsScreen /></ProtectedRoute>} />
+        <Route path="/achievements" element={<ProtectedRoute><AchievementsScreen /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
