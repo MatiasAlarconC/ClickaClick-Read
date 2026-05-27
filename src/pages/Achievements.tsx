@@ -9,6 +9,7 @@ import {
 } from '../data/achievements'
 import { CHARACTERS, type CharacterId } from '../components/AvatarCharacter'
 import Medal3D from '../components/Medal3D'
+import MedalIcon from '../components/MedalIcon'
 import Character3D from '../components/Character3D'
 
 // ─── Genre count helper ───────────────────────────────────────────────────────
@@ -205,7 +206,21 @@ export default function AchievementsScreen() {
                         opacity: unlocked ? 1 : 0.55,
                       }}
                     >
-                      <Medal3D tier={ach.tier} locked={!unlocked} size={72} />
+                      {/* Left icon: mini 3D character if this achievement unlocks one, else SVG medal */}
+                      {ach.reward.type === 'character' ? (
+                        <div style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden',
+                          border: `2px solid ${unlocked ? TIER_COLORS[ach.tier] + '60' : theme.border}`,
+                          background: theme.bg }}>
+                          <Character3D
+                            character={(ach.reward as any).characterId}
+                            locked={!unlocked}
+                            size={72}
+                            interactive={false}
+                          />
+                        </div>
+                      ) : (
+                        <MedalIcon tier={ach.tier} locked={!unlocked} size={72} />
+                      )}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{ach.name}</div>
                         <div style={{ fontSize: 12, color: theme.muted, marginTop: 2, lineHeight: 1.5 }}>{ach.description}</div>
