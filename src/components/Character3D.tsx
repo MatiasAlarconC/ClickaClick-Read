@@ -68,34 +68,63 @@ function FitToBox({ children }: { children: React.ReactNode }) {
   return <group ref={ref}>{children}</group>
 }
 
+// Secondary (darker) accent per character — used for details like eyes, claws, etc.
+const CHARACTER_SECONDARY: Record<CharacterId, string> = {
+  lion:   '#7B4F00',
+  mage:   '#2D1B69',
+  fox:    '#7C2D12',
+  owl:    '#042F2E',
+  knight: '#0F172A',
+  cosmic: '#4C0519',
+}
+
 // ─── Actual GLB model ─────────────────────────────────────────────────────────
+// Meshy Draft exports are gray with no texture. We replace every material with
+// a stylised MeshStandardMaterial tinted with the character's primary colour so
+// each character looks distinct with full 3D detail.
 function CharacterModel({ id }: { id: CharacterId }) {
   const { scene } = useGLTF(MODEL_PATH[id])
-
-  // Clone so multiple instances don't share the same scene graph
   const cloned = useRef(scene.clone(true))
 
-  // Enable shadows and better material quality on every mesh
   useEffect(() => {
+    const primary = new THREE.Color(CHARACTER_COLOR[id])
+    const secondary = new THREE.Color(CHARACTER_SECONDARY[id])
+
+    // Collect all meshes and sort by approximate Y position so we can shade
+    // the upper parts (face/head) slightly lighter than the body/feet.
+    const meshes: { mesh: THREE.Mesh; centerY: number }[] = []
     cloned.current.traverse(node => {
       if ((node as THREE.Mesh).isMesh) {
         const mesh = node as THREE.Mesh
         mesh.castShadow = true
         mesh.receiveShadow = true
-        // Upgrade any MeshBasicMaterial to Standard for proper lighting
-        const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-        mats.forEach(mat => {
-          if (mat instanceof THREE.MeshBasicMaterial) {
-            const std = new THREE.MeshStandardMaterial({
-              color: (mat as THREE.MeshBasicMaterial).color,
-              map: (mat as THREE.MeshBasicMaterial).map,
-            })
-            mesh.material = std
-          }
-        })
+        const box = new THREE.Box3().setFromObject(mesh)
+        const center = new THREE.Vector3()
+        box.getCenter(center)
+        meshes.push({ mesh, centerY: center.y })
       }
     })
-  }, [])
+
+    if (meshes.length === 0) return
+
+    const minY = Math.min(...meshes.map(m => m.centerY))
+    const maxY = Math.max(...meshes.map(m => m.centerY))
+    const rangeY = maxY - minY || 1
+
+    meshes.forEach(({ mesh, centerY }) => {
+      // t=0 at bottom, t=1 at top → lerp primary → lighter shade toward top
+      const t = (centerY - minY) / rangeY
+      const col = primary.clone().lerp(new THREE.Color('#ffffff'), t * 0.22)
+
+      mesh.material = new THREE.MeshStandardMaterial({
+        color: col,
+        roughness: 0.55,
+        metalness: id === 'knight' ? 0.55 : id === 'cosmic' ? 0.3 : 0.05,
+        emissive: id === 'cosmic' ? primary : secondary,
+        emissiveIntensity: id === 'cosmic' ? 0.12 : 0.04,
+      })
+    })
+  }, [id])
 
   return (
     <FitToBox>
