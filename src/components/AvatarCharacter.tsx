@@ -4,7 +4,7 @@ import React from 'react'
 // Each character is a 200×260 SVG with named color zones.
 // p = primaryColor, s = secondaryColor, derived shades computed inline.
 
-export type CharacterId = 'lion' | 'mage' | 'fox' | 'owl' | 'knight' | 'cosmic'
+export type CharacterId = 'lion' | 'mage' | 'fox' | 'owl' | 'knight' | 'cosmic' | 'phoenix' | 'shadow'
 
 export interface CharacterDef {
   id: CharacterId
@@ -15,12 +15,14 @@ export interface CharacterDef {
 }
 
 export const CHARACTERS: CharacterDef[] = [
-  { id: 'lion',   name: 'Leo',    description: 'The Bold Reader',    defaultPrimary: '#C17F24', defaultSecondary: '#7B4F00' },
-  { id: 'mage',   name: 'Sage',   description: 'The Wise Scholar',   defaultPrimary: '#7C3AED', defaultSecondary: '#2D1B69' },
-  { id: 'fox',    name: 'Vex',    description: 'The Cunning Explorer',defaultPrimary: '#D97706', defaultSecondary: '#7C2D12' },
-  { id: 'owl',    name: 'Orion',  description: 'The Night Thinker',  defaultPrimary: '#0F766E', defaultSecondary: '#042F2E' },
-  { id: 'knight', name: 'Vale',   description: 'The Story Guardian', defaultPrimary: '#475569', defaultSecondary: '#0F172A' },
-  { id: 'cosmic', name: 'Zara',   description: 'The Dream Weaver',   defaultPrimary: '#DB2777', defaultSecondary: '#4C0519' },
+  { id: 'lion',    name: 'Leo',    description: 'The Bold Reader',      defaultPrimary: '#C17F24', defaultSecondary: '#7B4F00' },
+  { id: 'mage',    name: 'Sage',   description: 'The Wise Scholar',     defaultPrimary: '#7C3AED', defaultSecondary: '#2D1B69' },
+  { id: 'fox',     name: 'Vex',    description: 'The Cunning Explorer', defaultPrimary: '#D97706', defaultSecondary: '#7C2D12' },
+  { id: 'owl',     name: 'Orion',  description: 'The Night Thinker',   defaultPrimary: '#0F766E', defaultSecondary: '#042F2E' },
+  { id: 'knight',  name: 'Vale',   description: 'The Story Guardian',  defaultPrimary: '#475569', defaultSecondary: '#0F172A' },
+  { id: 'cosmic',  name: 'Zara',   description: 'The Dream Weaver',    defaultPrimary: '#DB2777', defaultSecondary: '#4C0519' },
+  { id: 'phoenix', name: 'Ember',  description: 'The Eternal Flame',   defaultPrimary: '#F97316', defaultSecondary: '#7C2D12' },
+  { id: 'shadow',  name: 'Void',   description: 'The Last Reader',     defaultPrimary: '#7C3AED', defaultSecondary: '#0A0014' },
 ]
 
 function hex(c: string, opacity = 1): string {
@@ -391,18 +393,21 @@ interface AvatarCharacterProps {
 
 export function AvatarCharacter({ character, primaryColor, secondaryColor, size = 160, style }: AvatarCharacterProps) {
   const props = { p: primaryColor, s: secondaryColor }
-  const el = {
+  const el: Record<CharacterId, React.ReactElement> = {
     lion: <LionSVG {...props}/>,
     mage: <MageSVG {...props}/>,
     fox: <FoxSVG {...props}/>,
     owl: <OwlSVG {...props}/>,
     knight: <KnightSVG {...props}/>,
     cosmic: <CosmicSVG {...props}/>,
-  }[character]
+    // Phoenix and Shadow are 3D-only — SVG fallback reuses closest archetype
+    phoenix: <CosmicSVG {...props}/>,
+    shadow: <KnightSVG {...props}/>,
+  }
 
   return (
     <div style={{ width: size, height: Math.round(size * 1.3), ...style }}>
-      {el}
+      {el[character]}
     </div>
   )
 }

@@ -20,21 +20,25 @@ import type { CharacterId } from './AvatarCharacter'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MODEL_PATH: Record<CharacterId, string> = {
-  lion:   '/models/lion.glb',
-  mage:   '/models/mage.glb',
-  fox:    '/models/fox.glb',
-  owl:    '/models/owl.glb',
-  knight: '/models/knight.glb',
-  cosmic: '/models/cosmic.glb',
+  lion:    '/models/lion.glb',
+  mage:    '/models/mage.glb',
+  fox:     '/models/fox.glb',
+  owl:     '/models/owl.glb',
+  knight:  '/models/knight.glb',
+  cosmic:  '/models/cosmic.glb',
+  phoenix: '/models/phoenix.glb',
+  shadow:  '/models/shadow.glb',
 }
 
 const CHARACTER_COLOR: Record<CharacterId, string> = {
-  lion:   '#C17F24',
-  mage:   '#7C3AED',
-  fox:    '#D97706',
-  owl:    '#0F766E',
-  knight: '#475569',
-  cosmic: '#DB2777',
+  lion:    '#C17F24',
+  mage:    '#7C3AED',
+  fox:     '#D97706',
+  owl:     '#0F766E',
+  knight:  '#475569',
+  cosmic:  '#DB2777',
+  phoenix: '#F97316',
+  shadow:  '#4C1D95',
 }
 
 // ─── Auto-rotate wrapper ──────────────────────────────────────────────────────
@@ -70,12 +74,14 @@ function FitToBox({ children }: { children: React.ReactNode }) {
 
 // Secondary (darker) accent per character — used for details like eyes, claws, etc.
 const CHARACTER_SECONDARY: Record<CharacterId, string> = {
-  lion:   '#7B4F00',
-  mage:   '#2D1B69',
-  fox:    '#7C2D12',
-  owl:    '#042F2E',
-  knight: '#0F172A',
-  cosmic: '#4C0519',
+  lion:    '#7B4F00',
+  mage:    '#2D1B69',
+  fox:     '#7C2D12',
+  owl:     '#042F2E',
+  knight:  '#0F172A',
+  cosmic:  '#4C0519',
+  phoenix: '#7C2D12',
+  shadow:  '#0A0014',
 }
 
 // ─── Actual GLB model ─────────────────────────────────────────────────────────
@@ -118,10 +124,16 @@ function CharacterModel({ id }: { id: CharacterId }) {
 
       mesh.material = new THREE.MeshStandardMaterial({
         color: col,
-        roughness: 0.55,
-        metalness: id === 'knight' ? 0.55 : id === 'cosmic' ? 0.3 : 0.05,
-        emissive: id === 'cosmic' ? primary : secondary,
-        emissiveIntensity: id === 'cosmic' ? 0.12 : 0.04,
+        roughness: id === 'shadow' ? 0.15 : 0.55,
+        metalness: id === 'knight' ? 0.55 : id === 'cosmic' ? 0.3 : id === 'shadow' ? 0.8 : 0.05,
+        emissive: id === 'cosmic' ? primary
+                : id === 'phoenix' ? new THREE.Color('#FF4500')
+                : id === 'shadow'  ? new THREE.Color('#6D28D9')
+                : secondary,
+        emissiveIntensity: id === 'cosmic'  ? 0.12
+                         : id === 'phoenix' ? 0.25
+                         : id === 'shadow'  ? 0.35
+                         : 0.04,
       })
     })
   }, [id])

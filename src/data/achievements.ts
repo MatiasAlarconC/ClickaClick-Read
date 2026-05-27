@@ -385,7 +385,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: 'The Immortal',
     description: 'Read every single day for a full year (365-day streak).',
     tier: 'diamond',
-    reward: { type: 'title', value: 'The Immortal' },
+    reward: { type: 'character', characterId: 'phoenix' },
     check: s => s.streak >= 365,
   },
   {
@@ -440,9 +440,9 @@ export const ACHIEVEMENTS: Achievement[] = [
   {
     id: 'dark_library',
     name: 'Lord of Pages',
-    description: 'Accumulate 1,000 hours of reading time.',
+    description: 'Accumulate 1,000 hours of reading time. The void welcomes you.',
     tier: 'obsidian',
-    reward: { type: 'title', value: 'Lord of Pages' },
+    reward: { type: 'character', characterId: 'shadow' },
     check: s => s.totalHours >= 1000,
   },
 ]
