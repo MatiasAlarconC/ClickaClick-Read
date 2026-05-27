@@ -6,6 +6,11 @@ export function isGeminiConfigured(): boolean {
   return !!(GEMINI_API_KEY && GEMINI_API_KEY.trim().length > 0)
 }
 
+// Log key presence at module init (never logs the actual key value)
+if (import.meta.env.DEV || import.meta.env.PROD) {
+  console.info('[ClickaClick AI] GEMINI key configured:', isGeminiConfigured())
+}
+
 interface GeminiConfig {
   enabled: boolean
   model: string
@@ -48,7 +53,10 @@ async function getConfig(): Promise<GeminiConfig> {
 }
 
 async function callGemini(prompt: string, model: string): Promise<{ text: string; tokens: number }> {
-  if (!GEMINI_API_KEY) throw new Error('No Gemini API key')
+  if (!GEMINI_API_KEY) {
+    console.error('[ClickaClick AI] VITE_GEMINI_API_KEY is not set — check Vercel environment variables')
+    throw new Error('No Gemini API key')
+  }
 
   // If the configured model is deprecated (404/400), retry with gemini-2.0-flash
   const candidates = [model, 'gemini-2.0-flash'].filter((m, i, a) => a.indexOf(m) === i)
@@ -71,10 +79,13 @@ async function callGemini(prompt: string, model: string): Promise<{ text: string
       return { text, tokens }
     }
     if (res.status === 429 || res.status >= 500) {
-      // Rate-limited or server error — no point retrying with different model
+      const body = await res.text().catch(() => '')
+      console.error(`[ClickaClick AI] Gemini ${res.status} (${m}):`, body)
       throw new Error(`Gemini ${res.status}`)
     }
     // 404 / 400 likely means deprecated model — try next candidate
+    const body = await res.text().catch(() => '')
+    console.warn(`[ClickaClick AI] Gemini ${res.status} (${m}), trying next:`, body)
     lastError = new Error(`Gemini ${res.status}`)
   }
   throw lastError
