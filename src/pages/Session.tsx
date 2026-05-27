@@ -15,8 +15,8 @@ export default function SessionScreen() {
 
   const [playing, setPlaying] = useState(false)
   const [secs, setSecs] = useState(0)
-  const [page, setPage] = useState(String(userBook?.book ? 1 : 1))
-  const [startPage] = useState(page)
+  const [page, setPage] = useState(String(userBook?.current_page ?? 1))
+  const [startPage] = useState(String(userBook?.current_page ?? 1))
   const [showEndModal, setShowEndModal] = useState(false)
   const [endPage, setEndPage] = useState('')
   const [note, setNote] = useState('')
@@ -68,9 +68,9 @@ export default function SessionScreen() {
       pages_read: pagesRead,
     })
 
-    // Update user_book current page
+    // Update current page so Library shows real progress
     if (endPage) {
-      await supabase.from('user_books').update({ custom_pages: parseInt(endPage) }).eq('id', userBook.id)
+      await supabase.from('user_books').update({ current_page: parseInt(endPage) }).eq('id', userBook.id)
     }
 
     // Save note if provided

@@ -66,8 +66,10 @@ export function HomeScreen() {
   }, [user, profile])
 
   const activeBook = currentBooks[0]
-  const progress = activeBook ? (activeBook.custom_pages ?? activeBook.book?.pages_default ?? 1) > 0
-    ? 0.5 : 0 : 0 // placeholder; real progress from session data
+  const totalPages = activeBook ? (activeBook.custom_pages ?? activeBook.book?.pages_default ?? 0) : 0
+  const progress = (totalPages > 0 && activeBook?.current_page)
+    ? Math.min(activeBook.current_page / totalPages, 1)
+    : 0
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>

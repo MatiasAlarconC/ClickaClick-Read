@@ -31,6 +31,7 @@ export interface UserBook {
   book_id: string
   status: ReadingStatus
   custom_pages: number | null
+  current_page: number | null
   custom_language: string | null
   user_rating: number | null
   started_at: string | null

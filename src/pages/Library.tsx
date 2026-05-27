@@ -109,9 +109,22 @@ function SwipeableBookRow({ book, index, total, tab, theme, onPress, onDelete, o
   const deleteOpacity = useTransform(x, [-100, -40], [1, 0])
   const finishOpacity = useTransform(x, [40, 100], [0, 1])
 
-  const pages = book.custom_pages ?? book.book?.pages_default ?? 1
-  // get progress from sessions — simplified: use a rough estimate
-  const progress = tab === 'reading' ? 0.3 : 1
+  const [editingPage, setEditingPage] = useState(false)
+  const [pageInput, setPageInput] = useState(String(book.current_page ?? ''))
+
+  const totalPages = book.custom_pages ?? book.book?.pages_default ?? 0
+  const currentPage = book.current_page ?? 0
+  const progress = tab === 'reading'
+    ? (totalPages > 0 ? Math.min(currentPage / totalPages, 1) : 0)
+    : 1
+
+  const saveCurrentPage = async () => {
+    setEditingPage(false)
+    const p = pageInput ? parseInt(pageInput) : null
+    if (p === book.current_page) return
+    await supabase.from('user_books').update({ current_page: p }).eq('id', book.id)
+    // Optimistically update local display (parent will refetch on next mount)
+  }
 
   return (
     <div style={{ position: 'relative', overflow: 'hidden' }}>
@@ -140,8 +153,25 @@ function SwipeableBookRow({ book, index, total, tab, theme, onPress, onDelete, o
           </div>
           {tab === 'reading' && (
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                <span style={{ fontSize: 11, color: theme.muted }}>p. {book.custom_pages ?? '?'} of {pages}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                <button
+                  onClick={e => { e.stopPropagation(); setEditingPage(true) }}
+                  style={{ background: 'none', border: 'none', padding: 0, fontSize: 11, color: theme.muted, cursor: 'pointer', textAlign: 'left' }}>
+                  {editingPage ? (
+                    <input
+                      autoFocus
+                      value={pageInput}
+                      onChange={e => setPageInput(e.target.value)}
+                      onBlur={saveCurrentPage}
+                      onKeyDown={e => e.key === 'Enter' && saveCurrentPage()}
+                      onClick={e => e.stopPropagation()}
+                      type="number"
+                      style={{ width: 52, padding: '2px 6px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 6, fontSize: 11, color: theme.fg }}
+                    />
+                  ) : (
+                    <span>p. {book.current_page ?? '?'} of {totalPages || '?'} ✎</span>
+                  )}
+                </button>
                 <span style={{ fontSize: 11, color: theme.fg, fontWeight: 600 }}>{Math.round(progress * 100)}%</span>
               </div>
               <ProgressBar progress={progress} theme={theme} height={3} />

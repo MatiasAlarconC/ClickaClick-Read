@@ -45,8 +45,8 @@ export default function BookDetailScreen() {
         const dbId = bookRow.id
         setBookDbId(dbId)
 
-        // Check if book is in user's library
-        supabase.from('user_books').select('*')
+        // Check if book is in user's library (with book join so Session gets cover/title)
+        supabase.from('user_books').select('*, book:books(*)')
           .eq('user_id', user.id)
           .eq('book_id', dbId)
           .maybeSingle()
@@ -118,15 +118,18 @@ export default function BookDetailScreen() {
     const bookId = await ensureBookInDb()
     if (!bookId) { setAddingToLib(false); return }
 
-    const { data } = await supabase.from('user_books').upsert({
+    await supabase.from('user_books').upsert({
       user_id: user.id, book_id: bookId, status,
       added_at: new Date().toISOString(),
       custom_pages: customPages ? parseInt(customPages) : null,
       started_at: status === 'reading' ? new Date().toISOString() : null,
       finished_at: status === 'finished' ? new Date().toISOString() : null,
-    }, { onConflict: 'user_id,book_id' }).select().single()
+    }, { onConflict: 'user_id,book_id' })
 
-    if (data) setUserBook(data as UserBook)
+    // Refetch with book join so Session screen gets cover/title
+    const { data: fresh } = await supabase.from('user_books').select('*, book:books(*)')
+      .eq('user_id', user.id).eq('book_id', bookId).maybeSingle()
+    if (fresh) setUserBook(fresh as UserBook)
     setAddingToLib(false)
   }
 
@@ -151,6 +154,12 @@ export default function BookDetailScreen() {
       setNotes(prev => [...prev, data as BookNote])
       setNewNote(''); setNewNotePage('')
     }
+  }
+
+  const saveCustomPages = async () => {
+    if (!userBook) return
+    const pages = customPages ? parseInt(customPages) : null
+    await supabase.from('user_books').update({ custom_pages: pages }).eq('id', userBook.id)
   }
 
   const fetchAiSummary = async () => {
@@ -291,7 +300,7 @@ export default function BookDetailScreen() {
               <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 0', borderBottom: i < arr.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
                 <span style={{ fontSize: 14, color: theme.muted }}>{row.label}</span>
                 {row.editable && row.label === 'Pages' ? (
-                  <input value={customPages} onChange={e => setCustomPages(e.target.value)} style={{ textAlign: 'right', background: 'none', border: 'none', fontSize: 14, color: theme.fg, fontWeight: 500, width: 80 }} placeholder={row.value} />
+                  <input value={customPages} onChange={e => setCustomPages(e.target.value)} onBlur={saveCustomPages} style={{ textAlign: 'right', background: 'none', border: 'none', fontSize: 14, color: theme.fg, fontWeight: 500, width: 80 }} placeholder={row.value} />
                 ) : (
                   <span style={{ fontSize: 14, color: theme.fg, fontWeight: 500 }}>{row.value}</span>
                 )}
