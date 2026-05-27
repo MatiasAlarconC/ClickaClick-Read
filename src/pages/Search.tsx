@@ -17,6 +17,14 @@ export default function SearchScreen() {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
 
+  // Manual book entry state
+  const [showManual, setShowManual] = useState(false)
+  const [manualTitle, setManualTitle] = useState('')
+  const [manualAuthor, setManualAuthor] = useState('')
+  const [manualPages, setManualPages] = useState('')
+  const [manualCover, setManualCover] = useState('')
+  const [manualYear, setManualYear] = useState('')
+
   const handleSearch = useCallback(async (q: string) => {
     if (!q.trim()) { setResults([]); setSearched(false); return }
     setLoading(true); setSearched(true)
@@ -32,6 +40,26 @@ export default function SearchScreen() {
   const handleQueryChange = (val: string) => {
     setQuery(val)
     if (!val) { setResults([]); setSearched(false) }
+  }
+
+  const handleManualSubmit = () => {
+    if (!manualTitle.trim()) return
+    const book: SearchResult = {
+      id: `manual-${Date.now()}`,
+      google_books_id: `manual-${Date.now()}`,
+      title: manualTitle.trim(),
+      author: manualAuthor.trim() || 'Unknown Author',
+      cover_url: manualCover.trim() || null,
+      synopsis: null,
+      pages: manualPages ? parseInt(manualPages) : null,
+      genres: [],
+      published_year: manualYear ? parseInt(manualYear) : null,
+      isbn: null,
+      source: 'manual',
+    }
+    setShowManual(false)
+    setManualTitle(''); setManualAuthor(''); setManualPages(''); setManualCover(''); setManualYear('')
+    navigate('/detail', { state: { book } })
   }
 
   const filtered = results.filter(b => {
@@ -111,7 +139,10 @@ export default function SearchScreen() {
             <div style={{ textAlign: 'center', padding: '48px 0', color: theme.muted }}>
               <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 18 }}>No results found</div>
-              <div style={{ fontSize: 13, marginTop: 6 }}>Try a different search term</div>
+              <div style={{ fontSize: 13, marginTop: 6, marginBottom: 20 }}>Try a different search term</div>
+              <button onClick={() => setShowManual(true)} style={{ padding: '11px 22px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 500 }}>
+                + Add book manually
+              </button>
             </div>
           )}
 
@@ -120,12 +151,54 @@ export default function SearchScreen() {
               <div style={{ fontSize: 36, marginBottom: 12 }}>📖</div>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, marginBottom: 6, color: theme.fg }}>Find your next read</div>
               <div style={{ fontSize: 14 }}>Search by title, author, or genre</div>
+              <button onClick={() => setShowManual(true)} style={{ marginTop: 24, padding: '11px 22px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 14, fontWeight: 500 }}>
+                + Add book manually
+              </button>
             </div>
           )}
         </div>
       </div>
 
       <TabBar activeTab="search" onTabChange={t => navigate(`/${t === 'home' ? 'home' : t}`)} theme={theme} />
+
+      {/* Manual book entry modal */}
+      {showManual && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'flex-end' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowManual(false) }}>
+          <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} style={{ width: '100%', background: theme.bg, borderRadius: '20px 20px 0 0', padding: '24px 22px', paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px))' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: theme.fg }}>Add a book</div>
+              <button onClick={() => setShowManual(false)} style={{ background: 'none', border: 'none', color: theme.muted, fontSize: 24, padding: 0, lineHeight: 1 }}>×</button>
+            </div>
+
+            {[
+              { label: 'Title *', value: manualTitle, setter: setManualTitle, placeholder: 'Book title', type: 'text' },
+              { label: 'Author', value: manualAuthor, setter: setManualAuthor, placeholder: 'Author name', type: 'text' },
+              { label: 'Pages', value: manualPages, setter: setManualPages, placeholder: 'Number of pages', type: 'number' },
+              { label: 'Published Year', value: manualYear, setter: setManualYear, placeholder: 'e.g. 2023', type: 'number' },
+              { label: 'Cover URL', value: manualCover, setter: setManualCover, placeholder: 'https://...', type: 'url' },
+            ].map(field => (
+              <div key={field.label} style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 12, color: theme.muted, marginBottom: 5, fontWeight: 500 }}>{field.label}</div>
+                <input
+                  value={field.value}
+                  onChange={e => field.setter(e.target.value)}
+                  placeholder={field.placeholder}
+                  type={field.type}
+                  style={{ width: '100%', padding: '11px 14px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 15, color: theme.fg, boxSizing: 'border-box' }}
+                />
+              </div>
+            ))}
+
+            <button
+              onClick={handleManualSubmit}
+              disabled={!manualTitle.trim()}
+              style={{ width: '100%', padding: 14, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 500, marginTop: 6, opacity: manualTitle.trim() ? 1 : 0.5 }}>
+              Add Book
+            </button>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }

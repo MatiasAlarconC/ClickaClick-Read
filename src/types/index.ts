@@ -87,7 +87,7 @@ export interface SearchResult {
   genres: string[]
   published_year: number | null
   isbn: string | null
-  source: 'google' | 'openlibrary'
+  source: 'google' | 'openlibrary' | 'manual'
   google_books_id?: string
   open_library_id?: string
 }

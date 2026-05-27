@@ -29,46 +29,87 @@ export default function BookDetailScreen() {
   const [aiLoading, setAiLoading] = useState(false)
   const [aiError, setAiError] = useState(false)
   const [customPages, setCustomPages] = useState<string>('')
+  const [bookDbId, setBookDbId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user || !book) return
 
-    // Check if book is in user's library
-    supabase.from('user_books').select('*').eq('user_id', user.id)
-      .or(`book_id.eq.${book.id}`)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (data) {
-          setUserBook(data as UserBook)
-          setRating(data.user_rating ?? 0)
-          setCustomPages(String(data.custom_pages ?? book.pages ?? ''))
-        }
-      })
+    const externalId = book.google_books_id ?? book.id
 
-    // Load notes
-    supabase.from('book_notes').select('*').eq('user_id', user.id).order('page_number', { ascending: true })
-      .then(({ data }) => { if (data) setNotes(data as BookNote[]) })
+    // First find the book's UUID in the DB, then load user data
+    supabase.from('books').select('id')
+      .eq('google_books_id', externalId)
+      .maybeSingle()
+      .then(({ data: bookRow }) => {
+        if (!bookRow) return
+        const dbId = bookRow.id
+        setBookDbId(dbId)
+
+        // Check if book is in user's library
+        supabase.from('user_books').select('*')
+          .eq('user_id', user.id)
+          .eq('book_id', dbId)
+          .maybeSingle()
+          .then(({ data }) => {
+            if (data) {
+              setUserBook(data as UserBook)
+              setRating(data.user_rating ?? 0)
+              setCustomPages(String(data.custom_pages ?? book.pages ?? ''))
+            }
+          })
+
+        // Load notes for this specific book
+        supabase.from('book_notes').select('*')
+          .eq('user_id', user.id)
+          .eq('book_id', dbId)
+          .order('page_number', { ascending: true })
+          .then(({ data }) => { if (data) setNotes(data as BookNote[]) })
+      })
   }, [user, book])
 
   const ensureBookInDb = async (): Promise<string | null> => {
     if (!book || !user) return null
-    // Upsert book to books table
-    const bookData = {
-      id: book.id,
-      google_books_id: book.google_books_id ?? null,
+
+    // Return cached UUID if we already looked it up
+    if (bookDbId) return bookDbId
+
+    const externalId = book.google_books_id ?? book.id
+
+    // Check if the book already exists in DB
+    const { data: existing } = await supabase.from('books').select('id')
+      .eq('google_books_id', externalId)
+      .maybeSingle()
+
+    if (existing) {
+      setBookDbId(existing.id)
+      return existing.id
+    }
+
+    // Insert new book record; DB auto-generates the UUID
+    const { data, error } = await supabase.from('books').insert({
+      google_books_id: externalId,
       open_library_id: book.open_library_id ?? null,
       title: book.title,
       author: book.author,
-      cover_url: book.cover_url,
-      synopsis: book.synopsis,
-      pages_default: book.pages,
-      genres: book.genres,
-      published_year: book.published_year,
-      isbn: book.isbn,
+      synopsis: book.synopsis ?? null,
+      cover_url: book.cover_url ?? null,
+      pages_default: book.pages ?? null,
+      genres: book.genres ?? [],
+      published_year: book.published_year ?? null,
+      isbn: book.isbn ?? null,
+    }).select('id').single()
+
+    if (error) {
+      // Race condition: another request may have inserted it first
+      const { data: retry } = await supabase.from('books').select('id')
+        .eq('google_books_id', externalId)
+        .maybeSingle()
+      if (retry) { setBookDbId(retry.id); return retry.id }
+      return null
     }
-    const { error } = await supabase.from('books').upsert(bookData, { onConflict: 'id' })
-    if (error) return null
-    return book.id
+
+    setBookDbId(data.id)
+    return data.id
   }
 
   const addToLibrary = async (status: 'reading' | 'finished' | 'want_to_read') => {

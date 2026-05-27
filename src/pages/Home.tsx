@@ -81,30 +81,11 @@ export function HomeScreen() {
           <div style={{ fontSize: 13, color: theme.muted, marginTop: 5 }}>{dateStr}</div>
         </div>
 
-        {/* Currently Reading */}
-        {activeBook ? (
-          <div style={{ background: theme.bgSecondary, borderRadius: 20, padding: 18, marginBottom: 14 }}>
-            <SectionLabel theme={theme}>Currently Reading</SectionLabel>
-            <div style={{ display: 'flex', gap: 14, marginBottom: 16 }}>
-              <BookCover index={0} width={70} height={106} coverUrl={activeBook.book?.cover_url} />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontFamily: 'Georgia, serif', fontSize: 17, color: theme.fg, lineHeight: 1.3, marginBottom: 3 }}>{activeBook.book?.title}</div>
-                  <div style={{ fontSize: 13, color: theme.muted }}>{activeBook.book?.author}</div>
-                </div>
-                <div>
-                  <ProgressBar progress={progress} theme={theme} height={3} />
-                </div>
-              </div>
-            </div>
-            <button onClick={() => navigate('/session', { state: { book: activeBook } })} style={{ width: '100%', padding: 13, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              Continue Reading
-              <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5H11M11 6.5L7 2.5M11 6.5L7 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-          </div>
-        ) : (
-          <div style={{ background: theme.bgSecondary, borderRadius: 20, padding: 18, marginBottom: 14 }}>
-            <SectionLabel theme={theme}>Currently Reading</SectionLabel>
+        {/* Currently Reading — timer quick-access */}
+        <div style={{ background: theme.bgSecondary, borderRadius: 20, padding: 18, marginBottom: 14 }}>
+          <SectionLabel theme={theme}>Currently Reading</SectionLabel>
+
+          {currentBooks.length === 0 && (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
               <div style={{ fontSize: 32, marginBottom: 8 }}>📚</div>
               <div style={{ fontSize: 14, color: theme.muted, marginBottom: 16 }}>No books in progress</div>
@@ -112,8 +93,44 @@ export function HomeScreen() {
                 Find a book
               </button>
             </div>
-          </div>
-        )}
+          )}
+
+          {currentBooks.length === 1 && (
+            <>
+              <div style={{ display: 'flex', gap: 14, marginBottom: 16 }}>
+                <BookCover index={0} width={70} height={106} coverUrl={activeBook.book?.cover_url} />
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 17, color: theme.fg, lineHeight: 1.3, marginBottom: 3 }}>{activeBook.book?.title}</div>
+                    <div style={{ fontSize: 13, color: theme.muted }}>{activeBook.book?.author}</div>
+                  </div>
+                  <ProgressBar progress={progress} theme={theme} height={3} />
+                </div>
+              </div>
+              <button onClick={() => navigate('/session', { state: { book: activeBook } })} style={{ width: '100%', padding: 13, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                ⏱ Start Reading Session
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5H11M11 6.5L7 2.5M11 6.5L7 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </>
+          )}
+
+          {currentBooks.length > 1 && (
+            <div>
+              {currentBooks.map((ub, i) => (
+                <div key={ub.id} style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: i < currentBooks.length - 1 ? 12 : 0, marginBottom: i < currentBooks.length - 1 ? 12 : 0, borderBottom: i < currentBooks.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
+                  <BookCover index={i} width={48} height={72} coverUrl={ub.book?.cover_url} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 15, color: theme.fg, lineHeight: 1.3, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ub.book?.title}</div>
+                    <div style={{ fontSize: 12, color: theme.muted }}>{ub.book?.author}</div>
+                  </div>
+                  <button onClick={() => navigate('/session', { state: { book: ub } })} style={{ flexShrink: 0, padding: '9px 16px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 18, display: 'flex', alignItems: 'center' }}>
+                    ⏱
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Streak */}
         <div style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 18px', marginBottom: 14 }}>
