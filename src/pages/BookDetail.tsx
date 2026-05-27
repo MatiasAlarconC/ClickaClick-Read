@@ -5,11 +5,11 @@ import { Stars, ProgressBar, BackButton, Spinner, ErrorBoundary } from '../compo
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { getProgressiveSummary } from '../services/gemini'
-import type { SearchResult, UserBook, BookNote } from '../types'
+import type { SearchResult, UserBook, BookNote, ReadingSession } from '../types'
 
 const Book3D = React.lazy(() => import('../components/Book3D'))
 
-type DetailTab = 'overview' | 'details' | 'notes'
+type DetailTab = 'overview' | 'details' | 'notes' | 'sessions'
 
 export default function BookDetailScreen() {
   const { theme } = useTheme()
@@ -22,6 +22,7 @@ export default function BookDetailScreen() {
   const [rating, setRating] = useState(0)
   const [userBook, setUserBook] = useState<UserBook | null>(null)
   const [notes, setNotes] = useState<BookNote[]>([])
+  const [sessions, setSessions] = useState<ReadingSession[]>([])
   const [newNote, setNewNote] = useState('')
   const [newNotePage, setNewNotePage] = useState('')
   const [addingToLib, setAddingToLib] = useState(false)
@@ -68,6 +69,13 @@ export default function BookDetailScreen() {
           .eq('book_id', dbId)
           .order('page_number', { ascending: true })
           .then(({ data }) => { if (data) setNotes(data as BookNote[]) })
+
+        // Load reading sessions for this book
+        supabase.from('reading_sessions').select('*')
+          .eq('user_id', user.id)
+          .eq('book_id', dbId)
+          .order('started_at', { ascending: false })
+          .then(({ data }) => { if (data) setSessions(data as ReadingSession[]) })
       })
   }, [user, book])
 
@@ -170,7 +178,7 @@ export default function BookDetailScreen() {
     if (!book || !user) return
     setAiLoading(true); setAiError(false)
     // Use the user's actual current reading position
-    const currentPage = userBook?.current_page ?? parseInt(customPages) || Math.floor((book.pages ?? 200) / 2)
+    const currentPage = userBook?.current_page ?? (parseInt(customPages) || Math.floor((book.pages ?? 200) / 2))
     const result = await getProgressiveSummary({
       title: book.title, author: book.author,
       synopsis: synopsis,
@@ -249,7 +257,7 @@ export default function BookDetailScreen() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, marginBottom: 22 }}>
-          {(['overview','details','notes'] as DetailTab[]).map(tab => {
+          {(['overview','details','notes','sessions'] as DetailTab[]).map(tab => {
             const isActive = tab === activeTab
             return (
               <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: '10px 0', background: 'none', border: 'none', borderBottom: isActive ? `2px solid ${theme.fg}` : '2px solid transparent', marginBottom: -1, fontSize: 13.5, color: isActive ? theme.fg : theme.muted, fontWeight: isActive ? 600 : 400, textTransform: 'capitalize' }}>{tab}</button>
@@ -339,6 +347,61 @@ export default function BookDetailScreen() {
                   <div style={{ fontSize: 11, color: theme.muted, marginTop: 6 }}>{new Date(note.created_at).toLocaleDateString()}</div>
                 </div>
               ))
+            )}
+          </div>
+        )}
+
+        {/* Sessions tab */}
+        {activeTab === 'sessions' && (
+          <div style={{ paddingBottom: 40 }}>
+            {sessions.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: theme.muted, fontSize: 14 }}>No reading sessions yet</div>
+            ) : (
+              <>
+                {/* Summary row */}
+                <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
+                  {[
+                    { label: 'Sessions', value: sessions.filter(s => !s.is_manual).length },
+                    { label: 'Total pages', value: sessions.reduce((sum, s) => sum + (s.pages_read ?? 0), 0) },
+                    { label: 'Hours read', value: (sessions.reduce((sum, s) => sum + (s.duration_seconds ?? 0), 0) / 3600).toFixed(1) },
+                  ].map(stat => (
+                    <div key={stat.label} style={{ flex: 1, padding: '12px 10px', background: theme.bgSecondary, borderRadius: 12, textAlign: 'center' }}>
+                      <div style={{ fontSize: 18, fontWeight: 600, color: theme.fg }}>{stat.value}</div>
+                      <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{stat.label}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Session list */}
+                {sessions.map((s, i) => {
+                  const date = new Date(s.started_at)
+                  const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                  const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+                  const dur = s.duration_seconds
+                    ? `${Math.floor(s.duration_seconds / 60)}m`
+                    : null
+                  const isManual = s.is_manual
+                  return (
+                    <div key={s.id} style={{ padding: '14px 0', borderBottom: i < sessions.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 500, color: theme.fg }}>{dateStr}</div>
+                          <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{isManual ? 'Manual update' : timeStr}</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          {(s.pages_read ?? 0) > 0 && (
+                            <div style={{ fontSize: 14, fontWeight: 500, color: theme.fg }}>+{s.pages_read} pages</div>
+                          )}
+                          {dur && <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{dur}</div>}
+                          {s.start_page != null && s.end_page != null && (
+                            <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>p.{s.start_page}–{s.end_page}</div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </>
             )}
           </div>
         )}

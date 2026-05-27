@@ -6,6 +6,56 @@ import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import type { UserBook } from '../types'
 
+// ─── Music helpers ────────────────────────────────────────────────────────────
+
+const JAMENDO_CLIENT_ID = 'b6747d04'
+
+function genreToMusicTag(genres: string[] | undefined): string {
+  if (!genres?.length) return 'ambient'
+  const lower = genres.join(' ').toLowerCase()
+  if (/fantasy|magic|dragon|wizard|adventure/.test(lower)) return 'orchestral'
+  if (/thriller|crime|mystery|horror|suspense/.test(lower)) return 'darkambient'
+  if (/romance|love|contemporary/.test(lower)) return 'acoustic'
+  if (/sci.?fi|space|technology|futuristic/.test(lower)) return 'electronic'
+  if (/histor|biograph|classic/.test(lower)) return 'classical'
+  return 'ambient'
+}
+
+async function fetchJamendoTrack(tag: string): Promise<{ url: string; name: string } | null> {
+  try {
+    const res = await fetch(
+      `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_CLIENT_ID}&tags=${tag}&audioformat=mp32&order=popularity_total_desc&limit=30&include=musicinfo`
+    )
+    if (!res.ok) return null
+    const json = await res.json()
+    const tracks: { audio: string; name: string }[] = json.results ?? []
+    const valid = tracks.filter(t => t.audio)
+    if (!valid.length) return null
+    const pick = valid[Math.floor(Math.random() * valid.length)]
+    return { url: pick.audio, name: pick.name }
+  } catch {
+    return null
+  }
+}
+
+// ─── Retry helper ─────────────────────────────────────────────────────────────
+
+async function retrySupabase(
+  fn: () => PromiseLike<{ error: unknown }>,
+  maxRetries = 3
+): Promise<boolean> {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const { error } = await fn()
+    if (!error) return true
+    if (attempt < maxRetries - 1) {
+      await new Promise(r => setTimeout(r, 600 * (attempt + 1)))
+    }
+  }
+  return false
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
 export default function SessionScreen() {
   const { theme } = useTheme()
   const { user } = useAuth()
@@ -21,12 +71,30 @@ export default function SessionScreen() {
   const [endPage, setEndPage] = useState('')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState(false)
+
+  // Music
+  const [musicOn, setMusicOn] = useState(false)
+  const [musicLoading, setMusicLoading] = useState(false)
+  const [musicTrackName, setMusicTrackName] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
   // Time-based timer refs (survive tab switches / browser throttling)
-  const sessionStartTs = useRef<number | null>(null)  // ms timestamp of first play
-  const pausedMs = useRef<number>(0)                   // total ms spent paused
-  const pauseStartTs = useRef<number | null>(null)     // when current pause began
+  const sessionStartTs = useRef<number | null>(null)
+  const pausedMs = useRef<number>(0)
+  const pauseStartTs = useRef<number | null>(null)
   const wakeLock = useRef<WakeLockSentinel | null>(null)
+
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+        audioRef.current = null
+      }
+    }
+  }, [])
 
   // WakeLock
   useEffect(() => {
@@ -43,7 +111,7 @@ export default function SessionScreen() {
   // Pause / resume accounting
   useEffect(() => {
     if (playing) {
-      if (sessionStartTs.current === null) sessionStartTs.current = Date.now() // first press
+      if (sessionStartTs.current === null) sessionStartTs.current = Date.now()
       if (pauseStartTs.current !== null) {
         pausedMs.current += Date.now() - pauseStartTs.current
         pauseStartTs.current = null
@@ -53,7 +121,7 @@ export default function SessionScreen() {
     }
   }, [playing])
 
-  // Interval — uses Date.now() so it's correct even after tab was in background
+  // Interval — uses Date.now() so it stays accurate after tab is in background
   useEffect(() => {
     if (!playing) return
     const tick = () => {
@@ -62,7 +130,6 @@ export default function SessionScreen() {
       setSecs(Math.max(0, Math.floor(activeMs / 1000)))
     }
     const id = setInterval(tick, 500)
-    // Immediate update when user returns to the tab
     const onVisible = () => { if (!document.hidden) tick() }
     document.addEventListener('visibilitychange', onVisible)
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', onVisible) }
@@ -75,9 +142,47 @@ export default function SessionScreen() {
     return `${hh}:${mm}:${ss}`
   }
 
+  // ─── Music toggle ──────────────────────────────────────────────────────────
+
+  const toggleMusic = async () => {
+    if (musicOn) {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+        audioRef.current = null
+      }
+      setMusicOn(false)
+      setMusicTrackName(null)
+      return
+    }
+
+    setMusicLoading(true)
+    const tag = genreToMusicTag(userBook?.book?.genres ?? undefined)
+    let track = await fetchJamendoTrack(tag)
+    if (!track && tag !== 'ambient') track = await fetchJamendoTrack('ambient')
+
+    if (track) {
+      const audio = new Audio(track.url)
+      audio.loop = true
+      audio.volume = 0.4
+      try {
+        await audio.play()
+        audioRef.current = audio
+        setMusicOn(true)
+        setMusicTrackName(track.name)
+      } catch {
+        /* autoplay blocked or other error — silent */
+      }
+    }
+    setMusicLoading(false)
+  }
+
+  // ─── Reliable save ─────────────────────────────────────────────────────────
+
   const handleEndSession = async () => {
     if (!user || !userBook) { navigate('/home'); return }
     setSaving(true)
+    setSaveError(false)
 
     const now = Date.now()
     const totalPausedMs = pausedMs.current + (pauseStartTs.current !== null ? now - pauseStartTs.current : 0)
@@ -85,34 +190,75 @@ export default function SessionScreen() {
       ? Math.max(0, Math.floor((now - sessionStartTs.current - totalPausedMs) / 1000))
       : secs
 
-    const resolvedEndPage = endPage || page  // fall back to current page if user didn't type
+    const resolvedEndPage = endPage || page
     const pagesRead = Math.max(0, parseInt(resolvedEndPage) - parseInt(startPage))
 
-    await supabase.from('reading_sessions').insert({
+    const sessionPayload = {
       user_id: user.id,
       book_id: userBook.book_id,
-      started_at: sessionStartTs.current ? new Date(sessionStartTs.current).toISOString() : new Date().toISOString(),
+      started_at: sessionStartTs.current
+        ? new Date(sessionStartTs.current).toISOString()
+        : new Date().toISOString(),
       ended_at: new Date(now).toISOString(),
       duration_seconds: effectiveSecs,
       start_page: parseInt(startPage),
       end_page: parseInt(resolvedEndPage),
       pages_read: pagesRead,
-    })
+    }
 
-    // Update current page so Library shows real progress
-    await supabase.from('user_books').update({ current_page: parseInt(resolvedEndPage) }).eq('id', userBook.id)
+    // Persist locally before network call — recovered on next visit if needed
+    localStorage.setItem('pendingSession', JSON.stringify(sessionPayload))
 
-    // Save note if provided
-    if (note.trim() && endPage) {
-      await supabase.from('book_notes').insert({
-        user_id: user.id, book_id: userBook.book_id,
-        page_number: parseInt(endPage), content: note.trim(),
+    const sessionOk = await retrySupabase(() =>
+      supabase.from('reading_sessions').insert(sessionPayload).then(r => r)
+    )
+    const pageOk = await retrySupabase(() =>
+      supabase.from('user_books')
+        .update({ current_page: parseInt(resolvedEndPage) })
+        .eq('id', userBook.id)
+        .then(r => r)
+    )
+
+    if (!sessionOk || !pageOk) {
+      setSaving(false)
+      setSaveError(true)
+      return // keep modal open so user can retry
+    }
+
+    localStorage.removeItem('pendingSession')
+
+    // Note is non-critical — fire and forget
+    if (note.trim()) {
+      supabase.from('book_notes').insert({
+        user_id: user.id,
+        book_id: userBook.book_id,
+        page_number: parseInt(resolvedEndPage) || null,
+        content: note.trim(),
       })
     }
 
     setSaving(false)
     navigate('/home')
   }
+
+  // ─── Recovery of pending session on mount ──────────────────────────────────
+
+  useEffect(() => {
+    if (!user) return
+    const pending = localStorage.getItem('pendingSession')
+    if (!pending) return
+    try {
+      const data = JSON.parse(pending)
+      // Only recover if it belongs to the current user
+      if (data.user_id === user.id) {
+        supabase.from('reading_sessions').insert(data).then(({ error }) => {
+          if (!error) localStorage.removeItem('pendingSession')
+        })
+      }
+    } catch {
+      localStorage.removeItem('pendingSession')
+    }
+  }, [user])
 
   const dark = theme.dark
   const bg = dark ? '#000000' : '#FFFFFF'
@@ -127,8 +273,42 @@ export default function SessionScreen() {
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1L11 11M11 1L1 11" stroke={fg} strokeWidth="1.5" strokeLinecap="round"/></svg>
         </button>
         <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.2, textTransform: 'uppercase', color: muted }}>Focus Mode</span>
-        <div style={{ width: 34 }} />
+        {/* Music button */}
+        <button
+          onClick={toggleMusic}
+          title={musicOn ? 'Stop music' : 'Start reading music'}
+          style={{ width: 34, height: 34, borderRadius: '50%', background: musicOn ? fg : (dark ? '#1E1E1E' : '#F5F5F3'), border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
+        >
+          {musicLoading
+            ? <Spinner color={musicOn ? bg : muted} />
+            : musicOn
+              ? /* speaker ON */
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 9v6h4l5 5V4L7 9H3z" fill={bg}/><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill={bg}/><path d="M19.5 12c0 3.04-1.73 5.67-4.25 7l1.26 1.74C19.44 18.87 21.5 15.68 21.5 12s-2.06-6.87-5-8.74L15.25 5C17.77 6.33 19.5 8.96 19.5 12z" fill={bg}/></svg>
+              : /* speaker OFF / note icon */
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={fg} strokeWidth="1.5"/><circle cx="18" cy="16" r="3" stroke={fg} strokeWidth="1.5"/></svg>
+          }
+        </button>
       </div>
+
+      {/* Music indicator */}
+      <AnimatePresence>
+        {musicOn && musicTrackName && (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            style={{ textAlign: 'center', marginTop: -20, marginBottom: 16, overflow: 'hidden' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999, background: dark ? '#1A1A1A' : '#F0F0EE' }}>
+              {/* pulsing bar animation */}
+              <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 12 }}>
+                {[0.4, 0.7, 1, 0.6, 0.8].map((h, i) => (
+                  <motion.div key={i} style={{ width: 2, background: fg, borderRadius: 1 }}
+                    animate={{ scaleY: [h * 0.4, h, h * 0.3, h * 0.8, h * 0.4] }}
+                    transition={{ duration: 1.2 + i * 0.2, repeat: Infinity, ease: 'easeInOut' }} />
+                ))}
+              </div>
+              <span style={{ fontSize: 11, color: muted, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{musicTrackName}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Book cover */}
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
@@ -187,10 +367,20 @@ export default function SessionScreen() {
                   style={{ width: '100%', padding: '13px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 14, color: fg, resize: 'none' }} />
               </div>
 
-              <button onClick={handleEndSession} disabled={saving} style={{ width: '100%', padding: 15, background: fg, color: bg, border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 500 }}>
-                {saving ? 'Saving…' : 'Save & Finish'}
+              {saveError && (
+                <div style={{ marginBottom: 14, padding: '12px 14px', background: '#FF3B3020', borderRadius: 10, fontSize: 13, color: '#FF3B30' }}>
+                  Save failed. Check your connection and try again.
+                </div>
+              )}
+
+              <button onClick={handleEndSession} disabled={saving} style={{ width: '100%', padding: 15, background: saveError ? '#FF3B30' : fg, color: bg, border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 500, opacity: saving ? 0.7 : 1 }}>
+                {saving ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Spinner color={bg} />Saving…
+                  </span>
+                ) : saveError ? 'Retry Save' : 'Save & Finish'}
               </button>
-              <button onClick={() => { setShowEndModal(false); setPlaying(true) }} style={{ width: '100%', padding: '12px', marginTop: 10, background: 'none', border: 'none', fontSize: 14, color: muted }}>
+              <button onClick={() => { setShowEndModal(false); setSaveError(false); setPlaying(true) }} style={{ width: '100%', padding: '12px', marginTop: 10, background: 'none', border: 'none', fontSize: 14, color: muted }}>
                 Keep Reading
               </button>
             </motion.div>

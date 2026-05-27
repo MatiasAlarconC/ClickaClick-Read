@@ -57,6 +57,7 @@ export interface ReadingSession {
   start_page: number | null
   end_page: number | null
   pages_read: number | null
+  is_manual?: boolean
   book?: Book
 }
 
