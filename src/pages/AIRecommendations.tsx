@@ -16,11 +16,12 @@ export default function AIRecommendationsScreen() {
   const [loading, setLoading] = useState(false)
   const [recs, setRecs] = useState<BookRecommendation[]>([])
   const [unavailable, setUnavailable] = useState(false)
+  const [noBooksInLib, setNoBooksInLib] = useState(false)
   const [error, setError] = useState(false)
 
   const fetchRecs = async () => {
     if (!user) return
-    setLoading(true); setError(false); setUnavailable(false)
+    setLoading(true); setError(false); setUnavailable(false); setNoBooksInLib(false)
 
     // Use finished books first; fall back to currently-reading books
     let { data: userBooks } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'finished').limit(20)
@@ -29,7 +30,7 @@ export default function AIRecommendationsScreen() {
       userBooks = readingBooks
     }
     if (!userBooks?.length) {
-      setUnavailable(true); setLoading(false); return
+      setNoBooksInLib(true); setUnavailable(true); setLoading(false); return
     }
 
     const finishedBooks = (userBooks as UserBook[]).map(b => ({
@@ -79,9 +80,21 @@ export default function AIRecommendationsScreen() {
 
         {unavailable && (
           <div style={{ padding: '24px', background: theme.bgSecondary, borderRadius: 16, textAlign: 'center' }}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>🤖</div>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.fg, marginBottom: 6 }}>AI recommendations unavailable</div>
-            <div style={{ fontSize: 13, color: theme.muted }}>Add at least one book to your library first</div>
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" style={{ marginBottom: 10, opacity: 0.4 }}>
+              <circle cx="20" cy="20" r="18" stroke={theme.muted} strokeWidth="2"/>
+              <circle cx="13" cy="15" r="3" fill={theme.muted}/><circle cx="27" cy="15" r="3" fill={theme.muted}/>
+              <path d="M12 27c2-3 6-5 8-5s6 2 8 5" stroke={theme.muted} strokeWidth="2" strokeLinecap="round"/>
+              <path d="M8 8L32 32" stroke={theme.muted} strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.fg, marginBottom: 6 }}>Recommendations unavailable</div>
+            <div style={{ fontSize: 13, color: theme.muted, lineHeight: 1.6 }}>
+              {noBooksInLib
+                ? 'Add at least one book to your library first'
+                : 'AI could not generate recommendations right now. This may be a temporary issue.'}
+            </div>
+            {!noBooksInLib && (
+              <button onClick={fetchRecs} style={{ marginTop: 14, padding: '10px 22px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, cursor: 'pointer' }}>Try Again</button>
+            )}
           </div>
         )}
 

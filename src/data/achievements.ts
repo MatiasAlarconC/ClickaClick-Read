@@ -13,7 +13,7 @@ export interface AchievementStats {
 }
 
 // ─── Achievement definition ───────────────────────────────────────────────────
-export type AchievementTier = 'bronze' | 'silver' | 'gold' | 'platinum'
+export type AchievementTier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' | 'obsidian'
 export type AchievementReward =
   | { type: 'badge' }
   | { type: 'title'; value: string }
@@ -29,9 +29,21 @@ export interface Achievement {
   check: (s: AchievementStats) => boolean
 }
 
+// ─── Genre count helper (case-insensitive) ────────────────────────────────────
+function genre(s: AchievementStats, ...keys: string[]): number {
+  return keys.reduce((sum, k) => {
+    const lower = k.toLowerCase()
+    return sum + Object.entries(s.genreCounts).reduce((acc, [gk, v]) =>
+      gk.toLowerCase() === lower ? acc + v : acc, 0)
+  }, 0)
+}
+
 // ─── Achievement catalog ──────────────────────────────────────────────────────
 export const ACHIEVEMENTS: Achievement[] = [
-  // ── Bronze ──────────────────────────────────────────────────────────────────
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BRONZE — First Steps
+  // ══════════════════════════════════════════════════════════════════════════
   {
     id: 'first_book',
     name: 'First Page',
@@ -64,8 +76,50 @@ export const ACHIEVEMENTS: Achievement[] = [
     reward: { type: 'badge' },
     check: s => s.sessionCount >= 10,
   },
+  {
+    id: 'first_note',
+    name: 'The Annotator',
+    description: 'Write your very first book note.',
+    tier: 'bronze',
+    reward: { type: 'badge' },
+    check: s => s.notesCount >= 1,
+  },
+  {
+    id: 'library_five',
+    name: 'Shelf Builder',
+    description: 'Add 5 books to your library.',
+    tier: 'bronze',
+    reward: { type: 'badge' },
+    check: s => s.totalBooks >= 5,
+  },
+  {
+    id: 'two_hours',
+    name: 'Time Well Spent',
+    description: 'Read for a total of 2 hours across sessions.',
+    tier: 'bronze',
+    reward: { type: 'badge' },
+    check: s => s.totalHours >= 2,
+  },
+  {
+    id: 'genre_curious',
+    name: 'Genre Curious',
+    description: 'Read books from 3 different genres.',
+    tier: 'bronze',
+    reward: { type: 'badge' },
+    check: s => Object.values(s.genreCounts).filter(v => v > 0).length >= 3,
+  },
 
-  // ── Silver ───────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // SILVER — Growing Reader
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'streak_3',
+    name: 'Three in a Row',
+    description: 'Read for 3 consecutive days.',
+    tier: 'silver',
+    reward: { type: 'badge' },
+    check: s => s.streak >= 3,
+  },
   {
     id: 'ten_books',
     name: 'The Librarian',
@@ -81,6 +135,14 @@ export const ACHIEVEMENTS: Achievement[] = [
     tier: 'silver',
     reward: { type: 'character', characterId: 'knight' },
     check: s => s.streak >= 7,
+  },
+  {
+    id: 'notes_10',
+    name: 'Margin Writer',
+    description: 'Write 10 notes across your books.',
+    tier: 'silver',
+    reward: { type: 'badge' },
+    check: s => s.notesCount >= 10,
   },
   {
     id: 'notes_25',
@@ -99,6 +161,14 @@ export const ACHIEVEMENTS: Achievement[] = [
     check: s => s.sessionCount >= 15,
   },
   {
+    id: 'twenty_sessions',
+    name: 'In the Flow',
+    description: 'Complete 20 reading sessions.',
+    tier: 'silver',
+    reward: { type: 'badge' },
+    check: s => s.sessionCount >= 20,
+  },
+  {
     id: 'five_hundred_pages',
     name: 'Page Turner',
     description: 'Read 500 pages in total.',
@@ -106,8 +176,34 @@ export const ACHIEVEMENTS: Achievement[] = [
     reward: { type: 'badge' },
     check: s => s.totalPages >= 500,
   },
+  {
+    id: 'one_thousand_pages',
+    name: 'One Thousand Pages',
+    description: 'Read 1,000 pages across all your books.',
+    tier: 'silver',
+    reward: { type: 'badge' },
+    check: s => s.totalPages >= 1000,
+  },
+  {
+    id: 'romance_reader',
+    name: 'Hopeful Heart',
+    description: 'Read 5 Romance books.',
+    tier: 'silver',
+    reward: { type: 'badge' },
+    check: s => genre(s, 'romance') >= 5,
+  },
 
-  // ── Gold ─────────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // GOLD — Advanced Reader
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'twenty_books',
+    name: 'Avid Reader',
+    description: 'Finish 20 books.',
+    tier: 'gold',
+    reward: { type: 'badge' },
+    check: s => s.booksFinished >= 20,
+  },
   {
     id: 'thirty_books',
     name: 'The Scholar',
@@ -117,12 +213,36 @@ export const ACHIEVEMENTS: Achievement[] = [
     check: s => s.booksFinished >= 30,
   },
   {
+    id: 'streak_30',
+    name: 'The Monk',
+    description: 'Read every day for 30 consecutive days.',
+    tier: 'gold',
+    reward: { type: 'title', value: 'The Monk' },
+    check: s => s.streak >= 30,
+  },
+  {
+    id: 'fifty_sessions',
+    name: 'Session Master',
+    description: 'Complete 50 reading sessions.',
+    tier: 'gold',
+    reward: { type: 'badge' },
+    check: s => s.sessionCount >= 50,
+  },
+  {
+    id: 'notes_50',
+    name: 'The Archivist',
+    description: 'Write 50 notes. Every insight preserved.',
+    tier: 'gold',
+    reward: { type: 'title', value: 'The Archivist' },
+    check: s => s.notesCount >= 50,
+  },
+  {
     id: 'fantasy_master',
     name: 'Fantasy Master',
     description: 'Read 20+ books in the Fantasy genre.',
     tier: 'gold',
     reward: { type: 'title', value: 'Fantasy Master' },
-    check: s => (s.genreCounts['Fantasy'] ?? 0) + (s.genreCounts['fantasy'] ?? 0) >= 20,
+    check: s => genre(s, 'fantasy') >= 20,
   },
   {
     id: 'detective',
@@ -130,11 +250,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     description: 'Read 10+ Mystery or Thriller books.',
     tier: 'gold',
     reward: { type: 'character', characterId: 'fox' },
-    check: s =>
-      (s.genreCounts['Mystery'] ?? 0) +
-      (s.genreCounts['mystery'] ?? 0) +
-      (s.genreCounts['Thriller'] ?? 0) +
-      (s.genreCounts['thriller'] ?? 0) >= 10,
+    check: s => genre(s, 'mystery', 'thriller', 'crime') >= 10,
   },
   {
     id: 'magic_realm',
@@ -142,12 +258,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     description: 'Read 15+ Fantasy or Sci-Fi books.',
     tier: 'gold',
     reward: { type: 'character', characterId: 'mage' },
-    check: s =>
-      (s.genreCounts['Fantasy'] ?? 0) +
-      (s.genreCounts['fantasy'] ?? 0) +
-      (s.genreCounts['Science Fiction'] ?? 0) +
-      (s.genreCounts['Sci-Fi'] ?? 0) +
-      (s.genreCounts['sci-fi'] ?? 0) >= 15,
+    check: s => genre(s, 'fantasy', 'science fiction', 'sci-fi', 'scifi') >= 15,
   },
   {
     id: 'cosmic_explorer',
@@ -155,10 +266,31 @@ export const ACHIEVEMENTS: Achievement[] = [
     description: 'Read 5+ Science Fiction books.',
     tier: 'gold',
     reward: { type: 'character', characterId: 'cosmic' },
-    check: s =>
-      (s.genreCounts['Science Fiction'] ?? 0) +
-      (s.genreCounts['Sci-Fi'] ?? 0) +
-      (s.genreCounts['sci-fi'] ?? 0) >= 5,
+    check: s => genre(s, 'science fiction', 'sci-fi', 'scifi') >= 5,
+  },
+  {
+    id: 'horror_fan',
+    name: 'The Haunted',
+    description: 'Read 10+ Horror books. You enjoy the dark.',
+    tier: 'gold',
+    reward: { type: 'title', value: 'The Haunted' },
+    check: s => genre(s, 'horror') >= 10,
+  },
+  {
+    id: 'history_lover',
+    name: 'Time Traveler',
+    description: 'Read 10+ Historical Fiction or History books.',
+    tier: 'gold',
+    reward: { type: 'title', value: 'Time Traveler' },
+    check: s => genre(s, 'historical fiction', 'history', 'historical') >= 10,
+  },
+  {
+    id: 'nonfiction_scholar',
+    name: 'Truth Seeker',
+    description: 'Read 8+ Nonfiction or Self-Help books.',
+    tier: 'gold',
+    reward: { type: 'title', value: 'Truth Seeker' },
+    check: s => genre(s, 'nonfiction', 'non-fiction', 'self-help', 'self help', 'biography', 'memoir') >= 8,
   },
   {
     id: 'ten_thousand_pages',
@@ -169,7 +301,9 @@ export const ACHIEVEMENTS: Achievement[] = [
     check: s => s.totalPages >= 10000,
   },
 
-  // ── Platinum ──────────────────────────────────────────────────────────────────
+  // ══════════════════════════════════════════════════════════════════════════
+  // PLATINUM — Hardcore Reader
+  // ══════════════════════════════════════════════════════════════════════════
   {
     id: 'fifty_books',
     name: 'The Sage',
@@ -195,16 +329,125 @@ export const ACHIEVEMENTS: Achievement[] = [
     check: s => s.sessionCount >= 100,
   },
   {
+    id: 'streak_100',
+    name: 'The Unbreakable',
+    description: 'Maintain a 100-day reading streak.',
+    tier: 'platinum',
+    reward: { type: 'title', value: 'The Unbreakable' },
+    check: s => s.streak >= 100,
+  },
+  {
+    id: 'notes_100',
+    name: 'The Chronicler',
+    description: 'Write 100 notes. Every thought documented.',
+    tier: 'platinum',
+    reward: { type: 'title', value: 'The Chronicler' },
+    check: s => s.notesCount >= 100,
+  },
+  {
+    id: 'two_hundred_sessions',
+    name: 'The Devoted Pilgrim',
+    description: '200 reading sessions. A true ritual.',
+    tier: 'platinum',
+    reward: { type: 'title', value: 'The Devoted Pilgrim' },
+    check: s => s.sessionCount >= 200,
+  },
+  {
+    id: 'romance_master',
+    name: 'Hopeless Romantic',
+    description: 'Read 15+ Romance books.',
+    tier: 'platinum',
+    reward: { type: 'title', value: 'Hopeless Romantic' },
+    check: s => genre(s, 'romance') >= 15,
+  },
+  {
     id: 'fifty_thousand_pages',
-    name: 'Speed Reader',
+    name: 'The Lexicon',
     description: 'Read 50,000 total pages.',
     tier: 'platinum',
-    reward: { type: 'title', value: 'Speed Reader' },
+    reward: { type: 'title', value: 'The Lexicon' },
     check: s => s.totalPages >= 50000,
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DIAMOND — Legendary
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'diamond_reader',
+    name: 'Diamond Reader',
+    description: '200 books finished. A crystalline achievement.',
+    tier: 'diamond',
+    reward: { type: 'title', value: 'Diamond Reader' },
+    check: s => s.booksFinished >= 200,
+  },
+  {
+    id: 'eternal_flame',
+    name: 'The Immortal',
+    description: 'Read every single day for a full year (365-day streak).',
+    tier: 'diamond',
+    reward: { type: 'title', value: 'The Immortal' },
+    check: s => s.streak >= 365,
+  },
+  {
+    id: 'five_hundred_sessions',
+    name: 'Transcended Reader',
+    description: '500 reading sessions completed.',
+    tier: 'diamond',
+    reward: { type: 'title', value: 'Transcended' },
+    check: s => s.sessionCount >= 500,
+  },
+  {
+    id: 'hundred_thousand_pages',
+    name: 'The Wordsmith',
+    description: 'Read 100,000 total pages. Words flow through you.',
+    tier: 'diamond',
+    reward: { type: 'title', value: 'The Wordsmith' },
+    check: s => s.totalPages >= 100000,
+  },
+  {
+    id: 'polymath',
+    name: 'The Polymath',
+    description: 'Read 5+ books in 8 different genres.',
+    tier: 'diamond',
+    reward: { type: 'title', value: 'The Polymath' },
+    check: s => {
+      const genres = Object.entries(s.genreCounts)
+      let count = 0
+      for (const [, v] of genres) if (v >= 5) count++
+      return count >= 8
+    },
+  },
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // OBSIDIAN — Mythic
+  // ══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'obsidian_scholar',
+    name: 'The Obsidian Scholar',
+    description: '500 books finished. A living library.',
+    tier: 'obsidian',
+    reward: { type: 'title', value: 'The Obsidian Scholar' },
+    check: s => s.booksFinished >= 500,
+  },
+  {
+    id: 'thousand_sessions',
+    name: 'The Eternal',
+    description: '1,000 reading sessions. Beyond dedication.',
+    tier: 'obsidian',
+    reward: { type: 'title', value: 'The Eternal' },
+    check: s => s.sessionCount >= 1000,
+  },
+  {
+    id: 'dark_library',
+    name: 'Lord of Pages',
+    description: 'Accumulate 1,000 hours of reading time.',
+    tier: 'obsidian',
+    reward: { type: 'title', value: 'Lord of Pages' },
+    check: s => s.totalHours >= 1000,
   },
 ]
 
-// ─── Characters that are unlocked by default ────────────────────────────────
+// ─── Characters unlocked by default ──────────────────────────────────────────
 export const DEFAULT_UNLOCKED: CharacterId[] = ['lion']
 
 /** Returns the set of character IDs the user has unlocked from achievements */
@@ -225,12 +468,14 @@ export function getUnlockedTitles(stats: AchievementStats): string[] {
     .map(a => (a.reward as { type: 'title'; value: string }).value)
 }
 
-/** Tier styling helpers */
+/** Tier styling */
 export const TIER_COLORS: Record<AchievementTier, string> = {
   bronze:   '#CD7F32',
   silver:   '#A8A9AD',
   gold:     '#FFD700',
   platinum: '#E8E6F0',
+  diamond:  '#B9F2FF',
+  obsidian: '#C084FC',
 }
 
 export const TIER_EMISSIVE: Record<AchievementTier, string> = {
@@ -238,4 +483,6 @@ export const TIER_EMISSIVE: Record<AchievementTier, string> = {
   silver:   '#808080',
   gold:     '#B8860B',
   platinum: '#9370DB',
+  diamond:  '#00BFFF',
+  obsidian: '#7C3AED',
 }

@@ -144,7 +144,10 @@ export function HomeScreen() {
                 <span style={{ fontSize: 13, color: theme.muted }}>days</span>
               </div>
             </div>
-            <div style={{ fontSize: 28, lineHeight: 1, marginTop: 4 }}>🔥</div>
+            <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style={{ marginTop: 4 }}>
+              <path d="M14 3C12 7 9 9.5 9 13c0 2.76 2.24 5 5 5s5-2.24 5-5c0-3.5-3-6-5-10z" fill={theme.fg} opacity="0.85"/>
+              <path d="M14 18c-2.76 0-5-2.24-5-5 0 5.52 4.48 10 10 10-2.76 0-5-2.24-5-5z" fill={theme.fg} opacity="0.5"/>
+            </svg>
           </div>
           <div style={{ display: 'flex', gap: 5 }}>
             {dayLetters.map((day, i) => (

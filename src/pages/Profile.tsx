@@ -178,7 +178,13 @@ export default function ProfileScreen() {
         {/* Achievements entry */}
         <button onClick={() => navigate('/achievements')} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '14px 16px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 14, marginBottom: 20, cursor: 'pointer' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 20 }}>🏆</span>
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              <path d="M3 4h14v2H3V4zm0 2v6c0 2.76 2.24 5 5 5h4c2.76 0 5-2.24 5-5V6H3z" fill={theme.muted} opacity="0.85"/>
+              <rect x="7" y="15" width="6" height="1.5" rx="0.75" fill={theme.muted} opacity="0.7"/>
+              <rect x="5" y="16.5" width="10" height="1.5" rx="0.75" fill={theme.muted} opacity="0.7"/>
+              <rect x="1" y="4" width="2" height="5" rx="1" fill={theme.muted} opacity="0.6"/>
+              <rect x="17" y="4" width="2" height="5" rx="1" fill={theme.muted} opacity="0.6"/>
+            </svg>
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: theme.fg }}>Achievements</div>
               <div style={{ fontSize: 11, color: theme.muted }}>Medals, titles & unlockable characters</div>

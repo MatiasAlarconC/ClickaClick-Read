@@ -24,7 +24,8 @@ function countGenres(userBooks: { book?: { genres?: string[] | null } | null }[]
 
 // ─── Tier label ───────────────────────────────────────────────────────────────
 const TIER_LABEL: Record<AchievementTier, string> = {
-  bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum'
+  bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum',
+  diamond: 'Diamond', obsidian: 'Obsidian',
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -90,7 +91,7 @@ export default function AchievementsScreen() {
     setShowTitlePicker(false)
   }
 
-  const tiers: AchievementTier[] = ['platinum', 'gold', 'silver', 'bronze']
+  const tiers: AchievementTier[] = ['obsidian', 'diamond', 'platinum', 'gold', 'silver', 'bronze']
 
   return (
     <div style={{ minHeight: '100%', background: theme.bg }}>
@@ -169,7 +170,7 @@ export default function AchievementsScreen() {
                       />
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{c.name}</div>
-                    {!unlocked && <div style={{ fontSize: 10, color: theme.muted }}>🔒</div>}
+                    {!unlocked && <div style={{ fontSize: 10, color: theme.muted, textAlign: 'center', marginTop: 2 }}>locked</div>}
                   </div>
                 )
               })}
@@ -212,7 +213,7 @@ export default function AchievementsScreen() {
                         <div style={{ marginTop: 6 }}>
                           {ach.reward.type === 'title' && (
                             <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 999, background: unlocked ? '#FFD70020' : theme.bg, border: `1px solid ${unlocked ? '#FFD700' : theme.border}`, fontSize: 11, color: unlocked ? '#FFD700' : theme.muted }}>
-                              🏷 Title: "{ach.reward.value}"
+                              ✦ Title: "{ach.reward.value}"
                             </span>
                           )}
                           {ach.reward.type === 'character' && (
@@ -222,7 +223,7 @@ export default function AchievementsScreen() {
                           )}
                           {ach.reward.type === 'badge' && (
                             <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 999, background: theme.bg, border: `1px solid ${theme.border}`, fontSize: 11, color: theme.muted }}>
-                              🎖 Badge
+                              ◆ Badge
                             </span>
                           )}
                         </div>

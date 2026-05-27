@@ -297,7 +297,10 @@ export default function BookDetailScreen() {
                 </div>
               )}
               {aiError && (
-                <div style={{ marginTop: 12, padding: '12px 16px', background: theme.bgSecondary, borderRadius: 12, fontSize: 13, color: theme.muted }}>AI summary unavailable</div>
+                <div style={{ marginTop: 12, padding: '12px 16px', background: theme.bgSecondary, borderRadius: 12, fontSize: 13, color: theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                  <span>AI summary unavailable — the service may be temporarily down.</span>
+                  <button onClick={fetchAiSummary} style={{ padding: '6px 14px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, color: theme.fg, cursor: 'pointer', flexShrink: 0 }}>Retry</button>
+                </div>
               )}
             </div>
           </div>
