@@ -38,7 +38,7 @@ export default function ProfileScreen() {
         <BlobShape size="medium" fill={theme.blobFill} opacity={0.4} style={{ width: '100%', height: '100%' }} />
       </div>
 
-      <div style={{ flex: 1, padding: '64px 22px 0' }}>
+      <div style={{ flex: 1, padding: '64px 22px 0', paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
         <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 400, color: theme.fg, letterSpacing: -1, marginBottom: 28 }}>Profile</div>
 
         {/* Avatar */}

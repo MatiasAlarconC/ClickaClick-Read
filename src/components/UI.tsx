@@ -130,7 +130,7 @@ export function TabBar({ activeTab, onTabChange, theme }: {
   activeTab: string; onTabChange: (tab: string) => void; theme: Theme
 }) {
   return (
-    <div style={{ position: 'sticky', bottom: 0, zIndex: 50, display: 'flex', background: theme.bg, borderTop: `1px solid ${theme.border}`, paddingBottom: 20 }}>
+    <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100, display: 'flex', background: theme.bg, borderTop: `1px solid ${theme.border}`, paddingBottom: 'env(safe-area-inset-bottom, 8px)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
       {(['home','search','library','stats','profile'] as const).map(tab => {
         const active = tab === activeTab
         const color = active ? theme.fg : theme.muted

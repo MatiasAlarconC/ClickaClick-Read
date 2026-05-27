@@ -70,7 +70,7 @@ export function HomeScreen() {
     ? 0.5 : 0 : 0 // placeholder; real progress from session data
 
   return (
-    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg }}>
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
       <div style={{ flex: 1, padding: '64px 22px 0' }}>
 
         {/* Greeting */}

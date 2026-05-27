@@ -2,29 +2,48 @@ import type { SearchResult } from '../types'
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY as string | undefined
 
+// ─── In-memory cache to avoid redundant fetches ───────────────────────────────
+const cache = new Map<string, { results: SearchResult[]; ts: number }>()
+const CACHE_TTL = 5 * 60 * 1000 // 5 min
+
 export async function searchBooks(query: string): Promise<SearchResult[]> {
-  if (!query.trim()) return []
+  const q = query.trim()
+  if (!q) return []
 
-  // Try Google Books first
-  try {
-    const googleResults = await searchGoogleBooks(query)
-    if (googleResults.length > 0) return googleResults
-  } catch {
-    // fall through to Open Library
+  const cached = cache.get(q)
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.results
+
+  // Run all three sources in parallel
+  const [googleGen, openLibGen, openLibTitle] = await Promise.allSettled([
+    searchGoogleBooks(q),
+    searchOpenLibrary(q, 'q'),
+    searchOpenLibrary(q, 'title'),
+  ])
+
+  const seen = new Set<string>()
+  const results: SearchResult[] = []
+
+  const addUnique = (arr: SearchResult[]) => {
+    for (const r of arr) {
+      const key = (r.isbn || r.title).toLowerCase().trim()
+      if (!seen.has(key)) { seen.add(key); results.push(r) }
+    }
   }
 
-  // Fallback to Open Library
-  try {
-    return await searchOpenLibrary(query)
-  } catch {
-    return []
-  }
+  if (googleGen.status === 'fulfilled')   addUnique(googleGen.value)
+  if (openLibGen.status === 'fulfilled')  addUnique(openLibGen.value)
+  if (openLibTitle.status === 'fulfilled') addUnique(openLibTitle.value)
+
+  const final = results.slice(0, 40)
+  cache.set(q, { results: final, ts: Date.now() })
+  return final
 }
 
 async function searchGoogleBooks(query: string): Promise<SearchResult[]> {
   const url = new URL('https://www.googleapis.com/books/v1/volumes')
   url.searchParams.set('q', query)
-  url.searchParams.set('maxResults', '20')
+  url.searchParams.set('maxResults', '40')
+  url.searchParams.set('printType', 'books')
   if (GOOGLE_API_KEY) url.searchParams.set('key', GOOGLE_API_KEY)
 
   const res = await fetch(url.toString())
@@ -37,7 +56,7 @@ async function searchGoogleBooks(query: string): Promise<SearchResult[]> {
       id: item.id,
       title: info.title ?? 'Unknown Title',
       author: (info.authors ?? ['Unknown Author']).join(', '),
-      cover_url: info.imageLinks?.thumbnail?.replace('http:', 'https:') ?? null,
+      cover_url: (info.imageLinks?.extraLarge ?? info.imageLinks?.large ?? info.imageLinks?.thumbnail)?.replace('http:', 'https:') ?? null,
       synopsis: info.description ?? null,
       pages: info.pageCount ?? null,
       genres: info.categories ?? [],
@@ -49,8 +68,9 @@ async function searchGoogleBooks(query: string): Promise<SearchResult[]> {
   })
 }
 
-async function searchOpenLibrary(query: string): Promise<SearchResult[]> {
-  const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=20`
+// field: 'q' (general) or 'title' (title-specific for obscure books)
+async function searchOpenLibrary(query: string, field: 'q' | 'title' = 'q'): Promise<SearchResult[]> {
+  const url = `https://openlibrary.org/search.json?${field}=${encodeURIComponent(query)}&limit=20&fields=key,title,author_name,cover_i,number_of_pages_median,subject,first_publish_year,isbn`
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Open Library ${res.status}`)
   const data = await res.json()
@@ -59,7 +79,7 @@ async function searchOpenLibrary(query: string): Promise<SearchResult[]> {
     id: doc.key,
     title: doc.title ?? 'Unknown Title',
     author: (doc.author_name ?? ['Unknown Author']).slice(0, 2).join(', '),
-    cover_url: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-M.jpg` : null,
+    cover_url: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : null,
     synopsis: null,
     pages: doc.number_of_pages_median ?? null,
     genres: doc.subject?.slice(0, 5) ?? [],
@@ -76,7 +96,7 @@ interface GoogleBookItem {
     title?: string
     authors?: string[]
     description?: string
-    imageLinks?: { thumbnail?: string }
+    imageLinks?: { thumbnail?: string; large?: string; extraLarge?: string }
     pageCount?: number
     categories?: string[]
     publishedDate?: string
@@ -94,3 +114,5 @@ interface OpenLibraryDoc {
   first_publish_year?: number
   isbn?: string[]
 }
+
+

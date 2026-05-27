@@ -102,7 +102,7 @@ export default function StatsScreen() {
   const CELL = 5.2; const GAP = 1.5
 
   return (
-    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg }}>
+    <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
       <div style={{ flex: 1, padding: '64px 22px 0' }}>
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 400, color: theme.fg, letterSpacing: -1, lineHeight: 1.15 }}>Your Reading<br />Life</div>
