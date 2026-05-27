@@ -72,7 +72,7 @@ export default function LibraryScreen() {
             </div>
           ) : (
             books[tab].map((book, i) => (
-              <SwipeableBookRow key={book.id} book={book} index={i} total={books[tab].length} tab={tab} theme={theme} onPress={() => navigate('/detail', { state: { book: book.book } })} onDelete={() => {
+              <SwipeableBookRow key={book.id} book={book} index={i} total={books[tab].length} tab={tab} theme={theme} userId={user?.id ?? ''} onPress={() => navigate('/detail', { state: { book: book.book } })} onDelete={() => {
                 setBooks(prev => ({
                   ...prev,
                   [tab]: prev[tab].filter(b => b.id !== book.id)
@@ -101,8 +101,8 @@ export default function LibraryScreen() {
   )
 }
 
-function SwipeableBookRow({ book, index, total, tab, theme, onPress, onDelete, onFinish }: {
-  book: UserBook; index: number; total: number; tab: LibTab; theme: import('../types').Theme
+function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onDelete, onFinish }: {
+  book: UserBook; index: number; total: number; tab: LibTab; theme: import('../types').Theme; userId: string
   onPress: () => void; onDelete: () => void; onFinish: () => void
 }) {
   const x = useMotionValue(0)
@@ -123,7 +123,22 @@ function SwipeableBookRow({ book, index, total, tab, theme, onPress, onDelete, o
     const p = pageInput ? parseInt(pageInput) : null
     if (p === book.current_page) return
     await supabase.from('user_books').update({ current_page: p }).eq('id', book.id)
-    // Optimistically update local display (parent will refetch on next mount)
+    // Log a manual reading session so Stats picks it up
+    const oldPage = book.current_page ?? 0
+    if (p !== null && p > oldPage && userId) {
+      const now = new Date().toISOString()
+      await supabase.from('reading_sessions').insert({
+        user_id: userId,
+        book_id: book.book_id,
+        started_at: now,
+        ended_at: now,
+        duration_seconds: null,
+        start_page: oldPage,
+        end_page: p,
+        pages_read: p - oldPage,
+        is_manual: true,
+      })
+    }
   }
 
   return (

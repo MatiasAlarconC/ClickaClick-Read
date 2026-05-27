@@ -36,7 +36,12 @@ export default function StatsScreen() {
     const hours = Math.round(totalSeconds / 3600)
     const days = new Set(sessions.map(s => new Date(s.started_at).toDateString())).size
     const dailyAvgPages = days > 0 ? Math.round(pagesRead / days) : 0
-    return { booksFinished, pagesRead, hours, dailyAvgPages }
+    // Reading pace: pages per hour — only from timed sessions (duration > 0)
+    const timedSessions = sessions.filter(s => (s.duration_seconds ?? 0) > 0)
+    const timedPages = timedSessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
+    const timedHours = timedSessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / 3600
+    const pacePerHour = timedHours > 0 ? Math.round(timedPages / timedHours) : 0
+    return { booksFinished, pagesRead, hours, dailyAvgPages, pacePerHour }
   }, [sessions, userBooks])
 
   // Heatmap: 52 weeks × 7 days
@@ -124,6 +129,19 @@ export default function StatsScreen() {
             </motion.div>
           ))}
         </div>
+
+        {/* Reading pace — full-width accent card */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.36 }}
+          style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 20px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: theme.muted, marginBottom: 5 }}>Reading Pace</div>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, color: theme.fg, lineHeight: 1 }}>
+              {stats.pacePerHour > 0 ? stats.pacePerHour : '—'}
+            </div>
+            <div style={{ fontSize: 11, color: theme.muted, marginTop: 3 }}>pages / hour</div>
+          </div>
+          <div style={{ fontSize: 28 }}>⚡</div>
+        </motion.div>
 
         {/* Heatmap */}
         <div style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 16px 14px', marginBottom: 14 }}>
