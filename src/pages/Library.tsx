@@ -66,7 +66,7 @@ export default function LibraryScreen() {
             <div style={{ textAlign: 'center', padding: '48px 0', color: theme.muted }}>Loading…</div>
           ) : books[tab].length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 0' }}>
-              <div style={{ fontSize: 36, marginBottom: 8 }}>📚</div>
+              <div style={{ marginBottom: 8 }}><svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="#888" strokeWidth="1.5" strokeLinecap="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.muted }}>Nothing here yet</div>
               <button onClick={() => navigate('/search')} style={{ marginTop: 16, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 500 }}>Find books</button>
             </div>
@@ -146,7 +146,7 @@ function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onD
       {/* Swipe actions */}
       <div style={{ position: 'absolute', inset: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px' }}>
         <motion.div style={{ opacity: finishOpacity }}>
-          <div style={{ background: '#22c55e', padding: '8px 14px', borderRadius: 10, fontSize: 12, color: '#FFF', fontWeight: 600 }}>✅ Done</div>
+          <div style={{ background: '#22c55e', padding: '8px 14px', borderRadius: 10, fontSize: 12, color: '#FFF', fontWeight: 600 }}>Done</div>
         </motion.div>
         <motion.div style={{ opacity: deleteOpacity }}>
           <div style={{ background: '#ef4444', padding: '8px 14px', borderRadius: 10, fontSize: 12, color: '#FFF', fontWeight: 600 }}>🗑 Remove</div>

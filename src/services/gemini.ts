@@ -2,6 +2,10 @@ import { supabase } from '../lib/supabase'
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
 
+export function isGeminiConfigured(): boolean {
+  return !!(GEMINI_API_KEY && GEMINI_API_KEY.trim().length > 0)
+}
+
 interface GeminiConfig {
   enabled: boolean
   model: string
@@ -122,7 +126,8 @@ export async function getProgressiveSummary(params: {
       })
     }
     return text
-  } catch {
+  } catch (err) {
+    console.error('[ClickaClick AI] progressive_summary failed:', err)
     return null
   }
 }
@@ -146,7 +151,8 @@ export async function getRecommendations(params: {
     await logUsage('recommendations', tokens, cfg.model, params.userId)
     const json = text.match(/\[[\s\S]*\]/)?.[0]
     return json ? JSON.parse(json) : []
-  } catch {
+  } catch (err) {
+    console.error('[ClickaClick AI] recommendations failed:', err)
     return []
   }
 }
@@ -164,7 +170,8 @@ export async function getReadingPersonality(params: {
     const { text, tokens } = await callGemini(prompt, cfg.model)
     await logUsage('wrapped_personality', tokens, cfg.model, params.userId)
     return text.trim()
-  } catch {
+  } catch (err) {
+    console.error('[ClickaClick AI] wrapped_personality failed:', err)
     return null
   }
 }

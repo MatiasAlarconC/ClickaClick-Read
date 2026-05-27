@@ -213,7 +213,7 @@ export default function BookDetailScreen() {
     return (
       <div style={{ minHeight: '100%', background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>📚</div>
+          <div style={{ marginBottom: 8 }}><svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="#888" strokeWidth="1.5" strokeLinecap="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
           <div style={{ color: theme.muted, fontSize: 14 }}>No book selected</div>
           <button onClick={() => navigate('/search')} style={{ marginTop: 16, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14 }}>Search Books</button>
         </div>
@@ -222,7 +222,7 @@ export default function BookDetailScreen() {
   }
 
   const statusLabel = userBook ? {
-    reading: '📖 Reading', finished: '✅ Finished', want_to_read: '🔖 Want to Read'
+    reading: 'Reading', finished: 'Finished', want_to_read: 'Want to Read'
   }[userBook.status] : null
 
   return (
@@ -260,10 +260,10 @@ export default function BookDetailScreen() {
           {!userBook && (
             <>
               <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
-                {addingToLib ? '…' : '📖 Start Reading'}
+                {addingToLib ? '…' : 'Start Reading'}
               </button>
               <button onClick={() => addToLibrary('want_to_read')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
-                🔖 Want to Read
+                Want to Read
               </button>
             </>
           )}
@@ -275,12 +275,12 @@ export default function BookDetailScreen() {
           )}
           {userBook?.status === 'want_to_read' && (
             <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
-              {addingToLib ? '…' : '📖 Start Reading'}
+              {addingToLib ? '…' : 'Start Reading'}
             </button>
           )}
           {userBook?.status === 'reading' && (
             <button onClick={() => addToLibrary('finished')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
-              {addingToLib ? '…' : '✅ Mark Finished'}
+              {addingToLib ? '…' : 'Mark Finished'}
             </button>
           )}
         </div>
