@@ -30,6 +30,8 @@ export default function BookDetailScreen() {
   const [aiError, setAiError] = useState(false)
   const [customPages, setCustomPages] = useState<string>('')
   const [bookDbId, setBookDbId] = useState<string | null>(null)
+  // synopsis may come from nav state OR the DB books record — prefer DB
+  const [synopsis, setSynopsis] = useState<string | null>(book?.synopsis ?? null)
 
   useEffect(() => {
     if (!user || !book) return
@@ -55,6 +57,8 @@ export default function BookDetailScreen() {
               setUserBook(data as UserBook)
               setRating(data.user_rating ?? 0)
               setCustomPages(String(data.custom_pages ?? book.pages ?? ''))
+              // Update synopsis from DB if the nav state didn't have one
+              if (!synopsis && data.book?.synopsis) setSynopsis(data.book.synopsis)
             }
           })
 
@@ -165,10 +169,12 @@ export default function BookDetailScreen() {
   const fetchAiSummary = async () => {
     if (!book || !user) return
     setAiLoading(true); setAiError(false)
+    // Use the user's actual current reading position
+    const currentPage = userBook?.current_page ?? parseInt(customPages) || Math.floor((book.pages ?? 200) / 2)
     const result = await getProgressiveSummary({
       title: book.title, author: book.author,
-      synopsis: book.synopsis,
-      currentPage: parseInt(customPages) || Math.floor((book.pages ?? 200) / 2),
+      synopsis: synopsis,
+      currentPage,
       totalPages: book.pages ?? 200,
       userId: user.id,
     })
@@ -254,8 +260,10 @@ export default function BookDetailScreen() {
         {/* Overview tab */}
         {activeTab === 'overview' && (
           <div style={{ paddingBottom: 40 }}>
-            {book.synopsis && (
-              <p style={{ fontSize: 14, color: theme.fgDim, lineHeight: 1.75, marginBottom: 22 }}>{book.synopsis}</p>
+            {synopsis ? (
+              <p style={{ fontSize: 14, color: theme.fgDim, lineHeight: 1.75, marginBottom: 22 }}>{synopsis}</p>
+            ) : (
+              <p style={{ fontSize: 14, color: theme.muted, lineHeight: 1.75, marginBottom: 22, fontStyle: 'italic' }}>No description available for this book.</p>
             )}
 
             {book.genres.length > 0 && (

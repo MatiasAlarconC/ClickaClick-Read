@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { TabBar } from '../components/UI'
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
+import { FlameIcon, LightningIcon } from '../components/Icons'
 import type { ReadingSession, UserBook } from '../types'
 
 export default function StatsScreen() {
@@ -140,7 +141,7 @@ export default function StatsScreen() {
             </div>
             <div style={{ fontSize: 11, color: theme.muted, marginTop: 3 }}>pages / hour</div>
           </div>
-          <div style={{ fontSize: 28 }}>⚡</div>
+          <LightningIcon size={36} color={theme.accent} style={{ opacity: 0.7 }}/>
         </motion.div>
 
         {/* Heatmap */}
@@ -191,11 +192,14 @@ export default function StatsScreen() {
         {/* Streaks */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
           {[
-            { label: 'Current Streak', value: String(currentStreak), unit: 'days' },
-            { label: 'Best Streak', value: String(longestStreak), unit: 'days' },
+            { label: 'Current Streak', value: String(currentStreak), unit: 'days', icon: <FlameIcon size={28} color={theme.accent}/> },
+            { label: 'Best Streak', value: String(longestStreak), unit: 'days', icon: <FlameIcon size={28} color={theme.muted}/> },
           ].map(item => (
             <div key={item.label} style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 16px 14px' }}>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: theme.muted, marginBottom: 5 }}>{item.label}</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: theme.muted, marginBottom: 5 }}>{item.label}</div>
+                {item.icon}
+              </div>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 36, color: theme.fg, lineHeight: 1 }}>{item.value}</div>
               <div style={{ fontSize: 11, color: theme.muted, marginTop: 3 }}>{item.unit}</div>
             </div>

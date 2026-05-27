@@ -1,7 +1,14 @@
+export interface AvatarConfig {
+  character: 'lion' | 'mage' | 'fox' | 'owl' | 'knight' | 'cosmic'
+  primaryColor: string
+  secondaryColor: string
+}
+
 export interface Profile {
   id: string
   username: string | null
   avatar_url: string | null
+  avatar_config: AvatarConfig | null
   created_at: string
   reading_goal_books_per_year: number | null
   reading_goal_minutes_per_day: number | null

@@ -22,9 +22,14 @@ export default function AIRecommendationsScreen() {
     if (!user) return
     setLoading(true); setError(false); setUnavailable(false)
 
-    const { data: userBooks } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'finished').limit(20)
+    // Use finished books first; fall back to currently-reading books
+    let { data: userBooks } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'finished').limit(20)
     if (!userBooks?.length) {
-      setRecs([]); setLoading(false); return
+      const { data: readingBooks } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'reading').limit(10)
+      userBooks = readingBooks
+    }
+    if (!userBooks?.length) {
+      setUnavailable(true); setLoading(false); return
     }
 
     const finishedBooks = (userBooks as UserBook[]).map(b => ({
@@ -76,7 +81,7 @@ export default function AIRecommendationsScreen() {
           <div style={{ padding: '24px', background: theme.bgSecondary, borderRadius: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>🤖</div>
             <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.fg, marginBottom: 6 }}>AI recommendations unavailable</div>
-            <div style={{ fontSize: 13, color: theme.muted }}>Finish a few books first, or check back later</div>
+            <div style={{ fontSize: 13, color: theme.muted }}>Add at least one book to your library first</div>
           </div>
         )}
 

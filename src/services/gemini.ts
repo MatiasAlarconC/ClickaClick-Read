@@ -78,7 +78,7 @@ export async function getProgressiveSummary(params: {
 
   // Check 24h cache
   if (params.userId) {
-    const rangeKey = Math.floor(params.currentPage / 50) * 50
+    const rangeKey = params.currentPage // cache per exact page
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
     const { data: cached } = await supabase
       .from('ai_summary_cache')
@@ -91,7 +91,8 @@ export async function getProgressiveSummary(params: {
     if (cached?.summary) return cached.summary
   }
 
-  const prompt = `The user is on page ${params.currentPage} of ${params.totalPages} of "${params.title}" by ${params.author}. Based only on what would reasonably have happened up to this point in the book (do not spoil future events), write a 3-sentence recap of what the reader has likely experienced so far. Be engaging, not dry.`
+  const fromPage = Math.max(1, params.currentPage - 20)
+  const prompt = `The reader is on page ${params.currentPage} of "${params.title}" by ${params.author}${params.synopsis ? ` (synopsis: ${params.synopsis.slice(0, 200)})` : ''}. Write a vivid 3-sentence recap of what likely happened in pages ${fromPage}–${params.currentPage} to help the reader remember where they left off. Focus on recent events — character actions, emotional beats, plot twists. Be engaging, not dry. Do not spoil anything beyond page ${params.currentPage}.`
 
   try {
     const { text, tokens } = await callGemini(prompt, cfg.model)
@@ -99,7 +100,7 @@ export async function getProgressiveSummary(params: {
 
     // Cache result
     if (params.userId) {
-      const rangeKey = Math.floor(params.currentPage / 50) * 50
+      const rangeKey = params.currentPage
       await supabase.from('ai_summary_cache').upsert({
         user_id: params.userId, book_title: params.title,
         page_range: rangeKey, summary: text
