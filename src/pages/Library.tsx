@@ -4,7 +4,7 @@ import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-mo
 import { BookCover, TabBar, ProgressBar, Stars, Spinner } from '../components/UI'
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
-import { getRecommendations, type BookRecommendation } from '../services/gemini'
+import { getRecommendations, isGeminiConfigured, type BookRecommendation } from '../services/gemini'
 import { searchBooks } from '../services/books'
 import type { UserBook } from '../types'
 
@@ -32,6 +32,7 @@ export default function LibraryScreen() {
   const [recs, setRecs] = useState<BookRecommendation[]>([])
   const [recLoading, setRecLoading] = useState(false)
   const [recError, setRecError] = useState(false)
+  const [recErrorMsg, setRecErrorMsg] = useState('')
   const [recLoadingMore, setRecLoadingMore] = useState(false)
   const [noBooksForRecs, setNoBooksForRecs] = useState(false)
 
@@ -50,6 +51,12 @@ export default function LibraryScreen() {
         }
       } catch { /* ignore */ }
     }
+    if (!isGeminiConfigured()) {
+      setRecError(true)
+      setRecErrorMsg('No API key configured. Add VITE_GEMINI_API_KEY in Vercel.')
+      setRecLoading(false)
+      return
+    }
     setRecLoading(true)
     let { data: userBooks } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'finished').limit(20)
     if (!userBooks?.length) {
@@ -59,7 +66,7 @@ export default function LibraryScreen() {
     if (!userBooks?.length) { setNoBooksForRecs(true); setRecLoading(false); return }
     const bookList = (userBooks as UserBook[]).map(b => ({ title: b.book?.title ?? '', author: b.book?.author ?? '', rating: b.user_rating, genres: b.book?.genres ?? [] }))
     const results = await getRecommendations({ finishedBooks: bookList, userId: user.id, count: 10 })
-    if (!results.length) { setRecError(true); setRecLoading(false); return }
+    if (!results.length) { setRecError(true); setRecErrorMsg('Gemini could not generate recommendations. Check your API key in Vercel.'); setRecLoading(false); return }
     const enriched = await enrichRecs(results)
     setRecs(enriched)
     try { localStorage.setItem(recCacheKey, JSON.stringify({ ts: Date.now(), data: enriched })) } catch { /* ignore */ }
@@ -159,7 +166,8 @@ export default function LibraryScreen() {
             )}
             {recError && !recLoading && (
               <div style={{ textAlign: 'center', padding: '40px 0' }}>
-                <div style={{ fontSize: 13, color: theme.muted, marginBottom: 12 }}>Could not load recommendations right now.</div>
+                <div style={{ fontSize: 13, color: theme.muted, marginBottom: 8 }}>Could not load recommendations right now.</div>
+                {recErrorMsg ? <div style={{ fontSize: 11, color: theme.muted, opacity: 0.7, marginBottom: 12, fontFamily: 'monospace', wordBreak: 'break-all' }}>{recErrorMsg}</div> : null}
                 <button onClick={() => loadDiscover(true)} style={{ padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14 }}>Try Again</button>
               </div>
             )}

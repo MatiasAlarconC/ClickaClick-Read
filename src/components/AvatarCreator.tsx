@@ -22,8 +22,20 @@ const RARITY: Record<CharacterId, { label: string; color: string }> = {
   fox:     { label: 'Rare',      color: '#60A5FA' },
   mage:    { label: 'Rare',      color: '#60A5FA' },
   cosmic:  { label: 'Rare',      color: '#60A5FA' },
-  phoenix: { label: 'Legendary', color: '#F59E0B' },
-  shadow:  { label: 'Mythic',    color: '#A855F7' },
+  phoenix:     { label: 'Legendary', color: '#F59E0B' },
+  shadow:       { label: 'Mythic',    color: '#A855F7' },
+  ninja:        { label: 'Uncommon',  color: '#34D399' },
+  viking:       { label: 'Uncommon',  color: '#34D399' },
+  astronaut:    { label: 'Rare',      color: '#60A5FA' },
+  witch:        { label: 'Rare',      color: '#60A5FA' },
+  pirate:       { label: 'Uncommon',  color: '#34D399' },
+  robot:        { label: 'Rare',      color: '#60A5FA' },
+  samurai:      { label: 'Uncommon',  color: '#34D399' },
+  angel:        { label: 'Rare',      color: '#60A5FA' },
+  dragon:       { label: 'Legendary', color: '#F59E0B' },
+  jester:       { label: 'Uncommon',  color: '#34D399' },
+  alchemist:    { label: 'Legendary', color: '#F59E0B' },
+  necromancer:  { label: 'Mythic',    color: '#A855F7' },
 }
 
 // ─── Achievement required to unlock each character ────────────────────────────
@@ -34,7 +46,19 @@ const UNLOCK_HINT: Partial<Record<CharacterId, { name: string; hint: string }>> 
   mage:    { name: 'Magic Realm',     hint: 'Read 15+ Fantasy or Sci-Fi books' },
   cosmic:  { name: 'Cosmic Explorer', hint: 'Read 5+ Science Fiction books' },
   phoenix: { name: 'The Immortal',    hint: 'Read every day for 365 consecutive days' },
-  shadow:  { name: 'Lord of Pages',   hint: 'Accumulate 1,000 hours of reading' },
+  shadow:      { name: 'Lord of Pages',       hint: 'Accumulate 1,000 hours of reading' },
+  ninja:        { name: 'Silent but Deadly',   hint: 'Complete 30 reading sessions' },
+  viking:       { name: 'Epic Saga Reader',    hint: 'Finish 15 books' },
+  astronaut:    { name: 'To Infinity',         hint: 'Read 10 Sci-Fi books' },
+  witch:        { name: 'Spellbound',          hint: 'Read 10 Fantasy books' },
+  pirate:       { name: 'Ahoy, Adventure!',   hint: 'Read 5 Adventure books' },
+  robot:        { name: 'Data Overload',       hint: 'Complete 75 reading sessions' },
+  samurai:      { name: 'The Way of the Reader', hint: 'Maintain a 21-day streak' },
+  angel:        { name: 'Celestial Reader',    hint: 'Accumulate 100 hours of reading' },
+  dragon:       { name: 'The Legendary',       hint: 'Read 25,000 total pages' },
+  jester:       { name: 'Comic Relief',        hint: 'Read 5 Humor or Comedy books' },
+  alchemist:    { name: 'The Great Work',      hint: 'Read 5+ books in 5 different genres' },
+  necromancer:  { name: 'Midnight Scholar',    hint: 'Accumulate 500 hours of reading' },
 }
 
 interface AvatarCreatorProps {
