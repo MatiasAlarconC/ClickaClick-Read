@@ -4,7 +4,6 @@ import { motion } from 'framer-motion'
 import { Stars, ProgressBar, BackButton, Spinner, ErrorBoundary } from '../components/UI'
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
-import { getProgressiveSummary } from '../services/gemini'
 import type { SearchResult, UserBook, BookNote, ReadingSession } from '../types'
 
 /** Strip HTML tags from Google Books / Open Library descriptions */
@@ -36,9 +35,6 @@ export default function BookDetailScreen() {
   const [newNote, setNewNote] = useState('')
   const [newNotePage, setNewNotePage] = useState('')
   const [addingToLib, setAddingToLib] = useState(false)
-  const [aiSummary, setAiSummary] = useState<string | null>(null)
-  const [aiLoading, setAiLoading] = useState(false)
-  const [aiError, setAiError] = useState(false)
   const [customPages, setCustomPages] = useState<string>('')
   const [pagesSaved, setPagesSaved] = useState(false)
   const [bookDbId, setBookDbId] = useState<string | null>(null)
@@ -212,23 +208,6 @@ export default function BookDetailScreen() {
     setTimeout(() => setPagesSaved(false), 2000)
   }
 
-  const fetchAiSummary = async () => {
-    if (!book || !user) return
-    setAiLoading(true); setAiError(false)
-    // Use the user's actual current reading position
-    const currentPage = userBook?.current_page ?? (parseInt(customPages) || Math.floor((book.pages ?? 200) / 2))
-    const result = await getProgressiveSummary({
-      title: book.title, author: book.author,
-      synopsis: synopsis,
-      currentPage,
-      totalPages: book.pages ?? 200,
-      userId: user.id,
-    })
-    setAiLoading(false)
-    if (result) setAiSummary(result)
-    else setAiError(true)
-  }
-
   if (!book) {
     return (
       <div style={{ minHeight: '100%', background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -335,24 +314,6 @@ export default function BookDetailScreen() {
               </>
             )}
 
-            {/* AI Summary — only for books currently being read */}
-            {userBook?.status === 'reading' && <div style={{ marginTop: 8 }}>
-              <button onClick={fetchAiSummary} disabled={aiLoading} style={{ padding: '10px 18px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 12, fontSize: 13, color: theme.fg, display: 'flex', alignItems: 'center', gap: 8 }}>
-                {aiLoading ? <><Spinner color={theme.muted} />Loading…</> : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M12 2L14.5 9.5H22L16 14L18.5 21.5L12 17L5.5 21.5L8 14L2 9.5H9.5L12 2Z" stroke={theme.fg} strokeWidth="1.5" strokeLinejoin="round"/></svg>Refresh my memory</> }
-              </button>
-              {aiSummary && (
-                <div style={{ marginTop: 12, padding: '14px 16px', background: theme.bgSecondary, borderRadius: 12, fontSize: 14, color: theme.fgDim, lineHeight: 1.7 }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 8 }}>AI Summary</div>
-                  {aiSummary}
-                </div>
-              )}
-              {aiError && (
-                <div style={{ marginTop: 12, padding: '12px 16px', background: theme.bgSecondary, borderRadius: 12, fontSize: 13, color: theme.muted, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                  <span>AI summary unavailable — the service may be temporarily down.</span>
-                  <button onClick={fetchAiSummary} style={{ padding: '6px 14px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, color: theme.fg, cursor: 'pointer', flexShrink: 0 }}>Retry</button>
-                </div>
-              )}
-            </div>}
           </div>
         )}
 

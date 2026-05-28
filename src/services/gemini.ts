@@ -115,50 +115,6 @@ async function logUsage(feature: string, tokens: number, model: string, userId: 
   }
 }
 
-export async function getProgressiveSummary(params: {
-  title: string; author: string; synopsis: string | null
-  currentPage: number; totalPages: number; userId: string | null
-}): Promise<string | null> {
-  const cfg = await getConfig()
-  if (!cfg.enabled || !cfg.summary_enabled) return null
-
-  // Check 24h cache
-  if (params.userId) {
-    const rangeKey = params.currentPage // cache per exact page
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const { data: cached } = await supabase
-      .from('ai_summary_cache')
-      .select('summary')
-      .eq('user_id', params.userId)
-      .eq('book_title', params.title)
-      .eq('page_range', rangeKey)
-      .gte('created_at', since)
-      .single()
-    if (cached?.summary) return cached.summary
-  }
-
-  const progressPct = Math.round((params.currentPage / params.totalPages) * 100)
-  const prompt = `You are an expert on the book "${params.title}" by ${params.author}.${params.synopsis ? ` Synopsis: ${params.synopsis.slice(0, 500)}.` : ''} The reader has read up to page ${params.currentPage} of ${params.totalPages} (${progressPct}% through the book). Write a 3-sentence "story so far" recap covering only the events, characters, and conflicts that occur in the FIRST ${progressPct}% of the book — nothing beyond that point. This helps the reader remember where they left off without spoiling anything ahead. Be specific about characters and plot beats that have already happened by this point in the story.`
-
-  try {
-    const { text, tokens } = await callGemini(prompt, cfg.model)
-    await logUsage('progressive_summary', tokens, cfg.model, params.userId)
-
-    // Cache result
-    if (params.userId) {
-      const rangeKey = params.currentPage
-      await supabase.from('ai_summary_cache').upsert({
-        user_id: params.userId, book_title: params.title,
-        page_range: rangeKey, summary: text
-      })
-    }
-    return text
-  } catch (err) {
-    console.error('[ClickaClick AI] progressive_summary failed:', err)
-    return null
-  }
-}
-
 export interface BookRecommendation {
   title: string; author: string; reason: string; searchResult?: unknown
 }
