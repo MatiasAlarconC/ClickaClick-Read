@@ -201,7 +201,7 @@ function AnimGroup({
 
   useFrame((_, dt) => {
     if (!ref.current || !anim.current.active) return
-    anim.current.t = Math.min(anim.current.t + dt * 3.2, 1)
+    anim.current.t = Math.min(anim.current.t + dt * 1.6, 1)
     const t = anim.current.t
     const arc = Math.sin(t * Math.PI)
     ref.current.position.y = arc * height
@@ -222,7 +222,15 @@ function AnimGroup({
 // ─── Auto-rotate group for thumbnail mode ────────────────────────────────────
 function AutoRotateGroup({ locked, children }: { locked?: boolean; children: ReactNode }) {
   const ref = useRef<THREE.Group>(null!)
-  useFrame((_, dt) => { if (ref.current && !locked) ref.current.rotation.y += dt * 0.45 })
+  useFrame(({ clock }, dt) => {
+    if (!ref.current) return
+    if (!locked) {
+      ref.current.rotation.y += dt * 0.35
+      // Gentle idle sway (breathing)
+      ref.current.rotation.z = Math.sin(clock.elapsedTime * 0.9) * 0.025
+      ref.current.position.y = Math.sin(clock.elapsedTime * 0.8) * 0.04
+    }
+  })
   return <group ref={ref}>{children}</group>
 }
 
@@ -263,7 +271,7 @@ function CharacterScene({
           enableZoom={false}
           enablePan={false}
           autoRotate={!locked}
-          autoRotateSpeed={1.8}
+          autoRotateSpeed={0.8}
           minPolarAngle={Math.PI * 0.28}
           maxPolarAngle={Math.PI * 0.72}
           makeDefault

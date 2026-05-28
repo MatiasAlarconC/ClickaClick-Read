@@ -1,21 +1,41 @@
-import React, { useState, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import React, { useState, useCallback, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import { BookCover, TabBar, Stars, Spinner } from '../components/UI'
 import { useTheme } from '../context/AppContext'
 import { searchBooks } from '../services/books'
 import type { SearchResult } from '../types'
 
-const GENRES = ['All', 'Fiction', 'Non-Fiction', 'Science', 'History', 'Philosophy', 'Biography', 'Fantasy', 'Mystery']
+const GENRES = ['All', 'Fiction', 'Non-Fiction', 'Science', 'History', 'Philosophy', 'Biography', 'Fantasy', 'Mystery', 'Thriller', 'Romance', 'Horror']
+
+const SS_KEY = 'clickaclick_search_state'
+
+interface SavedSearch {
+  query: string; genre: string; results: SearchResult[]
+  authorFilter: string; yearFrom: string; yearTo: string
+}
 
 export default function SearchScreen() {
   const { theme } = useTheme()
   const navigate = useNavigate()
-  const [query, setQuery] = useState('')
-  const [genre, setGenre] = useState('All')
-  const [results, setResults] = useState<SearchResult[]>([])
+  const location = useLocation()
+
+  // Restore state from sessionStorage on mount
+  const saved: SavedSearch | null = (() => {
+    try { return JSON.parse(sessionStorage.getItem(SS_KEY) ?? 'null') } catch { return null }
+  })()
+
+  const [query, setQuery] = useState(saved?.query ?? '')
+  const [genre, setGenre] = useState(saved?.genre ?? 'All')
+  const [results, setResults] = useState<SearchResult[]>(saved?.results ?? [])
   const [loading, setLoading] = useState(false)
-  const [searched, setSearched] = useState(false)
+  const [searched, setSearched] = useState((saved?.results?.length ?? 0) > 0 || (saved?.query ?? '').length > 0)
+
+  // Advanced filter state
+  const [showFilters, setShowFilters] = useState(false)
+  const [authorFilter, setAuthorFilter] = useState(saved?.authorFilter ?? '')
+  const [yearFrom, setYearFrom] = useState(saved?.yearFrom ?? '')
+  const [yearTo, setYearTo] = useState(saved?.yearTo ?? '')
 
   // Manual book entry state
   const [showManual, setShowManual] = useState(false)
@@ -25,21 +45,29 @@ export default function SearchScreen() {
   const [manualCover, setManualCover] = useState('')
   const [manualYear, setManualYear] = useState('')
 
-  const handleSearch = useCallback(async (q: string) => {
+  const persistState = useCallback((q: string, g: string, r: SearchResult[], af: string, yf: string, yt: string) => {
+    sessionStorage.setItem(SS_KEY, JSON.stringify({ query: q, genre: g, results: r, authorFilter: af, yearFrom: yf, yearTo: yt }))
+  }, [])
+
+  const handleSearch = useCallback(async (q: string, af?: string) => {
     if (!q.trim()) { setResults([]); setSearched(false); return }
     setLoading(true); setSearched(true)
     try {
-      const data = await searchBooks(q)
+      // Build query string: append author filter using Google Books syntax
+      const authorTerm = (af ?? authorFilter).trim()
+      const fullQuery = authorTerm ? `${q} inauthor:${authorTerm}` : q
+      const data = await searchBooks(fullQuery)
       setResults(data)
+      persistState(q, genre, data, af ?? authorFilter, yearFrom, yearTo)
     } catch {
       setResults([])
     }
     setLoading(false)
-  }, [])
+  }, [genre, authorFilter, yearFrom, yearTo, persistState])
 
   const handleQueryChange = (val: string) => {
     setQuery(val)
-    if (!val) { setResults([]); setSearched(false) }
+    if (!val) { setResults([]); setSearched(false); sessionStorage.removeItem(SS_KEY) }
   }
 
   const handleManualSubmit = () => {
@@ -62,9 +90,13 @@ export default function SearchScreen() {
     navigate('/detail', { state: { book } })
   }
 
+  const activeFilterCount = [authorFilter, yearFrom, yearTo].filter(Boolean).length
+
   const filtered = results.filter(b => {
-    if (genre === 'All') return true
-    return b.genres.some(g => g.toLowerCase().includes(genre.toLowerCase()))
+    if (genre !== 'All' && !b.genres.some(g => g.toLowerCase().includes(genre.toLowerCase()))) return false
+    if (yearFrom && b.published_year && b.published_year < parseInt(yearFrom)) return false
+    if (yearTo && b.published_year && b.published_year > parseInt(yearTo)) return false
+    return true
   })
 
   return (
@@ -74,7 +106,7 @@ export default function SearchScreen() {
         <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 400, color: theme.fg, letterSpacing: -1, marginBottom: 18 }}>Discover</div>
 
         {/* Search bar */}
-        <div style={{ background: theme.bgSecondary, borderRadius: 14, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <div style={{ background: theme.bgSecondary, borderRadius: 14, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
             <circle cx="6.5" cy="6.5" r="5" stroke={theme.muted} strokeWidth="1.4"/>
             <line x1="10.5" y1="10.5" x2="14" y2="14" stroke={theme.muted} strokeWidth="1.5" strokeLinecap="round"/>
@@ -85,9 +117,55 @@ export default function SearchScreen() {
             style={{ flex: 1, background: 'none', border: 'none', fontSize: 15, color: theme.fg }}/>
           {loading && <Spinner color={theme.muted} />}
           {!loading && query && (
-            <button onClick={() => { setQuery(''); setResults([]); setSearched(false) }} style={{ background: 'none', border: 'none', color: theme.muted, fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
+            <button onClick={() => { setQuery(''); setResults([]); setSearched(false); sessionStorage.removeItem(SS_KEY) }} style={{ background: 'none', border: 'none', color: theme.muted, fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
           )}
+          {/* Filter toggle */}
+          <button onClick={() => setShowFilters(f => !f)} style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, position: 'relative' }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M3 5H21M6 12H18M10 19H14" stroke={showFilters || activeFilterCount > 0 ? theme.accent : theme.muted} strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+            {activeFilterCount > 0 && (
+              <span style={{ position: 'absolute', top: -2, right: -2, width: 14, height: 14, borderRadius: '50%', background: theme.accent, color: theme.accentFg, fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{activeFilterCount}</span>
+            )}
+          </button>
         </div>
+
+        {/* Advanced filters panel */}
+        <AnimatePresence>
+          {showFilters && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
+              style={{ overflow: 'hidden', marginBottom: 10 }}>
+              <div style={{ background: theme.bgSecondary, borderRadius: 12, padding: '14px 14px 10px' }}>
+                <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 12 }}>Filters</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {/* Author */}
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5 }}>Author</div>
+                    <input value={authorFilter} onChange={e => setAuthorFilter(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleSearch(query)}
+                      placeholder="e.g. Jules Verne"
+                      style={{ width: '100%', padding: '8px 11px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 14, color: theme.fg, boxSizing: 'border-box' }}/>
+                  </div>
+                  {/* Year range */}
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5 }}>Published year</div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input value={yearFrom} onChange={e => setYearFrom(e.target.value)} placeholder="From" type="number" min="1000" max="2030"
+                        style={{ flex: 1, padding: '8px 11px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 14, color: theme.fg }}/>
+                      <span style={{ color: theme.muted, fontSize: 12 }}>–</span>
+                      <input value={yearTo} onChange={e => setYearTo(e.target.value)} placeholder="To" type="number" min="1000" max="2030"
+                        style={{ flex: 1, padding: '8px 11px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 14, color: theme.fg }}/>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => handleSearch(query)} style={{ flex: 1, padding: '9px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Apply</button>
+                    <button onClick={() => { setAuthorFilter(''); setYearFrom(''); setYearTo('') }} style={{ padding: '9px 14px', background: theme.bg, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 13 }}>Clear</button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Search button */}
         {query && !loading && (

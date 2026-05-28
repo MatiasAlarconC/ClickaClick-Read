@@ -7,6 +7,16 @@ import { supabase } from '../lib/supabase'
 import { getProgressiveSummary } from '../services/gemini'
 import type { SearchResult, UserBook, BookNote, ReadingSession } from '../types'
 
+/** Strip HTML tags from Google Books / Open Library descriptions */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n').trim()
+}
+
 const Book3D = React.lazy(() => import('../components/Book3D'))
 
 type DetailTab = 'overview' | 'details' | 'notes' | 'sessions'
@@ -82,16 +92,26 @@ export default function BookDetailScreen() {
           .then(({ data }) => { if (data) setSessions(data as ReadingSession[]) })
       })
 
-    // Fetch synopsis from Google Books if not already available
+    // Fetch synopsis from Google Books or Open Library if not already available
     const googleId = book.google_books_id ?? book.id
-    if (!book.synopsis && googleId && !googleId.startsWith('OL')) {
-      fetch(`https://www.googleapis.com/books/v1/volumes/${googleId}`)
-        .then(r => r.json())
-        .then(data => {
-          const desc = data.volumeInfo?.description
-          if (desc) setSynopsis(desc)
-        })
-        .catch(() => { /* ignore — synopsis just stays null */ })
+    const olId = book.open_library_id ?? (book.id?.startsWith('/works/') ? book.id : null)
+    if (!book.synopsis) {
+      if (googleId && !googleId.startsWith('/') && !googleId.startsWith('OL') && !googleId.startsWith('manual')) {
+        fetch(`https://www.googleapis.com/books/v1/volumes/${googleId}`)
+          .then(r => r.json())
+          .then(data => { const desc = data.volumeInfo?.description; if (desc) setSynopsis(desc) })
+          .catch(() => {})
+      } else if (olId) {
+        // Open Library works endpoint returns description
+        fetch(`https://openlibrary.org${olId.startsWith('/') ? olId : '/' + olId}.json`)
+          .then(r => r.json())
+          .then(data => {
+            const desc = typeof data.description === 'string' ? data.description
+              : data.description?.value ?? null
+            if (desc) setSynopsis(desc)
+          })
+          .catch(() => {})
+      }
     }
   }, [user, book])
 
@@ -299,7 +319,7 @@ export default function BookDetailScreen() {
         {activeTab === 'overview' && (
           <div style={{ paddingBottom: 40 }}>
             {synopsis ? (
-              <p style={{ fontSize: 14, color: theme.fgDim, lineHeight: 1.75, marginBottom: 22 }}>{synopsis}</p>
+              <p style={{ fontSize: 14, color: theme.fgDim, lineHeight: 1.75, marginBottom: 22, whiteSpace: 'pre-wrap' }}>{stripHtml(synopsis)}</p>
             ) : (
               <p style={{ fontSize: 14, color: theme.muted, lineHeight: 1.75, marginBottom: 22, fontStyle: 'italic' }}>No description available for this book.</p>
             )}
@@ -315,10 +335,10 @@ export default function BookDetailScreen() {
               </>
             )}
 
-            {/* AI Summary */}
-            <div style={{ marginTop: 8 }}>
+            {/* AI Summary — only for books currently being read */}
+            {userBook?.status === 'reading' && <div style={{ marginTop: 8 }}>
               <button onClick={fetchAiSummary} disabled={aiLoading} style={{ padding: '10px 18px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 12, fontSize: 13, color: theme.fg, display: 'flex', alignItems: 'center', gap: 8 }}>
-                {aiLoading ? <><Spinner color={theme.muted} />Loading…</> : '✨ Refresh my memory'}
+                {aiLoading ? <><Spinner color={theme.muted} />Loading…</> : <><svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}><path d="M12 2L14.5 9.5H22L16 14L18.5 21.5L12 17L5.5 21.5L8 14L2 9.5H9.5L12 2Z" stroke={theme.fg} strokeWidth="1.5" strokeLinejoin="round"/></svg>Refresh my memory</> }
               </button>
               {aiSummary && (
                 <div style={{ marginTop: 12, padding: '14px 16px', background: theme.bgSecondary, borderRadius: 12, fontSize: 14, color: theme.fgDim, lineHeight: 1.7 }}>
@@ -332,7 +352,7 @@ export default function BookDetailScreen() {
                   <button onClick={fetchAiSummary} style={{ padding: '6px 14px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, color: theme.fg, cursor: 'pointer', flexShrink: 0 }}>Retry</button>
                 </div>
               )}
-            </div>
+            </div>}
           </div>
         )}
 

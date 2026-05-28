@@ -75,8 +75,18 @@ async function callGemini(prompt: string, model: string): Promise<{ text: string
     if (res.ok) {
       const data = await res.json()
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      if (!text) {
+        const reason = data.candidates?.[0]?.finishReason ?? 'UNKNOWN'
+        console.warn(`[ClickaClick AI] Gemini returned empty response (${m}), finishReason: ${reason}`)
+        throw new Error(`Gemini empty response: ${reason}`)
+      }
       const tokens = data.usageMetadata?.totalTokenCount ?? 0
       return { text, tokens }
+    }
+    if (res.status === 403) {
+      const body = await res.text().catch(() => '')
+      console.error(`[ClickaClick AI] 403 FORBIDDEN — API key is invalid, expired, or IP-restricted. Check Vercel env vars. Body:`, body)
+      throw new Error('Gemini 403: invalid key')
     }
     if (res.status === 429 || res.status >= 500) {
       const body = await res.text().catch(() => '')

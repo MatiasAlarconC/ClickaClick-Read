@@ -139,3 +139,14 @@ export function useTheme() {
   if (!ctx) throw new Error('useTheme must be used within ThemeProvider')
   return ctx
 }
+
+// ─── Responsive hook ──────────────────────────────────────────────────────────
+export function useIsDesktop(): boolean {
+  const [isDesktop, setIsDesktop] = React.useState(() => window.innerWidth >= 768)
+  React.useEffect(() => {
+    const handler = () => setIsDesktop(window.innerWidth >= 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+  return isDesktop
+}

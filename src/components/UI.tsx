@@ -1,5 +1,6 @@
 import React from 'react'
 import type { Theme } from '../types'
+import { useIsDesktop } from '../context/AppContext'
 
 // ─── Blob shapes ────────────────────────────────────────────────────────────
 const BLOB_PATHS = {
@@ -129,6 +130,8 @@ const TAB_ICONS: Record<string, (active: boolean, c: string) => React.ReactNode>
 export function TabBar({ activeTab, onTabChange, theme }: {
   activeTab: string; onTabChange: (tab: string) => void; theme: Theme
 }) {
+  const isDesktop = useIsDesktop()
+  if (isDesktop) return null
   return (
     <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100, display: 'flex', background: theme.bg, borderTop: `1px solid ${theme.border}`, paddingBottom: 'env(safe-area-inset-bottom, 8px)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
       {(['home','search','library','stats','profile'] as const).map(tab => {
