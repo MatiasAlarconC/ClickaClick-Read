@@ -315,7 +315,7 @@ export default function YearInReviewScreen() {
 
   return (
     <div
-      style={{ minHeight: '100%', position: 'relative', overflow: 'hidden', userSelect: 'none' }}
+      style={{ position: 'fixed', inset: 0, overflow: 'hidden', userSelect: 'none' }}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >

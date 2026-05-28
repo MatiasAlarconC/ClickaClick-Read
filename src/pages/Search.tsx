@@ -90,7 +90,7 @@ export default function SearchScreen() {
     navigate('/detail', { state: { book } })
   }
 
-  const activeFilterCount = [authorFilter, yearFrom, yearTo].filter(Boolean).length
+  const activeFilterCount = [authorFilter, yearFrom, yearTo].filter(Boolean).length + (genre !== 'All' ? 1 : 0)
 
   const filtered = results.filter(b => {
     if (genre !== 'All' && !b.genres.some(g => g.toLowerCase().includes(genre.toLowerCase()))) return false
@@ -138,6 +138,15 @@ export default function SearchScreen() {
               <div style={{ background: theme.bgSecondary, borderRadius: 12, padding: '14px 14px 10px' }}>
                 <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 12 }}>Filters</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {/* Genre */}
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.muted, marginBottom: 7 }}>Genre</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {GENRES.map(g => (
+                        <button key={g} onClick={() => setGenre(g)} style={{ padding: '6px 12px', borderRadius: 999, background: g === genre ? theme.accent : theme.bg, color: g === genre ? theme.accentFg : theme.muted, border: `1px solid ${g === genre ? theme.accent : theme.border}`, whiteSpace: 'nowrap', fontSize: 12, fontWeight: 500 }}>{g}</button>
+                      ))}
+                    </div>
+                  </div>
                   {/* Author */}
                   <div>
                     <div style={{ fontSize: 11, color: theme.muted, marginBottom: 5 }}>Author</div>
@@ -158,8 +167,8 @@ export default function SearchScreen() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => handleSearch(query)} style={{ flex: 1, padding: '9px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Apply</button>
-                    <button onClick={() => { setAuthorFilter(''); setYearFrom(''); setYearTo('') }} style={{ padding: '9px 14px', background: theme.bg, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 13 }}>Clear</button>
+                    <button onClick={() => { if (query.trim()) handleSearch(query); else { /* apply genre/year to existing results */ setShowFilters(false) } }} style={{ flex: 1, padding: '9px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Apply</button>
+                    <button onClick={() => { setAuthorFilter(''); setYearFrom(''); setYearTo(''); setGenre('All') }} style={{ padding: '9px 14px', background: theme.bg, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 13 }}>Clear</button>
                   </div>
                 </div>
               </div>
@@ -174,14 +183,7 @@ export default function SearchScreen() {
           </button>
         )}
 
-        {/* Genre pills */}
-        <div style={{ display: 'flex', gap: 7, overflowX: 'auto', marginBottom: 20, WebkitOverflowScrolling: 'touch', paddingBottom: 2 }}>
-          {GENRES.map(g => (
-            <button key={g} onClick={() => setGenre(g)} style={{ padding: '7px 14px', borderRadius: 999, flexShrink: 0, background: g === genre ? theme.accent : theme.bgSecondary, color: g === genre ? theme.accentFg : theme.muted, border: 'none', whiteSpace: 'nowrap', fontSize: 12.5, fontWeight: 500 }}>
-              {g}
-            </button>
-          ))}
-        </div>
+        {/* Genre pills — removed from here, now inside filter panel */}
 
         {/* Result count */}
         {searched && !loading && (

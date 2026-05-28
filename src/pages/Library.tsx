@@ -223,9 +223,6 @@ export default function LibraryScreen() {
         )}
       </div>
 
-      {/* FAB */}
-      <button onClick={() => navigate('/search')} style={{ position: 'absolute', bottom: 74, right: 22, width: 50, height: 50, borderRadius: '50%', background: theme.accent, color: theme.accentFg, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 300, boxShadow: theme.dark ? '0 4px 16px rgba(255,255,255,0.15)' : '0 4px 16px rgba(0,0,0,0.18)' }}>+</button>
-
       <TabBar activeTab="library" onTabChange={t => navigate(`/${t === 'home' ? 'home' : t}`)} theme={theme} />
     </div>
   )
