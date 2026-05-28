@@ -35,7 +35,7 @@ async function getConfig(): Promise<GeminiConfig> {
 
     configCache = {
       enabled: map['gemini_enabled'] !== 'false',
-      model: map['gemini_model'] ?? 'gemini-2.0-flash',
+      model: map['gemini_model'] ?? 'gemini-2.5-flash',
       summary_enabled: map['gemini_summary_enabled'] !== 'false',
       recommendations_enabled: map['gemini_recommendations_enabled'] !== 'false',
       wrapped_enabled: map['gemini_wrapped_enabled'] !== 'false',
@@ -43,7 +43,7 @@ async function getConfig(): Promise<GeminiConfig> {
     }
   } catch {
     configCache = {
-      enabled: true, model: 'gemini-2.0-flash',
+      enabled: true, model: 'gemini-2.5-flash',
       summary_enabled: true, recommendations_enabled: true,
       wrapped_enabled: true, monthly_token_budget: 500000,
     }
@@ -59,7 +59,7 @@ async function callGemini(prompt: string, model: string): Promise<{ text: string
   }
 
   // Fallback chain: try configured model → flash-lite → 2.0-flash → 2.5-flash
-  const candidates = [model, 'gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash-preview-05-20'].filter((m, i, a) => a.indexOf(m) === i)
+  const candidates = [model, 'gemini-2.5-flash', 'gemini-2.0-flash'].filter((m, i, a) => a.indexOf(m) === i)
 
   let lastError: Error = new Error('Gemini unreachable')
   for (const m of candidates) {
