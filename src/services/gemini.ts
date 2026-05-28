@@ -59,7 +59,7 @@ async function callGemini(prompt: string, model: string): Promise<{ text: string
   }
 
   // Fallback chain: try configured model → flash-lite → 2.0-flash → 2.5-flash
-  const candidates = [model, 'gemini-2.5-flash', 'gemini-2.0-flash'].filter((m, i, a) => a.indexOf(m) === i)
+  const candidates = [model, 'gemini-2.5-flash', 'gemini-2.5-flash-preview-05-20', 'gemini-2.0-flash'].filter((m, i, a) => a.indexOf(m) === i)
 
   let lastError: Error = new Error('Gemini unreachable')
   for (const m of candidates) {
