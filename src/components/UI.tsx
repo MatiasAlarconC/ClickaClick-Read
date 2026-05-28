@@ -125,14 +125,6 @@ const TAB_ICONS: Record<string, (active: boolean, c: string) => React.ReactNode>
       <path d="M3 19C3 15.68 6.58 13 11 13C15.42 13 19 15.68 19 19" stroke={c} strokeWidth="1.5" strokeLinecap="round"/>
     </svg>
   ),
-  social: (a, c) => (
-    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-      <circle cx="8" cy="7" r="3" fill={a ? c : 'none'} stroke={c} strokeWidth="1.5"/>
-      <circle cx="15" cy="5" r="2.5" fill={a ? c : 'none'} stroke={c} strokeWidth="1.5"/>
-      <path d="M2 18C2 15.24 4.69 13 8 13C11.31 13 14 15.24 14 18" stroke={c} strokeWidth="1.5" strokeLinecap="round"/>
-      <path d="M15 11C17.21 11 19 12.57 19 14.5" stroke={c} strokeWidth="1.5" strokeLinecap="round"/>
-    </svg>
-  ),
 }
 
 export function TabBar({ activeTab, onTabChange, theme }: {
@@ -142,7 +134,7 @@ export function TabBar({ activeTab, onTabChange, theme }: {
   if (isDesktop) return null
   return (
     <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100, display: 'flex', background: theme.bg, borderTop: `1px solid ${theme.border}`, paddingBottom: 'env(safe-area-inset-bottom, 8px)', backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)' }}>
-      {(['home','search','library','stats','social','profile'] as const).map(tab => {
+      {(['home','search','library','stats','profile'] as const).map(tab => {
         const active = tab === activeTab
         const color = active ? theme.fg : theme.muted
         return (
