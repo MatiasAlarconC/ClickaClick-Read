@@ -452,10 +452,12 @@ export default function ProfileScreen() {
                       )}
                       {friends.map(p => (
                         <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 34, height: 34, borderRadius: '50%', background: theme.border, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: theme.muted }}>
-                            {p.avatar_url ? <img src={p.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : (p.username?.[0] ?? '?').toUpperCase()}
-                          </div>
-                          <div style={{ flex: 1, fontSize: 13, fontWeight: 500, color: theme.fg }}>@{p.username ?? 'unnamed'}</div>
+                          <button onClick={() => navigate(`/profile/${p.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                            <div style={{ width: 34, height: 34, borderRadius: '50%', background: theme.border, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: theme.muted }}>
+                              {p.avatar_url ? <img src={p.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : (p.username?.[0] ?? '?').toUpperCase()}
+                            </div>
+                            <div style={{ fontSize: 13, fontWeight: 500, color: theme.fg }}>@{p.username ?? 'unnamed'}</div>
+                          </button>
                           <button disabled={friendActionId === p.id} onClick={() => removeFriend(p.id)} style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${theme.border}`, background: 'none', color: theme.muted, fontSize: 11, cursor: 'pointer' }}>{friendActionId === p.id ? '…' : 'Remove'}</button>
                         </div>
                       ))}

@@ -100,7 +100,7 @@ export function HomeScreen() {
           {currentBooks.length === 1 && (
             <>
               <div style={{ display: 'flex', gap: 14, marginBottom: 16 }}>
-                <BookCover index={0} width={70} height={106} coverUrl={activeBook.book?.cover_url} />
+                <BookCover index={0} width={70} height={106} coverUrl={activeBook.book?.cover_url} title={activeBook.book?.title} author={activeBook.book?.author} />
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontFamily: 'Georgia, serif', fontSize: 17, color: theme.fg, lineHeight: 1.3, marginBottom: 3 }}>{activeBook.book?.title}</div>
@@ -120,7 +120,7 @@ export function HomeScreen() {
             <div>
               {currentBooks.map((ub, i) => (
                 <div key={ub.id} style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: i < currentBooks.length - 1 ? 12 : 0, marginBottom: i < currentBooks.length - 1 ? 12 : 0, borderBottom: i < currentBooks.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
-                  <BookCover index={i} width={48} height={72} coverUrl={ub.book?.cover_url} />
+                  <BookCover index={i} width={48} height={72} coverUrl={ub.book?.cover_url} title={ub.book?.title} author={ub.book?.author} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontFamily: 'Georgia, serif', fontSize: 15, color: theme.fg, lineHeight: 1.3, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ub.book?.title}</div>
                     <div style={{ fontSize: 12, color: theme.muted }}>{ub.book?.author}</div>

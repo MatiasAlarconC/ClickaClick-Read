@@ -49,16 +49,17 @@ export default function SearchScreen() {
     sessionStorage.setItem(SS_KEY, JSON.stringify({ query: q, genre: g, results: r, authorFilter: af, yearFrom: yf, yearTo: yt }))
   }, [])
 
-  const handleSearch = useCallback(async (q: string, af?: string) => {
-    if (!q.trim()) { setResults([]); setSearched(false); return }
+  const handleSearch = useCallback(async (q: string, af?: string, g?: string) => {
+    const effectiveGenre = g ?? genre
+    const effectiveQuery = q.trim() || (effectiveGenre !== 'All' ? effectiveGenre : '')
+    if (!effectiveQuery) { setResults([]); setSearched(false); return }
     setLoading(true); setSearched(true)
     try {
-      // Build query string: append author filter using Google Books syntax
       const authorTerm = (af ?? authorFilter).trim()
-      const fullQuery = authorTerm ? `${q} inauthor:${authorTerm}` : q
+      const fullQuery = authorTerm ? `${effectiveQuery} inauthor:${authorTerm}` : effectiveQuery
       const data = await searchBooks(fullQuery)
       setResults(data)
-      persistState(q, genre, data, af ?? authorFilter, yearFrom, yearTo)
+      persistState(q, effectiveGenre, data, af ?? authorFilter, yearFrom, yearTo)
     } catch {
       setResults([])
     }
@@ -167,7 +168,7 @@ export default function SearchScreen() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => { if (query.trim()) handleSearch(query); else { /* apply genre/year to existing results */ setShowFilters(false) } }} style={{ flex: 1, padding: '9px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Apply</button>
+                    <button onClick={() => { setShowFilters(false); handleSearch(query) }} style={{ flex: 1, padding: '9px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Apply</button>
                     <button onClick={() => { setAuthorFilter(''); setYearFrom(''); setYearTo(''); setGenre('All') }} style={{ padding: '9px 14px', background: theme.bg, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 13 }}>Clear</button>
                   </div>
                 </div>
@@ -198,7 +199,7 @@ export default function SearchScreen() {
             <motion.button key={book.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
               onClick={() => navigate('/detail', { state: { book } })}
               style={{ display: 'flex', gap: 14, padding: '13px 0', background: 'none', border: 'none', textAlign: 'left', borderBottom: i < filtered.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
-              <BookCover index={i} width={50} height={76} coverUrl={book.cover_url} />
+              <BookCover index={i} width={50} height={76} coverUrl={book.cover_url} title={book.title} author={book.author} />
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 5 }}>
                 <div style={{ fontFamily: 'Georgia, serif', fontSize: 15.5, color: theme.fg, lineHeight: 1.3 }}>{book.title}</div>
                 <div style={{ fontSize: 12, color: theme.muted }}>{book.author}{book.published_year ? ` · ${book.published_year}` : ''}</div>

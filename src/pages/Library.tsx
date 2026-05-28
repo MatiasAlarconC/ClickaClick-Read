@@ -178,7 +178,7 @@ export default function LibraryScreen() {
                   return (
                     <motion.div key={`${rec.title}-${i}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 9) * 0.07 }}
                       style={{ display: 'flex', gap: 14, padding: 16, background: theme.bgSecondary, borderRadius: 16 }}>
-                      <BookCover index={i} width={58} height={88} coverUrl={sr?.cover_url ?? null} />
+                      <BookCover index={i} width={58} height={88} coverUrl={sr?.cover_url ?? null} title={rec.title} author={rec.author} />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontFamily: 'Georgia, serif', fontSize: 15, color: theme.fg, lineHeight: 1.3, marginBottom: 3 }}>{rec.title}</div>
                         <div style={{ fontSize: 12, color: theme.muted, marginBottom: 7 }}>{rec.author}</div>
@@ -295,7 +295,7 @@ function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onD
         }}
         onClick={onPress}
         whileTap={{ scale: 0.98 }}>
-        <BookCover index={index} width={60} height={90} coverUrl={book.book?.cover_url} />
+        <BookCover index={index} width={60} height={90} coverUrl={book.book?.cover_url} title={book.book?.title} author={book.book?.author} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingTop: 2, paddingBottom: 2 }}>
           <div>
             <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, color: theme.fg, lineHeight: 1.3, marginBottom: 3 }}>{book.book?.title ?? 'Unknown'}</div>

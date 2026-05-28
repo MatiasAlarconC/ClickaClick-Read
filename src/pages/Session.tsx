@@ -322,7 +322,7 @@ export default function SessionScreen() {
 
       {/* Book cover */}
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-        <BookCover index={0} width={120} height={182} coverUrl={userBook?.book?.cover_url} />
+        <BookCover index={0} width={120} height={182} coverUrl={userBook?.book?.cover_url} title={userBook?.book?.title} author={userBook?.book?.author} />
       </div>
 
       {/* Book info */}

@@ -112,7 +112,7 @@ export default function AIRecommendationsScreen() {
               return (
                 <motion.div key={i} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.12 }}
                   style={{ display: 'flex', gap: 14, padding: 16, background: theme.bgSecondary, borderRadius: 16 }}>
-                  <BookCover index={i} width={60} height={90} coverUrl={sr?.cover_url ?? null} />
+                  <BookCover index={i} width={60} height={90} coverUrl={sr?.cover_url ?? null} title={rec.title} author={rec.author} />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, color: theme.fg, lineHeight: 1.3, marginBottom: 3 }}>{rec.title}</div>
                     <div style={{ fontSize: 12, color: theme.muted, marginBottom: 8 }}>{rec.author}</div>

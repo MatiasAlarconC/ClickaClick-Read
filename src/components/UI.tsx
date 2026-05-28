@@ -63,13 +63,14 @@ function PatternLayer({ pattern, w, h }: { pattern: string; w: number; h: number
   }
 }
 
-export function BookCover({ index = 0, width = 80, height = 120, coverUrl, style = {} }: {
-  index?: number; width?: number; height?: number; coverUrl?: string | null; style?: React.CSSProperties
+export function BookCover({ index = 0, width = 80, height = 120, coverUrl, title, author, style = {} }: {
+  index?: number; width?: number; height?: number; coverUrl?: string | null
+  title?: string | null; author?: string | null; style?: React.CSSProperties
 }) {
   const meta = BOOK_META[index % BOOK_META.length]
   const w = width; const h = height
-  const titleSize = Math.max(7, w * 0.1)
-  const authorSize = Math.max(6, w * 0.08)
+  const titleSize = Math.max(7, w * 0.13)
+  const authorSize = Math.max(6, w * 0.10)
 
   if (coverUrl) {
     return (
@@ -79,14 +80,20 @@ export function BookCover({ index = 0, width = 80, height = 120, coverUrl, style
     )
   }
 
+  // Use real book title/author when provided; fall back to placeholder meta
+  const displayTitle  = title  || meta.title
+  const displayAuthor = author || meta.author
+
   return (
     <div style={{ width: w, height: h, background: meta.baseColor, borderRadius: 6, overflow: 'hidden', position: 'relative', flexShrink: 0, boxShadow: '0 6px 20px rgba(0,0,0,0.35)', ...style }}>
       <svg viewBox={`0 0 ${w} ${h}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
         <PatternLayer pattern={meta.pattern} w={w} h={h} />
       </svg>
-      <div style={{ position: 'absolute', inset: 0, padding: '8px 7px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-        <div style={{ fontFamily: 'Georgia, serif', fontSize: titleSize, lineHeight: 1.2, color: '#FFF', fontWeight: 400 }}>{meta.title}</div>
-        <div style={{ fontFamily: '-apple-system, sans-serif', fontSize: authorSize, color: 'rgba(255,255,255,0.5)', marginTop: 2 }}>{meta.author}</div>
+      {/* Gradient overlay so text is always readable */}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 30%, rgba(0,0,0,0.75) 100%)' }}/>
+      <div style={{ position: 'absolute', inset: 0, padding: '6px 7px', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+        <div style={{ fontFamily: 'Georgia, serif', fontSize: titleSize, lineHeight: 1.2, color: '#FFF', fontWeight: 400, overflowWrap: 'break-word', wordBreak: 'break-word' }}>{displayTitle}</div>
+        <div style={{ fontFamily: '-apple-system, sans-serif', fontSize: authorSize, color: 'rgba(255,255,255,0.6)', marginTop: 2, overflowWrap: 'break-word', wordBreak: 'break-word' }}>{displayAuthor}</div>
       </div>
     </div>
   )
