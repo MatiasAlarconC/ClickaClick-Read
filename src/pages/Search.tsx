@@ -148,7 +148,7 @@ export default function SearchScreen() {
 
           {!searched && (
             <div style={{ textAlign: 'center', padding: '60px 0 24px', color: theme.muted }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>📖</div>
+              <div style={{ marginBottom: 12 }}><svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="#888" strokeWidth="1.5" strokeLinecap="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, marginBottom: 6, color: theme.fg }}>Find your next read</div>
               <div style={{ fontSize: 14 }}>Search by title, author, or genre</div>
               <button onClick={() => setShowManual(true)} style={{ marginTop: 24, padding: '11px 22px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 14, fontWeight: 500 }}>

@@ -486,3 +486,74 @@ export const TIER_EMISSIVE: Record<AchievementTier, string> = {
   diamond:  '#00BFFF',
   obsidian: '#7C3AED',
 }
+
+/**
+ * Returns { current, target } for numeric achievements so a progress bar can
+ * be displayed.  Returns null for complex/non-numeric achievements.
+ */
+export function getAchievementProgress(
+  achId: string,
+  s: AchievementStats,
+): { current: number; target: number } | null {
+  switch (achId) {
+    // — library count
+    case 'first_book':      return { current: Math.min(s.totalBooks, 1),   target: 1 }
+    case 'library_five':    return { current: Math.min(s.totalBooks, 5),   target: 5 }
+    // — books finished
+    case 'three_books':     return { current: Math.min(s.booksFinished, 3),   target: 3 }
+    case 'ten_books':       return { current: Math.min(s.booksFinished, 10),  target: 10 }
+    case 'twenty_books':    return { current: Math.min(s.booksFinished, 20),  target: 20 }
+    case 'thirty_books':    return { current: Math.min(s.booksFinished, 30),  target: 30 }
+    case 'fifty_books':     return { current: Math.min(s.booksFinished, 50),  target: 50 }
+    case 'hundred_books':   return { current: Math.min(s.booksFinished, 100), target: 100 }
+    case 'diamond_reader':  return { current: Math.min(s.booksFinished, 200), target: 200 }
+    case 'obsidian_scholar':return { current: Math.min(s.booksFinished, 500), target: 500 }
+    // — sessions
+    case 'first_session':        return { current: Math.min(s.sessionCount, 1),   target: 1 }
+    case 'ten_sessions':         return { current: Math.min(s.sessionCount, 10),  target: 10 }
+    case 'fifteen_sessions':     return { current: Math.min(s.sessionCount, 15),  target: 15 }
+    case 'twenty_sessions':      return { current: Math.min(s.sessionCount, 20),  target: 20 }
+    case 'fifty_sessions':       return { current: Math.min(s.sessionCount, 50),  target: 50 }
+    case 'hundred_sessions':     return { current: Math.min(s.sessionCount, 100), target: 100 }
+    case 'two_hundred_sessions': return { current: Math.min(s.sessionCount, 200), target: 200 }
+    case 'five_hundred_sessions':return { current: Math.min(s.sessionCount, 500), target: 500 }
+    case 'thousand_sessions':    return { current: Math.min(s.sessionCount, 1000),target: 1000 }
+    // — notes
+    case 'first_note':  return { current: Math.min(s.notesCount, 1),   target: 1 }
+    case 'notes_10':    return { current: Math.min(s.notesCount, 10),  target: 10 }
+    case 'notes_25':    return { current: Math.min(s.notesCount, 25),  target: 25 }
+    case 'notes_50':    return { current: Math.min(s.notesCount, 50),  target: 50 }
+    case 'notes_100':   return { current: Math.min(s.notesCount, 100), target: 100 }
+    // — streak
+    case 'streak_3':     return { current: Math.min(s.streak, 3),   target: 3 }
+    case 'streak_7':     return { current: Math.min(s.streak, 7),   target: 7 }
+    case 'streak_30':    return { current: Math.min(s.streak, 30),  target: 30 }
+    case 'streak_100':   return { current: Math.min(s.streak, 100), target: 100 }
+    case 'eternal_flame':return { current: Math.min(s.streak, 365), target: 365 }
+    // — pages
+    case 'five_hundred_pages':    return { current: Math.min(s.totalPages, 500),    target: 500 }
+    case 'one_thousand_pages':    return { current: Math.min(s.totalPages, 1000),   target: 1000 }
+    case 'ten_thousand_pages':    return { current: Math.min(s.totalPages, 10000),  target: 10000 }
+    case 'fifty_thousand_pages':  return { current: Math.min(s.totalPages, 50000),  target: 50000 }
+    case 'hundred_thousand_pages':return { current: Math.min(s.totalPages, 100000), target: 100000 }
+    // — hours
+    case 'two_hours':    return { current: Math.min(Math.round(s.totalHours * 10) / 10, 2),    target: 2 }
+    case 'dark_library': return { current: Math.min(Math.round(s.totalHours),       1000), target: 1000 }
+    // — genre diversity
+    case 'genre_curious': return {
+      current: Math.min(Object.values(s.genreCounts).filter(v => v > 0).length, 3),
+      target: 3,
+    }
+    // — genre depth
+    case 'romance_reader':    return { current: Math.min(genre(s, 'romance'), 5),  target: 5 }
+    case 'romance_master':    return { current: Math.min(genre(s, 'romance'), 15), target: 15 }
+    case 'fantasy_master':    return { current: Math.min(genre(s, 'fantasy'), 20), target: 20 }
+    case 'detective':         return { current: Math.min(genre(s, 'mystery', 'thriller', 'crime'), 10), target: 10 }
+    case 'magic_realm':       return { current: Math.min(genre(s, 'fantasy', 'science fiction', 'sci-fi', 'scifi'), 15), target: 15 }
+    case 'cosmic_explorer':   return { current: Math.min(genre(s, 'science fiction', 'sci-fi', 'scifi'), 5), target: 5 }
+    case 'horror_fan':        return { current: Math.min(genre(s, 'horror'), 10), target: 10 }
+    case 'history_lover':     return { current: Math.min(genre(s, 'historical fiction', 'history', 'historical'), 10), target: 10 }
+    case 'nonfiction_scholar':return { current: Math.min(genre(s, 'nonfiction', 'non-fiction', 'self-help', 'self help', 'biography', 'memoir'), 8), target: 8 }
+    default: return null
+  }
+}

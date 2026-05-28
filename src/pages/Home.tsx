@@ -89,7 +89,7 @@ export function HomeScreen() {
 
           {currentBooks.length === 0 && (
             <div style={{ textAlign: 'center', padding: '24px 0' }}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>📚</div>
+              <div style={{ marginBottom: 8 }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="#888" strokeWidth="1.5" strokeLinecap="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
               <div style={{ fontSize: 14, color: theme.muted, marginBottom: 16 }}>No books in progress</div>
               <button onClick={() => navigate('/search')} style={{ padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 500 }}>
                 Find a book
@@ -110,7 +110,7 @@ export function HomeScreen() {
                 </div>
               </div>
               <button onClick={() => navigate('/session', { state: { book: activeBook } })} style={{ width: '100%', padding: 13, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                ⏱ Start Reading Session
+                Start Reading Session
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5H11M11 6.5L7 2.5M11 6.5L7 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
             </>

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import {
-  ACHIEVEMENTS, TIER_COLORS, getUnlockedCharacters, getUnlockedTitles,
+  ACHIEVEMENTS, TIER_COLORS, getUnlockedCharacters, getUnlockedTitles, getAchievementProgress,
   type AchievementTier, type AchievementStats
 } from '../data/achievements'
 import { CHARACTERS, type CharacterId } from '../components/AvatarCharacter'
@@ -242,6 +242,24 @@ export default function AchievementsScreen() {
                             </span>
                           )}
                         </div>
+                        {/* Progress bar */}
+                        {!unlocked && stats && (() => {
+                          const p = getAchievementProgress(ach.id, stats)
+                          if (!p) return null
+                          const pct = p.target > 0 ? Math.min(100, (p.current / p.target) * 100) : 0
+                          const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : String(n)
+                          return (
+                            <div style={{ marginTop: 8 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                                <span style={{ fontSize: 10, color: theme.muted }}>{fmt(p.current)} / {fmt(p.target)}</span>
+                                <span style={{ fontSize: 10, color: theme.muted }}>{Math.round(pct)}%</span>
+                              </div>
+                              <div style={{ height: 4, background: theme.bg, borderRadius: 2, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, background: TIER_COLORS[ach.tier], borderRadius: 2, transition: 'width 0.6s ease' }}/>
+                              </div>
+                            </div>
+                          )
+                        })()}
                         {unlocked && (
                           <div style={{ fontSize: 11, color: TIER_COLORS[tier], marginTop: 4, fontWeight: 600 }}>✓ Unlocked</div>
                         )}

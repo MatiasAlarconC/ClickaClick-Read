@@ -220,10 +220,10 @@ export default function ProfileScreen() {
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, color: theme.fg, letterSpacing: -0.5 }}>{profile?.username ?? 'Reader'}</div>
           {/* Title with edit pencil */}
           <button onClick={() => setShowTitlePicker(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 2, padding: '2px 6px', borderRadius: 6 }}>
-            <span style={{ fontSize: 12, color: '#FFD700', fontWeight: 600 }}>{profileTitle ?? 'Reader'}</span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.828 2.828 0 014 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke="#FFD700" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            <span style={{ fontSize: 12, color: primaryColor, fontWeight: 600 }}>{profileTitle ?? 'Reader'}</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.828 2.828 0 014 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke={primaryColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
-          <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{charDef.description}{memberYear ? ` · since ${memberYear}` : ''}</div>
+          <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{memberYear ? `member since ${memberYear}` : charDef.description}</div>
         </div>
 
         {/* Character — click to animate only (Customize is its own button) */}

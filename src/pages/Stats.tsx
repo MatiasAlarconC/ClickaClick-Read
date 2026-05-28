@@ -9,7 +9,7 @@ import type { ReadingSession, UserBook } from '../types'
 
 export default function StatsScreen() {
   const { theme } = useTheme()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const navigate = useNavigate()
   const dark = theme.dark
 
@@ -35,6 +35,7 @@ export default function StatsScreen() {
     const pagesRead = sessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
     const totalSeconds = sessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0)
     const hours = Math.round(totalSeconds / 3600)
+    const totalMins = Math.round(totalSeconds / 60)
     const days = new Set(sessions.map(s => new Date(s.started_at).toDateString())).size
     const dailyAvgPages = days > 0 ? Math.round(pagesRead / days) : 0
     // Reading pace: pages per hour — only from timed sessions (duration > 0)
@@ -42,7 +43,8 @@ export default function StatsScreen() {
     const timedPages = timedSessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
     const timedHours = timedSessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / 3600
     const pacePerHour = timedHours > 0 ? Math.round(timedPages / timedHours) : 0
-    return { booksFinished, pagesRead, hours, dailyAvgPages, pacePerHour }
+    const avgDailyMins = days > 0 ? Math.round(totalMins / days) : 0
+    return { booksFinished, pagesRead, hours, dailyAvgPages, pacePerHour, avgDailyMins }
   }, [sessions, userBooks])
 
   // Heatmap: 52 weeks × 7 days
@@ -68,7 +70,8 @@ export default function StatsScreen() {
       d.setDate(start.getDate() + i)
       if (d > today) { cells.push({ date: d, value: 0 }); continue }
       const p = sessionPagesByDate[d.toDateString()] ?? 0
-      cells.push({ date: d, value: p === 0 ? 0 : p > 30 ? 2 : 1 })
+      const hasSession = sessionDates.has(d.toDateString())
+      cells.push({ date: d, value: hasSession ? (p > 30 ? 2 : 1) : 0 })
     }
     return cells
   }, [sessions])
@@ -206,6 +209,50 @@ export default function StatsScreen() {
           ))}
         </div>
 
+        {/* Reading Goals progress */}
+        {(() => {
+          const goalBooks  = (profile as any)?.reading_goal_books_per_year
+          const goalPages  = (profile as any)?.reading_goal_pages_per_day
+          const goalMins   = (profile as any)?.reading_goal_minutes_per_day
+          const goalStreak = (profile as any)?.reading_goal_streak_days
+          const goals = [
+            goalBooks  ? { label: 'Books this year', current: stats.booksFinished, target: goalBooks,  unit: 'books' }      : null,
+            goalPages  ? { label: 'Pages / day',     current: stats.dailyAvgPages, target: goalPages,  unit: 'pg/day' }     : null,
+            goalMins   ? { label: 'Minutes / day',   current: stats.avgDailyMins,  target: goalMins,   unit: 'min/day' }    : null,
+            goalStreak ? { label: 'Reading streak',  current: currentStreak,       target: goalStreak, unit: 'days' }       : null,
+          ].filter(Boolean) as { label: string; current: number; target: number; unit: string }[]
+          if (goals.length === 0) return null
+          return (
+            <div style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 16px 14px', marginBottom: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: theme.muted, marginBottom: 14 }}>Reading Goals</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {goals.map(g => {
+                  const pct = Math.min(100, g.target > 0 ? (g.current / g.target) * 100 : 0)
+                  const done = pct >= 100
+                  return (
+                    <div key={g.label}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                        <span style={{ fontSize: 12, color: theme.fg }}>{g.label}</span>
+                        <span style={{ fontSize: 12, color: done ? theme.accent : theme.muted, fontWeight: done ? 600 : 400 }}>
+                          {g.current} / {g.target} {g.unit}
+                        </span>
+                      </div>
+                      <div style={{ height: 5, background: theme.bg, borderRadius: 3, overflow: 'hidden' }}>
+                        <motion.div
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ duration: 0.7, ease: 'easeOut' }}
+                          style={{ height: '100%', background: done ? theme.accent : `${theme.accent}90`, borderRadius: 3 }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+
         {/* Year in Review CTA */}
         <motion.div onClick={() => navigate('/yearreview')}
           whileTap={{ scale: 0.98 }}
@@ -227,7 +274,9 @@ export default function StatsScreen() {
         <motion.div onClick={() => navigate('/ai')}
           whileTap={{ scale: 0.98 }}
           style={{ background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 18, padding: '20px', marginBottom: 28, cursor: 'pointer' }}>
-          <div style={{ fontSize: 22, marginBottom: 4 }}>✨</div>
+          <div style={{ marginBottom: 4 }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" stroke={theme.accent} strokeWidth="1.5" strokeLinejoin="round" fill={theme.accent} fillOpacity="0.15"/></svg>
+          </div>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, marginBottom: 4 }}>What should I read next?</div>
           <div style={{ fontSize: 13, color: theme.muted }}>AI recommendations based on your taste</div>
         </motion.div>
