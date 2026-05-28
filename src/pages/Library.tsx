@@ -1,40 +1,116 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion'
-import { BookCover, TabBar, ProgressBar, Stars } from '../components/UI'
+import { BookCover, TabBar, ProgressBar, Stars, Spinner } from '../components/UI'
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
+import { getRecommendations, type BookRecommendation } from '../services/gemini'
+import { searchBooks } from '../services/books'
 import type { UserBook } from '../types'
 
-type LibTab = 'reading' | 'finished' | 'want_to_read'
+type BookTab = 'reading' | 'finished' | 'want_to_read'
+type LibTab = BookTab | 'discover'
 
 const TAB_LABELS: Record<LibTab, string> = {
   reading: 'Reading',
   finished: 'Finished',
   want_to_read: 'Want to Read',
+  discover: '✦ For You',
 }
+
+const REC_CACHE_TTL = 24 * 60 * 60 * 1000 // 24h
 
 export default function LibraryScreen() {
   const { theme } = useTheme()
   const { user } = useAuth()
   const navigate = useNavigate()
   const [tab, setTab] = useState<LibTab>('reading')
-  const [books, setBooks] = useState<Record<LibTab, UserBook[]>>({ reading: [], finished: [], want_to_read: [] })
+  const [books, setBooks] = useState<Record<BookTab, UserBook[]>>({ reading: [], finished: [], want_to_read: [] })
   const [loading, setLoading] = useState(true)
+
+  // Discover tab state
+  const [recs, setRecs] = useState<BookRecommendation[]>([])
+  const [recLoading, setRecLoading] = useState(false)
+  const [recError, setRecError] = useState(false)
+  const [recLoadingMore, setRecLoadingMore] = useState(false)
+  const [noBooksForRecs, setNoBooksForRecs] = useState(false)
+
+  const recCacheKey = `clickaclick_recs_v1_${user?.id ?? ''}`
+
+  const loadDiscover = async (force = false) => {
+    if (!user) return
+    setRecError(false); setNoBooksForRecs(false)
+    // Check localStorage cache
+    if (!force) {
+      try {
+        const raw = localStorage.getItem(recCacheKey)
+        if (raw) {
+          const { ts, data } = JSON.parse(raw)
+          if (Date.now() - ts < REC_CACHE_TTL && data?.length > 0) { setRecs(data); return }
+        }
+      } catch { /* ignore */ }
+    }
+    setRecLoading(true)
+    let { data: userBooks } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'finished').limit(20)
+    if (!userBooks?.length) {
+      const { data: reading } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'reading').limit(10)
+      userBooks = reading
+    }
+    if (!userBooks?.length) { setNoBooksForRecs(true); setRecLoading(false); return }
+    const bookList = (userBooks as UserBook[]).map(b => ({ title: b.book?.title ?? '', author: b.book?.author ?? '', rating: b.user_rating, genres: b.book?.genres ?? [] }))
+    const results = await getRecommendations({ finishedBooks: bookList, userId: user.id, count: 10 })
+    if (!results.length) { setRecError(true); setRecLoading(false); return }
+    const enriched = await enrichRecs(results)
+    setRecs(enriched)
+    try { localStorage.setItem(recCacheKey, JSON.stringify({ ts: Date.now(), data: enriched })) } catch { /* ignore */ }
+    setRecLoading(false)
+  }
+
+  const loadMoreDiscover = async () => {
+    if (!user || recLoadingMore) return
+    setRecLoadingMore(true)
+    let { data: userBooks } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'finished').limit(20)
+    if (!userBooks?.length) {
+      const { data: reading } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'reading').limit(10)
+      userBooks = reading
+    }
+    if (!userBooks?.length) { setRecLoadingMore(false); return }
+    const bookList = (userBooks as UserBook[]).map(b => ({ title: b.book?.title ?? '', author: b.book?.author ?? '', rating: b.user_rating, genres: b.book?.genres ?? [] }))
+    const exclude = recs.map(r => r.title)
+    const results = await getRecommendations({ finishedBooks: bookList, userId: user.id, count: 10, exclude })
+    if (!results.length) { setRecLoadingMore(false); return }
+    const enriched = await enrichRecs(results)
+    setRecs(prev => [...prev, ...enriched])
+    setRecLoadingMore(false)
+  }
+
+  const enrichRecs = async (results: BookRecommendation[]) => {
+    return Promise.all(results.map(async rec => {
+      try {
+        const search = await searchBooks(`${rec.title} ${rec.author}`)
+        if (search[0]) return { ...rec, searchResult: search[0] }
+      } catch { /* ignore */ }
+      return rec
+    }))
+  }
 
   useEffect(() => {
     if (!user) return
     fetchBooks()
   }, [user])
 
+  useEffect(() => {
+    if (tab === 'discover' && recs.length === 0 && !recLoading) loadDiscover()
+  }, [tab])
+
   const fetchBooks = async () => {
     if (!user) return
     setLoading(true)
     const { data } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).order('added_at', { ascending: false })
     if (data) {
-      const grouped: Record<LibTab, UserBook[]> = { reading: [], finished: [], want_to_read: [] }
+      const grouped: Record<BookTab, UserBook[]> = { reading: [], finished: [], want_to_read: [] }
       for (const b of data as UserBook[]) {
-        if (b.status in grouped) grouped[b.status].push(b)
+        if (b.status in grouped) grouped[b.status as BookTab].push(b)
       }
       setBooks(grouped)
     }
@@ -42,6 +118,7 @@ export default function LibraryScreen() {
   }
 
   const totalBooks = books.reading.length + books.finished.length + books.want_to_read.length
+  const isBookTab = tab !== 'discover'
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, position: 'relative', paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
@@ -60,22 +137,74 @@ export default function LibraryScreen() {
           ))}
         </div>
 
+        {/* Discover tab */}
+        {tab === 'discover' && (
+          <div style={{ paddingBottom: 100 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <div style={{ fontSize: 11, color: theme.muted }}>Based on your reading history · refreshes every 24h</div>
+              <button onClick={() => loadDiscover(true)} disabled={recLoading} style={{ padding: '6px 12px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, color: theme.muted, cursor: 'pointer' }}>↺ Refresh</button>
+            </div>
+            {recLoading && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '48px 0' }}>
+                <Spinner color={theme.muted} />
+                <div style={{ fontSize: 13, color: theme.muted }}>Curating your picks…</div>
+              </div>
+            )}
+            {noBooksForRecs && !recLoading && (
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.muted, marginBottom: 8 }}>Nothing to work with yet</div>
+                <div style={{ fontSize: 13, color: theme.muted }}>Add and read some books first so the AI can learn your taste.</div>
+                <button onClick={() => navigate('/search')} style={{ marginTop: 16, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 500 }}>Find books</button>
+              </div>
+            )}
+            {recError && !recLoading && (
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <div style={{ fontSize: 13, color: theme.muted, marginBottom: 12 }}>Could not load recommendations right now.</div>
+                <button onClick={() => loadDiscover(true)} style={{ padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14 }}>Try Again</button>
+              </div>
+            )}
+            {!recLoading && recs.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {recs.map((rec, i) => {
+                  const sr = rec.searchResult as { cover_url?: string | null } | undefined
+                  return (
+                    <motion.div key={`${rec.title}-${i}`} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: Math.min(i, 9) * 0.07 }}
+                      style={{ display: 'flex', gap: 14, padding: 16, background: theme.bgSecondary, borderRadius: 16 }}>
+                      <BookCover index={i} width={58} height={88} coverUrl={sr?.cover_url ?? null} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: 'Georgia, serif', fontSize: 15, color: theme.fg, lineHeight: 1.3, marginBottom: 3 }}>{rec.title}</div>
+                        <div style={{ fontSize: 12, color: theme.muted, marginBottom: 7 }}>{rec.author}</div>
+                        <div style={{ fontSize: 13, color: theme.fgDim, lineHeight: 1.6 }}>{rec.reason}</div>
+                        <button onClick={() => navigate('/search', { state: { prefillQuery: `${rec.title} ${rec.author}` } })} style={{ marginTop: 10, padding: '7px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>Search →</button>
+                      </div>
+                    </motion.div>
+                  )
+                })}
+                <button onClick={loadMoreDiscover} disabled={recLoadingMore} style={{ padding: 15, background: 'none', border: `1.5px solid ${theme.border}`, borderRadius: 12, fontSize: 14, color: theme.muted, cursor: 'pointer' }}>
+                  {recLoadingMore ? 'Loading…' : 'Load more recommendations'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Book list */}
+        {isBookTab && (
         <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: 100 }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: theme.muted }}>Loading…</div>
-          ) : books[tab].length === 0 ? (
+          ) : books[tab as BookTab].length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 0' }}>
               <div style={{ marginBottom: 8 }}><svg width="36" height="36" viewBox="0 0 24 24" fill="none"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="#888" strokeWidth="1.5" strokeLinecap="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="#888" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg></div>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.muted }}>Nothing here yet</div>
               <button onClick={() => navigate('/search')} style={{ marginTop: 16, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 500 }}>Find books</button>
             </div>
           ) : (
-            books[tab].map((book, i) => (
-              <SwipeableBookRow key={book.id} book={book} index={i} total={books[tab].length} tab={tab} theme={theme} userId={user?.id ?? ''} onPress={() => navigate('/detail', { state: { book: book.book } })} onDelete={() => {
+            books[tab as BookTab].map((book, i) => (
+              <SwipeableBookRow key={book.id} book={book} index={i} total={books[tab as BookTab].length} tab={tab as BookTab} theme={theme} userId={user?.id ?? ''} onPress={() => navigate('/detail', { state: { book: book.book } })} onDelete={() => {
                 setBooks(prev => ({
                   ...prev,
-                  [tab]: prev[tab].filter(b => b.id !== book.id)
+                  [tab]: prev[tab as BookTab].filter(b => b.id !== book.id)
                 }))
                 supabase.from('user_books').delete().eq('id', book.id)
               }} onFinish={() => {
@@ -91,6 +220,7 @@ export default function LibraryScreen() {
             ))
           )}
         </div>
+        )}
       </div>
 
       {/* FAB */}

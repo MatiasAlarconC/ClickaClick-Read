@@ -122,12 +122,16 @@ export interface BookRecommendation {
 export async function getRecommendations(params: {
   finishedBooks: Array<{ title: string; author: string; rating: number | null; genres: string[] }>
   userId: string | null
+  count?: number
+  exclude?: string[]
 }): Promise<BookRecommendation[]> {
   const cfg = await getConfig()
   if (!cfg.enabled || !cfg.recommendations_enabled) return []
 
+  const count = params.count ?? 10
   const booksStr = params.finishedBooks.map(b => `"${b.title}" by ${b.author} (rating: ${b.rating ?? 'unrated'})`).join(', ')
-  const prompt = `Based on this reader's history: ${booksStr}, recommend 3 books they haven't read. For each, provide: title, author, and a one-sentence reason why it matches their taste. Respond in JSON only, as an array: [{"title":"...","author":"...","reason":"..."}]`
+  const excludeStr = params.exclude?.length ? ` Do not include these already shown: ${params.exclude.map(t => `"${t}"`).join(', ')}.` : ''
+  const prompt = `Based on this reader's history: ${booksStr}, recommend ${count} books they haven't read.${excludeStr} For each, provide: title, author, and a one-sentence reason why it matches their taste. Respond in JSON only, as an array: [{"title":"...","author":"...","reason":"..."}]`
 
   try {
     const { text, tokens } = await callGemini(prompt, cfg.model)

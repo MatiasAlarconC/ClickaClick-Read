@@ -108,6 +108,31 @@ export default function StatsScreen() {
   const maxPages = Math.max(...monthlyPages.filter(v => v > 0), 1)
   const months = ['J','F','M','A','M','J','J','A','S','O','N','D']
 
+  // Monthly insights: this month vs last month
+  const monthlyInsights = useMemo(() => {
+    const now = new Date()
+    const thisYear = now.getFullYear(); const thisMonth = now.getMonth()
+    const lastMonthDate = new Date(thisYear, thisMonth - 1, 1)
+    const lastYear = lastMonthDate.getFullYear(); const lastMonth = lastMonthDate.getMonth()
+    const filterMonth = (y: number, m: number) => sessions.filter(s => { const d = new Date(s.started_at); return d.getFullYear() === y && d.getMonth() === m })
+    const calc = (subs: ReadingSession[]) => {
+      const pages = subs.reduce((a, s) => a + (s.pages_read ?? 0), 0)
+      const days = new Set(subs.map(s => new Date(s.started_at).toDateString())).size
+      const timed = subs.filter(s => (s.duration_seconds ?? 0) > 0)
+      const timedPages = timed.reduce((a, s) => a + (s.pages_read ?? 0), 0)
+      const timedHrs = timed.reduce((a, s) => a + (s.duration_seconds ?? 0), 0) / 3600
+      const speed = timedHrs > 0 ? Math.round(timedPages / timedHrs) : 0
+      const totalSecs = subs.reduce((a, s) => a + (s.duration_seconds ?? 0), 0)
+      const avgMins = days > 0 ? Math.round(totalSecs / 60 / days) : 0
+      return { pages, speed, avgMins }
+    }
+    const thisData = calc(filterMonth(thisYear, thisMonth))
+    const lastData = calc(filterMonth(lastYear, lastMonth))
+    const hasLast = lastData.pages > 0 || lastData.speed > 0
+    const lastMonthName = lastMonthDate.toLocaleString('default', { month: 'long' })
+    return { thisData, lastData, hasLast, lastMonthName }
+  }, [sessions])
+
   const CELL = 5.2; const GAP = 1.5
 
   return (
@@ -253,6 +278,43 @@ export default function StatsScreen() {
           )
         })()}
 
+        {/* Monthly Insights */}
+        <div style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 16px 14px', marginBottom: 14 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: theme.muted, marginBottom: 14 }}>This Month vs Last</div>
+          {monthlyInsights.thisData.pages === 0 && !monthlyInsights.hasLast ? (
+            <div style={{ fontSize: 13, color: theme.muted, textAlign: 'center', padding: '8px 0' }}>No reading data yet this month.</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {[
+                { label: 'Pages read', thisVal: monthlyInsights.thisData.pages, lastVal: monthlyInsights.lastData.pages, unit: 'pages' },
+                { label: 'Reading speed', thisVal: monthlyInsights.thisData.speed, lastVal: monthlyInsights.lastData.speed, unit: 'pg/hr' },
+                { label: 'Avg daily time', thisVal: monthlyInsights.thisData.avgMins, lastVal: monthlyInsights.lastData.avgMins, unit: 'min/day' },
+              ].map(row => {
+                const diff = row.lastVal > 0 ? Math.round(((row.thisVal - row.lastVal) / row.lastVal) * 100) : null
+                const up = diff !== null && diff > 0; const dn = diff !== null && diff < 0
+                return (
+                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 13, color: theme.fg }}>{row.label}</div>
+                      {monthlyInsights.hasLast && <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{row.lastVal > 0 ? `${row.lastVal} ${row.unit}` : '—'} in {monthlyInsights.lastMonthName}</div>}
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: theme.fg, lineHeight: 1 }}>
+                        {row.thisVal > 0 ? row.thisVal : '—'}{row.thisVal > 0 && <span style={{ fontSize: 10, color: theme.muted }}> {row.unit}</span>}
+                      </div>
+                      {diff !== null && (
+                        <div style={{ fontSize: 11, color: up ? '#22c55e' : dn ? '#ef4444' : theme.muted, marginTop: 2 }}>
+                          {up ? '▲' : dn ? '▼' : '='} {Math.abs(diff)}%
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
         {/* Year in Review CTA */}
         <motion.div onClick={() => navigate('/yearreview')}
           whileTap={{ scale: 0.98 }}
@@ -270,16 +332,7 @@ export default function StatsScreen() {
           </div>
         </motion.div>
 
-        {/* AI Picks CTA */}
-        <motion.div onClick={() => navigate('/ai')}
-          whileTap={{ scale: 0.98 }}
-          style={{ background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 18, padding: '20px', marginBottom: 28, cursor: 'pointer' }}>
-          <div style={{ marginBottom: 4 }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z" stroke={theme.accent} strokeWidth="1.5" strokeLinejoin="round" fill={theme.accent} fillOpacity="0.15"/></svg>
-          </div>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, marginBottom: 4 }}>What should I read next?</div>
-          <div style={{ fontSize: 13, color: theme.muted }}>AI recommendations based on your taste</div>
-        </motion.div>
+
       </div>
 
       <TabBar activeTab="stats" onTabChange={t => navigate(`/${t === 'home' ? 'home' : t}`)} theme={theme} />
