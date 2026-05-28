@@ -138,7 +138,7 @@ export async function getProgressiveSummary(params: {
   }
 
   const fromPage = Math.max(1, params.currentPage - 20)
-  const prompt = `The reader is on page ${params.currentPage} of "${params.title}" by ${params.author}${params.synopsis ? ` (synopsis: ${params.synopsis.slice(0, 200)})` : ''}. Write a vivid 3-sentence recap of what likely happened in pages ${fromPage}–${params.currentPage} to help the reader remember where they left off. Focus on recent events — character actions, emotional beats, plot twists. Be engaging, not dry. Do not spoil anything beyond page ${params.currentPage}.`
+  const prompt = `You are an expert on the book "${params.title}" by ${params.author}.${params.synopsis ? ` Synopsis: ${params.synopsis.slice(0, 500)}.` : ''} The reader just finished page ${params.currentPage} (out of ${params.totalPages}). Write a tight, specific 3-sentence recap of what happens in pages ${fromPage}–${params.currentPage} — the exact section they just read. Name the specific characters involved, describe the concrete events, conflicts, or revelations that occur in those pages. Do NOT summarize the whole book; focus only on this page range. Be vivid and precise, not vague or generic.`
 
   try {
     const { text, tokens } = await callGemini(prompt, cfg.model)

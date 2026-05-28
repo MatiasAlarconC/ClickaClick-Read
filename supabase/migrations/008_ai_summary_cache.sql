@@ -1,5 +1,6 @@
 -- Migration 008: AI summary cache table
-CREATE TABLE IF NOT EXISTS ai_summary_cache (
+DROP TABLE IF EXISTS ai_summary_cache;
+CREATE TABLE ai_summary_cache (
   id          BIGSERIAL PRIMARY KEY,
   user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   book_title  TEXT NOT NULL,
@@ -14,6 +15,7 @@ CREATE INDEX IF NOT EXISTS ai_summary_cache_lookup
 
 ALTER TABLE ai_summary_cache ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage own summaries" ON ai_summary_cache;
 CREATE POLICY "Users manage own summaries"
   ON ai_summary_cache FOR ALL
   USING (auth.uid() = user_id)
