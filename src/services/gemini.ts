@@ -58,8 +58,8 @@ async function callGemini(prompt: string, model: string): Promise<{ text: string
     throw new Error('No Gemini API key')
   }
 
-  // If the configured model is deprecated (404/400), retry with gemini-2.0-flash
-  const candidates = [model, 'gemini-2.0-flash'].filter((m, i, a) => a.indexOf(m) === i)
+  // Fallback chain: try configured model → flash-lite → 2.0-flash → 2.5-flash
+  const candidates = [model, 'gemini-2.0-flash-lite', 'gemini-2.0-flash', 'gemini-2.5-flash-preview-05-20'].filter((m, i, a) => a.indexOf(m) === i)
 
   let lastError: Error = new Error('Gemini unreachable')
   for (const m of candidates) {
@@ -88,7 +88,13 @@ async function callGemini(prompt: string, model: string): Promise<{ text: string
       console.error(`[ClickaClick AI] 403 FORBIDDEN — API key is invalid, expired, or IP-restricted. Check Vercel env vars. Body:`, body)
       throw new Error('Gemini 403: invalid key')
     }
-    if (res.status === 429 || res.status >= 500) {
+    if (res.status === 429) {
+      const body = await res.text().catch(() => '')
+      console.warn(`[ClickaClick AI] Gemini 429 (${m}):`, body)
+      lastError = new Error('Gemini 429')
+      continue // try next model in chain
+    }
+    if (res.status >= 500) {
       const body = await res.text().catch(() => '')
       console.error(`[ClickaClick AI] Gemini ${res.status} (${m}):`, body)
       throw new Error(`Gemini ${res.status}`)

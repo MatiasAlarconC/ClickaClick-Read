@@ -26,6 +26,17 @@ const RARITY: Record<CharacterId, { label: string; color: string }> = {
   shadow:  { label: 'Mythic',    color: '#A855F7' },
 }
 
+// ─── Achievement required to unlock each character ────────────────────────────
+const UNLOCK_HINT: Partial<Record<CharacterId, { name: string; hint: string }>> = {
+  owl:     { name: 'Night Reader',    hint: 'Complete 15 reading sessions' },
+  knight:  { name: 'Iron Will',       hint: 'Maintain a 7-day reading streak' },
+  fox:     { name: 'The Detective',   hint: 'Read 10+ Mystery or Thriller books' },
+  mage:    { name: 'Magic Realm',     hint: 'Read 15+ Fantasy or Sci-Fi books' },
+  cosmic:  { name: 'Cosmic Explorer', hint: 'Read 5+ Science Fiction books' },
+  phoenix: { name: 'The Immortal',    hint: 'Read every day for 365 consecutive days' },
+  shadow:  { name: 'Lord of Pages',   hint: 'Accumulate 1,000 hours of reading' },
+}
+
 interface AvatarCreatorProps {
   onClose: () => void
   onSave: (character: CharacterId, primary: string, secondary: string) => void
@@ -59,6 +70,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
 
   const selectedLocked = !isUnlocked(selected)
   const rarity = RARITY[selected]
+  const unlockHint = UNLOCK_HINT[selected]
 
   return (
     <motion.div
@@ -109,7 +121,16 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: rarity.color, background: `${rarity.color}20`, padding: '3px 8px', borderRadius: 999 }}>{rarity.label}</span>
             </div>
             <div style={{ fontSize: 12, color: theme.muted }}>{def.description}</div>
-            {selectedLocked && (
+            {selectedLocked && unlockHint && (
+              <div style={{ marginTop: 8, background: `${rarity.color}15`, border: `1px solid ${rarity.color}40`, borderRadius: 12, padding: '10px 14px', textAlign: 'center', maxWidth: 260 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: rarity.color, marginBottom: 4 }}>
+                  Unlock via achievement
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: theme.fg, marginBottom: 2 }}>{unlockHint.name}</div>
+                <div style={{ fontSize: 11, color: theme.muted }}>{unlockHint.hint}</div>
+              </div>
+            )}
+            {selectedLocked && !unlockHint && (
               <div style={{ fontSize: 11, color: theme.muted, fontStyle: 'italic', marginTop: 2 }}>Complete achievements to unlock</div>
             )}
           </div>
@@ -161,8 +182,15 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
           {/* Save */}
           <div style={{ padding: '4px 16px 24px' }}>
             {selectedLocked ? (
-              <div style={{ padding: '15px', background: theme.bgSecondary, borderRadius: 14, textAlign: 'center', fontSize: 13, color: theme.muted }}>
-                Unlock <strong style={{ color: theme.fg }}>{def.name}</strong> through achievements to use this character
+              <div style={{ padding: '15px', background: theme.bgSecondary, borderRadius: 14, textAlign: 'center' }}>
+                <div style={{ fontSize: 13, color: theme.muted, marginBottom: unlockHint ? 6 : 0 }}>
+                  Unlock <strong style={{ color: theme.fg }}>{def.name}</strong> to use this character
+                </div>
+                {unlockHint && (
+                  <div style={{ fontSize: 11, color: rarity.color, fontWeight: 600 }}>
+                    Achievement: {unlockHint.name}
+                  </div>
+                )}
               </div>
             ) : (
               <button onClick={() => onSave(selected, primary, secondary)}
