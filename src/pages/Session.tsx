@@ -7,9 +7,6 @@ import { supabase } from '../lib/supabase'
 import type { UserBook } from '../types'
 
 // ─── Music helpers ────────────────────────────────────────────────────────────
-
-const JAMENDO_CLIENT_ID = 'b6747d04'
-
 function genreToMusicTag(genres: string[] | undefined): string {
   if (!genres?.length) return 'ambient'
   const lower = genres.join(' ').toLowerCase()
@@ -23,9 +20,7 @@ function genreToMusicTag(genres: string[] | undefined): string {
 
 async function fetchJamendoTrack(tag: string): Promise<{ url: string; name: string } | null> {
   try {
-    const res = await fetch(
-      `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_CLIENT_ID}&tags=${tag}&audioformat=mp32&order=popularity_total_desc&limit=30&include=musicinfo`
-    )
+    const res = await fetch(`/api/music?tag=${encodeURIComponent(tag)}`)
     if (!res.ok) return null
     const json = await res.json()
     const tracks: { audio: string; name: string }[] = json.results ?? []
@@ -129,6 +124,7 @@ export default function SessionScreen() {
       const activeMs = Date.now() - sessionStartTs.current - pausedMs.current
       setSecs(Math.max(0, Math.floor(activeMs / 1000)))
     }
+    tick() // fire immediately so there's no visible delay
     const id = setInterval(tick, 500)
     const onVisible = () => { if (!document.hidden) tick() }
     document.addEventListener('visibilitychange', onVisible)

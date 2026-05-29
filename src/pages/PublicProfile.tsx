@@ -64,7 +64,6 @@ export default function PublicProfileScreen() {
         .select('id, status, current_page, rating, book:books(title, author, cover_url, pages, genres)')
         .eq('user_id', userId)
         .in('status', ['reading', 'finished'])
-        .order('updated_at', { ascending: false })
 
       const bookList = (ubs ?? []) as unknown as UserBookEntry[]
       setBooks(bookList)

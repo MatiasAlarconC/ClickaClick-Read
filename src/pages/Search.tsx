@@ -240,17 +240,32 @@ export default function SearchScreen() {
 
           {/* Pagination */}
           {!loading && searched && filtered.length > 0 && totalPages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '20px 0 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6, padding: '20px 0 12px' }}>
+              {/* Prev */}
               <button disabled={currentPage === 0} onClick={() => handleSearch(query, authorFilter, genre, currentPage - 1)}
-                style={{ padding: '8px 16px', borderRadius: 10, border: `1px solid ${theme.border}`, background: 'none', color: currentPage === 0 ? theme.muted : theme.fg, fontSize: 13, cursor: currentPage === 0 ? 'default' : 'pointer', opacity: currentPage === 0 ? 0.4 : 1 }}>
-                ← Prev
+                style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${theme.border}`, background: 'none', color: currentPage === 0 ? theme.muted : theme.fg, fontSize: 14, cursor: currentPage === 0 ? 'default' : 'pointer', opacity: currentPage === 0 ? 0.35 : 1 }}>
+                ‹
               </button>
-              <span style={{ fontSize: 12, color: theme.muted, minWidth: 80, textAlign: 'center' }}>
-                {currentPage + 1} / {Math.min(totalPages, 40)}
-              </span>
+              {/* Page numbers — sliding window of up to 7 */}
+              {(() => {
+                const cap = Math.min(totalPages, 40)
+                const window = 7
+                let start = Math.max(0, currentPage - Math.floor(window / 2))
+                let end = Math.min(cap, start + window)
+                if (end - start < window) start = Math.max(0, end - window)
+                const pages: number[] = []
+                for (let p = start; p < end; p++) pages.push(p)
+                return pages.map(p => (
+                  <button key={p} onClick={() => handleSearch(query, authorFilter, genre, p)}
+                    style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${p === currentPage ? theme.accent : theme.border}`, background: p === currentPage ? theme.accent : 'none', color: p === currentPage ? theme.accentFg : theme.fg, fontSize: 13, fontWeight: p === currentPage ? 600 : 400, cursor: p === currentPage ? 'default' : 'pointer' }}>
+                    {p + 1}
+                  </button>
+                ))
+              })()}
+              {/* Next */}
               <button disabled={currentPage + 1 >= Math.min(totalPages, 40)} onClick={() => handleSearch(query, authorFilter, genre, currentPage + 1)}
-                style={{ padding: '8px 16px', borderRadius: 10, border: `1px solid ${theme.border}`, background: 'none', color: currentPage + 1 >= Math.min(totalPages, 40) ? theme.muted : theme.fg, fontSize: 13, cursor: currentPage + 1 >= Math.min(totalPages, 40) ? 'default' : 'pointer', opacity: currentPage + 1 >= Math.min(totalPages, 40) ? 0.4 : 1 }}>
-                Next →
+                style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${theme.border}`, background: 'none', color: currentPage + 1 >= Math.min(totalPages, 40) ? theme.muted : theme.fg, fontSize: 14, cursor: currentPage + 1 >= Math.min(totalPages, 40) ? 'default' : 'pointer', opacity: currentPage + 1 >= Math.min(totalPages, 40) ? 0.35 : 1 }}>
+                ›
               </button>
             </div>
           )}

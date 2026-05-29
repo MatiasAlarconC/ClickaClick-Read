@@ -246,8 +246,8 @@ export default function StatsScreen() {
           const goalStreak = (profile as any)?.reading_goal_streak_days
           const goals = [
             goalBooks  ? { label: 'Books this year', current: stats.booksFinished, target: goalBooks,  unit: 'books' }      : null,
-            goalPages  ? { label: 'Pages today',     current: stats.dailyAvgPages, target: goalPages,  unit: `/ ${goalPages}` }     : null,
-            goalMins   ? { label: 'Minutes today',   current: stats.avgDailyMins,  target: goalMins,   unit: `/ ${goalMins} min` }    : null,
+            goalPages  ? { label: 'Pages today',     current: stats.dailyAvgPages, target: goalPages,  unit: 'pages' }     : null,
+            goalMins   ? { label: 'Minutes today',   current: stats.avgDailyMins,  target: goalMins,   unit: 'min' }    : null,
             goalStreak ? { label: 'Reading streak',  current: currentStreak,       target: goalStreak, unit: 'days' }       : null,
           ].filter(Boolean) as { label: string; current: number; target: number; unit: string }[]
           if (goals.length === 0) return null
