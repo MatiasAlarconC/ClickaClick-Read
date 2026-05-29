@@ -63,13 +63,25 @@ export default function LibraryScreen() {
       const { data: reading } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'reading').limit(10)
       userBooks = reading
     }
+    if (!userBooks?.length) {
+      const { data: wantToRead } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'want_to_read').limit(10)
+      userBooks = wantToRead
+    }
     if (!userBooks?.length) { setNoBooksForRecs(true); setRecLoading(false); return }
     const bookList = (userBooks as UserBook[]).map(b => ({ title: b.book?.title ?? '', author: b.book?.author ?? '', rating: b.user_rating, genres: b.book?.genres ?? [] }))
-    const results = await getRecommendations({ finishedBooks: bookList, userId: user.id, count: 10 })
-    if (!results.length) { setRecError(true); setRecErrorMsg('Gemini could not generate recommendations. Check your API key in Vercel.'); setRecLoading(false); return }
-    const enriched = await enrichRecs(results)
-    setRecs(enriched)
-    try { localStorage.setItem(recCacheKey, JSON.stringify({ ts: Date.now(), data: enriched })) } catch { /* ignore */ }
+    try {
+      const results = await getRecommendations({ finishedBooks: bookList, userId: user.id, count: 10 })
+      const enriched = await enrichRecs(results)
+      setRecs(enriched)
+      try { localStorage.setItem(recCacheKey, JSON.stringify({ ts: Date.now(), data: enriched })) } catch { /* ignore */ }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setRecError(true)
+      if (msg.includes('403')) setRecErrorMsg('Gemini API key is invalid or expired. Check Vercel environment variables.')
+      else if (msg.includes('429')) setRecErrorMsg('Gemini API rate limit reached. Try again in a few minutes.')
+      else if (msg.includes('No Gemini API key')) setRecErrorMsg('Add VITE_GEMINI_API_KEY to your Vercel environment variables.')
+      else setRecErrorMsg(`Could not generate recommendations: ${msg}`)
+    }
     setRecLoading(false)
   }
 
@@ -94,7 +106,7 @@ export default function LibraryScreen() {
   const enrichRecs = async (results: BookRecommendation[]) => {
     return Promise.all(results.map(async rec => {
       try {
-        const search = await searchBooks(`${rec.title} ${rec.author}`)
+        const { results: search } = await searchBooks(`${rec.title} ${rec.author}`)
         if (search[0]) return { ...rec, searchResult: search[0] }
       } catch { /* ignore */ }
       return rec

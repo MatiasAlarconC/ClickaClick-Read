@@ -37,14 +37,18 @@ export default function StatsScreen() {
     const hours = Math.round(totalSeconds / 3600)
     const totalMins = Math.round(totalSeconds / 60)
     const days = new Set(sessions.map(s => new Date(s.started_at).toDateString())).size
-    const dailyAvgPages = days > 0 ? Math.round(pagesRead / days) : 0
     // Reading pace: pages per hour — only from timed sessions (duration > 0)
     const timedSessions = sessions.filter(s => (s.duration_seconds ?? 0) > 0)
     const timedPages = timedSessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
     const timedHours = timedSessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / 3600
     const pacePerHour = timedHours > 0 ? Math.round(timedPages / timedHours) : 0
     const avgDailyMins = days > 0 ? Math.round(totalMins / days) : 0
-    return { booksFinished, pagesRead, hours, dailyAvgPages, pacePerHour, avgDailyMins }
+    // Today's actual progress (for daily goals)
+    const todayStr = new Date().toDateString()
+    const todaySessions = sessions.filter(s => new Date(s.started_at).toDateString() === todayStr)
+    const todayPages = todaySessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
+    const todayMins = Math.round(todaySessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / 60)
+    return { booksFinished, pagesRead, hours, dailyAvgPages: todayPages, pacePerHour, avgDailyMins: todayMins }
   }, [sessions, userBooks])
 
   // Heatmap: 52 weeks × 7 days
@@ -242,8 +246,8 @@ export default function StatsScreen() {
           const goalStreak = (profile as any)?.reading_goal_streak_days
           const goals = [
             goalBooks  ? { label: 'Books this year', current: stats.booksFinished, target: goalBooks,  unit: 'books' }      : null,
-            goalPages  ? { label: 'Pages / day',     current: stats.dailyAvgPages, target: goalPages,  unit: 'pg/day' }     : null,
-            goalMins   ? { label: 'Minutes / day',   current: stats.avgDailyMins,  target: goalMins,   unit: 'min/day' }    : null,
+            goalPages  ? { label: 'Pages today',     current: stats.dailyAvgPages, target: goalPages,  unit: `/ ${goalPages}` }     : null,
+            goalMins   ? { label: 'Minutes today',   current: stats.avgDailyMins,  target: goalMins,   unit: `/ ${goalMins} min` }    : null,
             goalStreak ? { label: 'Reading streak',  current: currentStreak,       target: goalStreak, unit: 'days' }       : null,
           ].filter(Boolean) as { label: string; current: number; target: number; unit: string }[]
           if (goals.length === 0) return null

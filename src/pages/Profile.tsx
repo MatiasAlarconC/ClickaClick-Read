@@ -35,87 +35,6 @@ export default function ProfileScreen() {
   const [goalStreak, setGoalStreak] = useState(String((profile as any)?.reading_goal_streak_days ?? ''))
 
   // ── Friends / Social ────────────────────────────────────────────────────
-  interface FriendProfile { id: string; username: string | null; avatar_url: string | null }
-  interface Friendship { id: string; requester_id: string; addressee_id: string; status: string }
-  const [friendSearch,    setFriendSearch]    = useState('')
-  const [friendResults,   setFriendResults]   = useState<FriendProfile[]>([])
-  const [friendSearching, setFriendSearching] = useState(false)
-  const [friends,         setFriends]         = useState<FriendProfile[]>([])
-  const [incomingReqs,    setIncomingReqs]    = useState<(Friendship & { profile: FriendProfile })[]>([])
-  const [outgoingReqs,    setOutgoingReqs]    = useState<(Friendship & { profile: FriendProfile })[]>([])
-  const [friendActionId,  setFriendActionId]  = useState<string | null>(null)
-
-  const loadFriends = useCallback(async () => {
-    if (!user) return
-    const { data } = await supabase
-      .from('friendships')
-      .select('*')
-      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
-    if (!data) return
-    const otherIds = data.map(f => f.requester_id === user.id ? f.addressee_id : f.requester_id)
-    const { data: profiles } = otherIds.length
-      ? await supabase.from('profiles').select('id, username, avatar_url').in('id', otherIds)
-      : { data: [] }
-    const pm: Record<string, FriendProfile> = {}
-    for (const p of profiles ?? []) pm[p.id] = p
-    const acc: FriendProfile[] = []
-    const inc: (Friendship & { profile: FriendProfile })[] = []
-    const out: (Friendship & { profile: FriendProfile })[] = []
-    for (const f of data) {
-      const oid = f.requester_id === user.id ? f.addressee_id : f.requester_id
-      const prof = pm[oid] ?? { id: oid, username: 'Unknown', avatar_url: null }
-      if (f.status === 'accepted') acc.push(prof)
-      else if (f.status === 'pending') {
-        if (f.addressee_id === user.id) inc.push({ ...f, profile: prof })
-        else out.push({ ...f, profile: prof })
-      }
-    }
-    setFriends(acc); setIncomingReqs(inc); setOutgoingReqs(out)
-  }, [user])
-
-  useEffect(() => {
-    if (!friendSearch.trim() || !user) { setFriendResults([]); return }
-    const t = setTimeout(async () => {
-      setFriendSearching(true)
-      const { data } = await supabase
-        .from('profiles').select('id, username, avatar_url')
-        .ilike('username', `%${friendSearch.trim()}%`).neq('id', user.id).limit(10)
-      setFriendResults((data ?? []) as FriendProfile[])
-      setFriendSearching(false)
-    }, 400)
-    return () => clearTimeout(t)
-  }, [friendSearch, user])
-
-  const getFriendStatus = (id: string) => {
-    if (incomingReqs.some(f => f.profile.id === id)) return 'pending_received'
-    if (outgoingReqs.some(f => f.profile.id === id)) return 'pending_sent'
-    if (friends.some(f => f.id === id)) return 'accepted'
-    return 'none'
-  }
-  const sendFriendReq = async (addresseeId: string) => {
-    if (!user) return
-    setFriendActionId(addresseeId)
-    await supabase.from('friendships').insert({ requester_id: user.id, addressee_id: addresseeId, status: 'pending' })
-    await loadFriends()
-    setFriendActionId(null)
-  }
-  const acceptFriendReq = async (fid: string) => {
-    setFriendActionId(fid)
-    await supabase.from('friendships').update({ status: 'accepted' }).eq('id', fid)
-    await loadFriends(); setFriendActionId(null)
-  }
-  const deleteFriendship = async (fid: string) => {
-    setFriendActionId(fid)
-    await supabase.from('friendships').delete().eq('id', fid)
-    await loadFriends(); setFriendActionId(null)
-  }
-  const removeFriend = async (friendId: string) => {
-    if (!user) return
-    setFriendActionId(friendId)
-    await supabase.from('friendships').delete()
-      .or(`and(requester_id.eq.${user.id},addressee_id.eq.${friendId}),and(requester_id.eq.${friendId},addressee_id.eq.${user.id})`)
-    await loadFriends(); setFriendActionId(null)
-  }
   const [saving, setSaving]   = useState(false)
   const [saved,  setSaved]    = useState(false)
   const [goalSaved, setGoalSaved] = useState(false)
@@ -124,8 +43,6 @@ export default function ProfileScreen() {
   const [showCreator,     setShowCreator]     = useState(false)
   const [showGoals,       setShowGoals]       = useState(false)
   const [showAccount,     setShowAccount]     = useState(false)
-  const [showFriends,     setShowFriends]     = useState(false)
-  useEffect(() => { if (showFriends) loadFriends() }, [showFriends, loadFriends])
   const [showTitlePicker, setShowTitlePicker] = useState(false)
   const [showEmailForm,   setShowEmailForm]   = useState(false)
   const [showPwForm,      setShowPwForm]      = useState(false)
@@ -372,112 +289,21 @@ export default function ProfileScreen() {
         </button>
 
         {/* ── Friends ──────────────────────────────────────────────────────── */}
-        <div style={{ background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>
-          <button onClick={() => setShowFriends(v => !v)} style={{ ...sectionHeadStyle, borderRadius: 0, marginBottom: 0, border: 'none', background: 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <svg width="18" height="18" viewBox="0 0 22 22" fill="none">
-                <circle cx="8" cy="7" r="3" stroke={theme.muted} strokeWidth="1.5"/>
-                <circle cx="15" cy="5" r="2.5" stroke={theme.muted} strokeWidth="1.5"/>
-                <path d="M2 18C2 15.24 4.69 13 8 13C11.31 13 14 15.24 14 18" stroke={theme.muted} strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M15 11C17.21 11 19 12.57 19 14.5" stroke={theme.muted} strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: theme.fg }}>Friends</div>
-                <div style={{ fontSize: 11, color: theme.muted }}>
-                  {friends.length > 0 ? `${friends.length} friend${friends.length !== 1 ? 's' : ''}` : 'Find & add readers'}
-                  {incomingReqs.length > 0 && <span style={{ marginLeft: 6, background: primaryColor, color: '#fff', borderRadius: 99, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>{incomingReqs.length}</span>}
-                </div>
-              </div>
+        <button onClick={() => navigate('/friends')} style={{ ...sectionHeadStyle }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <svg width="18" height="18" viewBox="0 0 22 22" fill="none">
+              <circle cx="8" cy="7" r="3" stroke={theme.muted} strokeWidth="1.5"/>
+              <circle cx="15" cy="5" r="2.5" stroke={theme.muted} strokeWidth="1.5"/>
+              <path d="M2 18C2 15.24 4.69 13 8 13C11.31 13 14 15.24 14 18" stroke={theme.muted} strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M15 11C17.21 11 19 12.57 19 14.5" stroke={theme.muted} strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: theme.fg }}>Friends</div>
+              <div style={{ fontSize: 11, color: theme.muted }}>Find & connect with other readers</div>
             </div>
-            <Chevron down={showFriends} color={theme.muted}/>
-          </button>
-          <AnimatePresence initial={false}>
-            {showFriends && (
-              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} style={{ overflow: 'hidden' }}>
-                <div style={{ padding: '4px 16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {/* Search */}
-                  <div style={{ position: 'relative', marginTop: 4 }}>
-                    <input
-                      value={friendSearch} onChange={e => setFriendSearch(e.target.value)}
-                      placeholder="Search by username…"
-                      style={{ width: '100%', padding: '9px 32px 9px 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13, color: theme.fg, outline: 'none', boxSizing: 'border-box' }}
-                    />
-                    {friendSearch && <button onClick={() => setFriendSearch('')} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: theme.muted, fontSize: 18, cursor: 'pointer', lineHeight: 1 }}>×</button>}
-                  </div>
-                  {/* Search results */}
-                  {friendSearch.trim() && (
-                    friendSearching
-                      ? <div style={{ fontSize: 12, color: theme.muted, padding: '4px 0' }}>Searching…</div>
-                      : friendResults.length === 0
-                      ? <div style={{ fontSize: 12, color: theme.muted, padding: '4px 0' }}>No users found.</div>
-                      : friendResults.map(p => {
-                          const status = getFriendStatus(p.id)
-                          const loading = friendActionId === p.id
-                          return (
-                            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <div style={{ width: 34, height: 34, borderRadius: '50%', background: theme.border, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: theme.muted }}>
-                                {p.avatar_url ? <img src={p.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : (p.username?.[0] ?? '?').toUpperCase()}
-                              </div>
-                              <div style={{ flex: 1, fontSize: 13, fontWeight: 500, color: theme.fg }}>@{p.username ?? 'unnamed'}</div>
-                              {status === 'none' && <button disabled={loading} onClick={() => sendFriendReq(p.id)} style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: primaryColor, color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.6 : 1 }}>{loading ? '…' : 'Add'}</button>}
-                              {status === 'pending_sent' && <span style={{ fontSize: 11, color: theme.muted }}>Sent ✓</span>}
-                              {status === 'pending_received' && <button disabled={loading} onClick={() => { const f = incomingReqs.find(i => i.profile.id === p.id); if (f) acceptFriendReq(f.id) }} style={{ padding: '5px 12px', borderRadius: 8, border: 'none', background: primaryColor, color: '#fff', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>{loading ? '…' : 'Accept'}</button>}
-                              {status === 'accepted' && <span style={{ fontSize: 11, color: theme.muted }}>Friends ✓</span>}
-                            </div>
-                          )
-                        })
-                  )}
-                  {/* Incoming requests */}
-                  {!friendSearch.trim() && incomingReqs.length > 0 && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: theme.muted }}>Requests ({incomingReqs.length})</div>
-                      {incomingReqs.map(f => (
-                        <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 34, height: 34, borderRadius: '50%', background: theme.border, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: theme.muted }}>{(f.profile.username?.[0] ?? '?').toUpperCase()}</div>
-                          <div style={{ flex: 1, fontSize: 13, color: theme.fg }}>@{f.profile.username ?? 'unnamed'}</div>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button disabled={friendActionId === f.id} onClick={() => acceptFriendReq(f.id)} style={{ padding: '5px 10px', borderRadius: 8, border: 'none', background: primaryColor, color: '#fff', fontSize: 11, cursor: 'pointer' }}>{friendActionId === f.id ? '…' : 'Accept'}</button>
-                            <button disabled={friendActionId === f.id} onClick={() => deleteFriendship(f.id)} style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${theme.border}`, background: 'none', color: theme.muted, fontSize: 11, cursor: 'pointer' }}>Decline</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {/* Friends list */}
-                  {!friendSearch.trim() && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {friends.length > 0 && <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: theme.muted }}>Friends</div>}
-                      {friends.length === 0 && incomingReqs.length === 0 && outgoingReqs.length === 0 && (
-                        <div style={{ fontSize: 12, color: theme.muted, textAlign: 'center', padding: '12px 0' }}>No friends yet — search above to add readers.</div>
-                      )}
-                      {friends.map(p => (
-                        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <button onClick={() => navigate(`/profile/${p.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-                            <div style={{ width: 34, height: 34, borderRadius: '50%', background: theme.border, flexShrink: 0, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: theme.muted }}>
-                              {p.avatar_url ? <img src={p.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }}/> : (p.username?.[0] ?? '?').toUpperCase()}
-                            </div>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: theme.fg }}>@{p.username ?? 'unnamed'}</div>
-                          </button>
-                          <button disabled={friendActionId === p.id} onClick={() => removeFriend(p.id)} style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${theme.border}`, background: 'none', color: theme.muted, fontSize: 11, cursor: 'pointer' }}>{friendActionId === p.id ? '…' : 'Remove'}</button>
-                        </div>
-                      ))}
-                      {outgoingReqs.map(f => (
-                        <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 34, height: 34, borderRadius: '50%', background: theme.border, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: theme.muted }}>{(f.profile.username?.[0] ?? '?').toUpperCase()}</div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, color: theme.fg }}>@{f.profile.username ?? 'unnamed'}</div>
-                            <div style={{ fontSize: 11, color: theme.muted }}>Request pending…</div>
-                          </div>
-                          <button disabled={friendActionId === f.id} onClick={() => deleteFriendship(f.id)} style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${theme.border}`, background: 'none', color: theme.muted, fontSize: 11, cursor: 'pointer' }}>{friendActionId === f.id ? '…' : 'Cancel'}</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+          </div>
+          <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1L6 6L1 11" stroke={theme.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+        </button>
 
         {/* ── Reading Goals ─────────────────────────────────────────────────── */}
         <div style={{ background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 14, overflow: 'hidden' }}>

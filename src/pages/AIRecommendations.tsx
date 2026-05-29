@@ -47,7 +47,7 @@ export default function AIRecommendationsScreen() {
     // Enrich with cover images from API
     const enriched = await Promise.all(results.map(async (rec) => {
       try {
-        const search = await searchBooks(`${rec.title} ${rec.author}`)
+        const { results: search } = await searchBooks(`${rec.title} ${rec.author}`)
         if (search[0]) return { ...rec, searchResult: search[0] }
       } catch { /* ignore */ }
       return rec

@@ -143,9 +143,12 @@ export default function SessionScreen() {
   }
 
   // ─── Music play / pause ───────────────────────────────────────────────────
+  const [musicError, setMusicError] = useState(false)
+  const [volume, setVolume] = useState(0.4)
 
   const toggleMusic = async () => {
     if (musicLoading) return
+    setMusicError(false)
 
     // If track is already loaded, just toggle play / pause (no re-fetch)
     if (audioRef.current) {
@@ -156,7 +159,9 @@ export default function SessionScreen() {
         try {
           await audioRef.current.play()
           setMusicOn(true)
-        } catch { /* blocked — user needs to interact again */ }
+        } catch {
+          setMusicError(true)
+        }
       }
       return
     }
@@ -170,18 +175,50 @@ export default function SessionScreen() {
     if (track) {
       const audio = new Audio(track.url)
       audio.loop = true
-      audio.volume = 0.4
+      audio.volume = volume
       audioRef.current = audio
       setMusicTrackName(track.name)
       try {
         await audio.play()
         setMusicOn(true)
       } catch {
-        // Autoplay was blocked — track is loaded, user can tap again to play
+        // Autoplay was blocked — track is loaded, user can tap the play button
         setMusicOn(false)
       }
+    } else {
+      setMusicError(true)
     }
     setMusicLoading(false)
+  }
+
+  const skipTrack = async () => {
+    if (musicLoading) return
+    setMusicError(false)
+    // Stop current
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.src = ''
+      audioRef.current = null
+    }
+    setMusicOn(false); setMusicTrackName(null)
+    // Fetch new track
+    setMusicLoading(true)
+    const tag = genreToMusicTag(userBook?.book?.genres ?? undefined)
+    let track = await fetchJamendoTrack(tag)
+    if (!track && tag !== 'ambient') track = await fetchJamendoTrack('ambient')
+    if (track) {
+      const audio = new Audio(track.url)
+      audio.loop = true; audio.volume = volume
+      audioRef.current = audio
+      setMusicTrackName(track.name)
+      try { await audio.play(); setMusicOn(true) } catch { /* blocked */ }
+    } else { setMusicError(true) }
+    setMusicLoading(false)
+  }
+
+  const handleVolumeChange = (v: number) => {
+    setVolume(v)
+    if (audioRef.current) audioRef.current.volume = v
   }
 
   // ─── Reliable save ─────────────────────────────────────────────────────────
@@ -280,41 +317,77 @@ export default function SessionScreen() {
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1L11 11M11 1L1 11" stroke={fg} strokeWidth="1.5" strokeLinecap="round"/></svg>
         </button>
         <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.2, textTransform: 'uppercase', color: muted }}>Focus Mode</span>
-        {/* Music button */}
+        {/* Music toggle button — starts/shows player */}
         <button
           onClick={toggleMusic}
           title={musicOn ? 'Pause music' : musicTrackName ? 'Resume music' : 'Start reading music'}
-          style={{ width: 34, height: 34, borderRadius: '50%', background: musicOn ? fg : (dark ? '#1E1E1E' : '#F5F5F3'), border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
+          style={{ width: 34, height: 34, borderRadius: '50%', background: (musicOn || musicTrackName) ? fg : (dark ? '#1E1E1E' : '#F5F5F3'), border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
         >
           {musicLoading
-            ? <Spinner color={musicOn ? bg : muted} />
+            ? <Spinner color={(musicOn || musicTrackName) ? bg : muted} />
             : musicOn
-              ? /* pause icon */
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="4" height="18" rx="1" fill={bg}/><rect x="15" y="3" width="4" height="18" rx="1" fill={bg}/></svg>
+              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="4" height="18" rx="1" fill={bg}/><rect x="15" y="3" width="4" height="18" rx="1" fill={bg}/></svg>
               : musicTrackName
-                ? /* play icon (resume) */
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={fg}/></svg>
-                : /* music note (not started) */
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={fg} strokeWidth="1.5"/><circle cx="18" cy="16" r="3" stroke={fg} strokeWidth="1.5"/></svg>
+                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={bg}/></svg>
+                : <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={fg} strokeWidth="1.5"/><circle cx="18" cy="16" r="3" stroke={fg} strokeWidth="1.5"/></svg>
           }
         </button>
       </div>
 
-      {/* Music indicator */}
+      {/* ── Music player panel ─────────────────────────────────────────────── */}
       <AnimatePresence>
-        {musicOn && musicTrackName && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-            style={{ textAlign: 'center', marginTop: -20, marginBottom: 16, overflow: 'hidden' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 999, background: dark ? '#1A1A1A' : '#F0F0EE' }}>
-              {/* pulsing bar animation */}
-              <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 12 }}>
-                {[0.4, 0.7, 1, 0.6, 0.8].map((h, i) => (
-                  <motion.div key={i} style={{ width: 2, background: fg, borderRadius: 1 }}
-                    animate={{ scaleY: [h * 0.4, h, h * 0.3, h * 0.8, h * 0.4] }}
-                    transition={{ duration: 1.2 + i * 0.2, repeat: Infinity, ease: 'easeInOut' }} />
-                ))}
+        {(musicTrackName || musicLoading || musicError) && (
+          <motion.div key="music-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            style={{ overflow: 'hidden', marginTop: -20, marginBottom: 16 }}>
+            <div style={{ background: dark ? '#141414' : '#F5F5F3', borderRadius: 14, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {/* Track name + skip */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* Equalizer or pause bars */}
+                <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 14, flexShrink: 0 }}>
+                  {[0.5, 0.9, 0.6, 1, 0.7].map((h, i) => (
+                    <motion.div key={i} style={{ width: 2.5, background: musicOn ? fg : muted, borderRadius: 1, height: `${h * 14}px` }}
+                      animate={musicOn ? { scaleY: [h * 0.4, h, h * 0.3, h * 0.8, h * 0.4] } : { scaleY: 0.3 }}
+                      transition={{ duration: 1.1 + i * 0.15, repeat: Infinity, ease: 'easeInOut' }} />
+                  ))}
+                </div>
+                <span style={{ flex: 1, fontSize: 12, color: musicError ? '#FF6B6B' : muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {musicError ? 'Could not load music track' : (musicLoading ? 'Loading…' : (musicTrackName ?? ''))}
+                </span>
+                {!musicError && musicTrackName && (
+                  <button onClick={skipTrack} disabled={musicLoading} title="Skip track"
+                    style={{ background: 'none', border: 'none', color: muted, cursor: 'pointer', padding: '2px 4px', fontSize: 12, flexShrink: 0 }}>
+                    ⏭
+                  </button>
+                )}
               </div>
-              <span style={{ fontSize: 11, color: muted, maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{musicTrackName}</span>
+              {/* Play / Pause + Volume */}
+              {!musicError && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* Play / Pause big button */}
+                  <button onClick={toggleMusic} disabled={musicLoading}
+                    style={{ width: 40, height: 40, borderRadius: '50%', background: fg, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: musicLoading ? 'default' : 'pointer', opacity: musicLoading ? 0.5 : 1 }}>
+                    {musicLoading
+                      ? <Spinner color={bg} />
+                      : musicOn
+                        ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="4" height="18" rx="1" fill={bg}/><rect x="15" y="3" width="4" height="18" rx="1" fill={bg}/></svg>
+                        : <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={bg}/></svg>
+                    }
+                  </button>
+                  {/* Volume slider */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 5L6 9H2v6h4l5 4V5z" fill={muted}/></svg>
+                    <input type="range" min="0" max="1" step="0.05" value={volume}
+                      onChange={e => handleVolumeChange(parseFloat(e.target.value))}
+                      style={{ flex: 1, accentColor: fg, cursor: 'pointer' }} />
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 5L6 9H2v6h4l5 4V5z" fill={muted}/><path d="M15.54 8.46a5 5 0 010 7.07" stroke={muted} strokeWidth="1.5" strokeLinecap="round"/><path d="M19.07 4.93a10 10 0 010 14.14" stroke={muted} strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  </div>
+                </div>
+              )}
+              {musicError && (
+                <button onClick={toggleMusic} style={{ padding: '7px', borderRadius: 8, background: fg, color: bg, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  Try again
+                </button>
+              )}
             </div>
           </motion.div>
         )}

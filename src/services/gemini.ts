@@ -137,10 +137,11 @@ export async function getRecommendations(params: {
     const { text, tokens } = await callGemini(prompt, cfg.model)
     await logUsage('recommendations', tokens, cfg.model, params.userId)
     const json = text.match(/\[[\s\S]*\]/)?.[0]
+    if (!json) throw new Error('Gemini returned a response with no JSON array')
     return json ? JSON.parse(json) : []
   } catch (err) {
     console.error('[ClickaClick AI] recommendations failed:', err)
-    return []
+    throw err   // propagate so callers can show the real error
   }
 }
 

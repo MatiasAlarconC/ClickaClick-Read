@@ -48,19 +48,25 @@ const SECKRY_BOOKS: SearchResult[] = [
 const SECKRY_KEYWORDS = ['seckry', 'sevenstars', 'joseph evans', 'trinity awakening', 'fractured', 'falling sky', 'estergate']
 
 // ─── In-memory cache to avoid redundant fetches ───────────────────────────────
-const cache = new Map<string, { results: SearchResult[]; ts: number }>()
+const cache = new Map<string, { results: SearchResult[]; totalItems?: number; ts: number }>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 min
 
-export async function searchBooks(query: string): Promise<SearchResult[]> {
+export async function searchBooks(
+  query: string,
+  options: { startIndex?: number; genre?: string; author?: string } = {}
+): Promise<{ results: SearchResult[]; totalItems: number }> {
   const q = query.trim()
-  if (!q) return []
+  if (!q && !options.genre && !options.author) return { results: [], totalItems: 0 }
 
-  const cached = cache.get(q)
-  if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.results
+  const startIndex = options.startIndex ?? 0
+  const cacheKey = `${q}|${options.genre ?? ''}|${options.author ?? ''}|${startIndex}`
 
-  // Check for hardcoded Seckry books match
+  const cached = cache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < CACHE_TTL) return { results: cached.results, totalItems: cached.totalItems ?? cached.results.length }
+
+  // Hardcoded Seckry books (only on first page)
   const lq = q.toLowerCase()
-  const hardcoded = SECKRY_KEYWORDS.some(kw => lq.includes(kw))
+  const hardcoded = startIndex === 0 && SECKRY_KEYWORDS.some(kw => lq.includes(kw))
     ? SECKRY_BOOKS.filter(b =>
         b.title.toLowerCase().includes(lq) ||
         b.author.toLowerCase().includes(lq) ||
@@ -68,21 +74,21 @@ export async function searchBooks(query: string): Promise<SearchResult[]> {
       )
     : []
 
-  // Run all three sources in parallel
-  const [googleGen, openLibGen, openLibTitle] = await Promise.allSettled([
-    searchGoogleBooks(q),
-    searchOpenLibrary(q, 'q'),
-    searchOpenLibrary(q, 'title'),
+  // Build Google Books query with proper qualifiers
+  let googleQuery = q
+  if (options.genre && options.genre !== 'All') googleQuery += ` subject:${options.genre}`
+  if (options.author) googleQuery += ` inauthor:${options.author}`
+
+  const [googleRes, openLibGen] = await Promise.allSettled([
+    searchGoogleBooks(googleQuery, startIndex),
+    startIndex === 0 ? searchOpenLibrary(q, 'q', options.genre, options.author) : Promise.resolve({ results: [], totalItems: 0 }),
   ])
 
   const seen = new Set<string>()
   const results: SearchResult[] = []
+  let totalItems = 0
 
-  // Hardcoded books take priority
-  for (const r of hardcoded) {
-    seen.add(r.id)
-    results.push(r)
-  }
+  for (const r of hardcoded) { seen.add(r.id); results.push(r) }
 
   const addUnique = (arr: SearchResult[]) => {
     for (const r of arr) {
@@ -91,64 +97,72 @@ export async function searchBooks(query: string): Promise<SearchResult[]> {
     }
   }
 
-  if (googleGen.status === 'fulfilled')   addUnique(googleGen.value)
-  if (openLibGen.status === 'fulfilled')  addUnique(openLibGen.value)
-  if (openLibTitle.status === 'fulfilled') addUnique(openLibTitle.value)
+  if (googleRes.status === 'fulfilled')  { addUnique(googleRes.value.results); totalItems = Math.max(totalItems, googleRes.value.totalItems) }
+  if (openLibGen.status === 'fulfilled') { addUnique(openLibGen.value.results) }
 
-  const final = results.slice(0, 40)
-  cache.set(q, { results: final, ts: Date.now() })
-  return final
+  cache.set(cacheKey, { results, totalItems, ts: Date.now() })
+  return { results, totalItems }
 }
 
-async function searchGoogleBooks(query: string): Promise<SearchResult[]> {
+async function searchGoogleBooks(query: string, startIndex = 0): Promise<{ results: SearchResult[]; totalItems: number }> {
   const url = new URL('https://www.googleapis.com/books/v1/volumes')
   url.searchParams.set('q', query)
-  url.searchParams.set('maxResults', '40')
+  url.searchParams.set('maxResults', '25')
+  url.searchParams.set('startIndex', String(startIndex))
   url.searchParams.set('printType', 'books')
   if (GOOGLE_API_KEY) url.searchParams.set('key', GOOGLE_API_KEY)
 
   const res = await fetch(url.toString())
   if (!res.ok) throw new Error(`Google Books ${res.status}`)
   const data = await res.json()
+  const totalItems: number = data.totalItems ?? 0
 
-  return (data.items ?? []).map((item: GoogleBookItem): SearchResult => {
-    const info = item.volumeInfo
-    return {
-      id: item.id,
-      title: info.title ?? 'Unknown Title',
-      author: (info.authors ?? ['Unknown Author']).join(', '),
-      cover_url: (info.imageLinks?.extraLarge ?? info.imageLinks?.large ?? info.imageLinks?.thumbnail)?.replace('http:', 'https:') ?? null,
-      synopsis: info.description ?? null,
-      pages: info.pageCount ?? null,
-      genres: info.categories ?? [],
-      published_year: info.publishedDate ? parseInt(info.publishedDate) : null,
-      isbn: info.industryIdentifiers?.find((i: { type: string }) => i.type === 'ISBN_13')?.identifier ?? null,
-      source: 'google',
-      google_books_id: item.id,
-    }
-  })
+  return {
+    totalItems,
+    results: (data.items ?? []).map((item: GoogleBookItem): SearchResult => {
+      const info = item.volumeInfo
+      return {
+        id: item.id,
+        title: info.title ?? 'Unknown Title',
+        author: (info.authors ?? ['Unknown Author']).join(', '),
+        cover_url: (info.imageLinks?.extraLarge ?? info.imageLinks?.large ?? info.imageLinks?.thumbnail)?.replace('http:', 'https:') ?? null,
+        synopsis: info.description ?? null,
+        pages: info.pageCount ?? null,
+        genres: info.categories ?? [],
+        published_year: info.publishedDate ? parseInt(info.publishedDate) : null,
+        isbn: info.industryIdentifiers?.find((i: { type: string }) => i.type === 'ISBN_13')?.identifier ?? null,
+        source: 'google',
+        google_books_id: item.id,
+      }
+    }),
+  }
 }
 
 // field: 'q' (general) or 'title' (title-specific for obscure books)
-async function searchOpenLibrary(query: string, field: 'q' | 'title' = 'q'): Promise<SearchResult[]> {
-  const url = `https://openlibrary.org/search.json?${field}=${encodeURIComponent(query)}&limit=20&fields=key,title,author_name,cover_i,number_of_pages_median,subject,first_publish_year,isbn`
-  const res = await fetch(url)
+async function searchOpenLibrary(query: string, field: 'q' | 'title' = 'q', genre?: string, author?: string): Promise<{ results: SearchResult[]; totalItems: number }> {
+  let urlStr = `https://openlibrary.org/search.json?${field}=${encodeURIComponent(query)}&limit=20&fields=key,title,author_name,cover_i,number_of_pages_median,subject,first_publish_year,isbn`
+  if (author) urlStr += `&author=${encodeURIComponent(author)}`
+  if (genre && genre !== 'All') urlStr += `&subject=${encodeURIComponent(genre)}`
+  const res = await fetch(urlStr)
   if (!res.ok) throw new Error(`Open Library ${res.status}`)
   const data = await res.json()
 
-  return (data.docs ?? []).slice(0, 20).map((doc: OpenLibraryDoc): SearchResult => ({
-    id: doc.key,
-    title: doc.title ?? 'Unknown Title',
-    author: (doc.author_name ?? ['Unknown Author']).slice(0, 2).join(', '),
-    cover_url: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : null,
-    synopsis: null,
-    pages: doc.number_of_pages_median ?? null,
-    genres: doc.subject?.slice(0, 5) ?? [],
-    published_year: doc.first_publish_year ?? null,
-    isbn: doc.isbn?.[0] ?? null,
-    source: 'openlibrary',
-    open_library_id: doc.key,
-  }))
+  return {
+    totalItems: data.numFound ?? 0,
+    results: (data.docs ?? []).slice(0, 20).map((doc: OpenLibraryDoc): SearchResult => ({
+      id: doc.key,
+      title: doc.title ?? 'Unknown Title',
+      author: (doc.author_name ?? ['Unknown Author']).slice(0, 2).join(', '),
+      cover_url: doc.cover_i ? `https://covers.openlibrary.org/b/id/${doc.cover_i}-L.jpg` : null,
+      synopsis: null,
+      pages: doc.number_of_pages_median ?? null,
+      genres: doc.subject?.slice(0, 5) ?? [],
+      published_year: doc.first_publish_year ?? null,
+      isbn: doc.isbn?.[0] ?? null,
+      source: 'openlibrary',
+      open_library_id: doc.key,
+    })),
+  }
 }
 
 interface GoogleBookItem {
