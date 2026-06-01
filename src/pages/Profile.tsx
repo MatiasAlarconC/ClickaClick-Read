@@ -74,15 +74,31 @@ export default function ProfileScreen() {
     if (!user) return
     const startOfYear = new Date(new Date().getFullYear(), 0, 1).toISOString()
     Promise.all([
-      supabase.from('user_books').select('status, book:books(genres)').eq('user_id', user.id),
-      supabase.from('reading_sessions').select('pages_read, duration_seconds, started_at, is_manual').eq('user_id', user.id).gte('started_at', startOfYear),
+      supabase.from('user_books').select('status, book_id, finished_at, custom_pages, book:books(genres, pages_default)').eq('user_id', user.id),
+      supabase.from('reading_sessions').select('pages_read, duration_seconds, started_at, is_manual, book_id').eq('user_id', user.id).gte('started_at', startOfYear),
       supabase.from('reading_sessions').select('pages_read, duration_seconds, started_at, is_manual').eq('user_id', user.id),
       supabase.from('book_notes').select('id').eq('user_id', user.id),
     ]).then(([booksRes, sessYearRes, allSessRes, notesRes]) => {
       const booksFinished  = (booksRes.data ?? []).filter((b: any) => b.status === 'finished').length
       const sessions       = sessYearRes.data ?? []
       const allSessions    = (allSessRes.data ?? []).filter((s: any) => !s.is_manual)
-      const pagesRead      = sessions.reduce((s: number, r: any) => s + (r.pages_read ?? 0), 0)
+
+      // Compute pages: session sum + finished-book gap fill (same logic as Stats.tsx)
+      const sessionPagesByBook: Record<string, number> = {}
+      for (const s of sessions) {
+        if (s.book_id) sessionPagesByBook[s.book_id] = (sessionPagesByBook[s.book_id] ?? 0) + (s.pages_read ?? 0)
+      }
+      let pagesRead = sessions.reduce((s: number, r: any) => s + (r.pages_read ?? 0), 0)
+      const yearStart = new Date(new Date().getFullYear(), 0, 1)
+      for (const b of (booksRes.data ?? []) as any[]) {
+        if (b.status !== 'finished') continue
+        const finishedAt = b.finished_at ? new Date(b.finished_at) : null
+        if (finishedAt && finishedAt < yearStart) continue
+        const bookPages = b.custom_pages ?? b.book?.pages_default ?? 0
+        if (!bookPages) continue
+        const tracked = sessionPagesByBook[b.book_id] ?? 0
+        if (bookPages > tracked) pagesRead += (bookPages - tracked)
+      }
       const totalSeconds   = sessions.reduce((s: number, r: any) => s + (r.duration_seconds ?? 0), 0)
       const hours          = Math.round(totalSeconds / 3600)
       const sessionDates   = new Set(sessions.map((s: any) => new Date(s.started_at).toDateString()))

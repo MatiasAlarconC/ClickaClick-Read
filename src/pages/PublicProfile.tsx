@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { BookCover } from '../components/UI'
-import { useTheme } from '../context/AppContext'
+import { useTheme, useAuth } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { CHARACTERS } from '../components/AvatarCharacter'
 import Character3D from '../components/Character3D'
@@ -26,21 +26,23 @@ interface UserBookEntry {
     title: string
     author: string
     cover_url: string | null
-    pages: number | null
+    pages_default: number | null
     genres: string[] | null
   } | null
 }
 
 export default function PublicProfileScreen() {
   const { userId } = useParams<{ userId: string }>()
-  const { theme } = useTheme()
-  const navigate = useNavigate()
+  const { theme }  = useTheme()
+  const { user }   = useAuth()
+  const navigate   = useNavigate()
 
-  const [profile, setProfile]   = useState<PublicProfile | null>(null)
-  const [books, setBooks]       = useState<UserBookEntry[]>([])
-  const [stats, setStats]       = useState<AchievementStats | null>(null)
-  const [loading, setLoading]   = useState(true)
-  const [notFound, setNotFound] = useState(false)
+  const [profile, setProfile]       = useState<PublicProfile | null>(null)
+  const [books, setBooks]           = useState<UserBookEntry[]>([])
+  const [stats, setStats]           = useState<AchievementStats | null>(null)
+  const [loading, setLoading]       = useState(true)
+  const [notFound, setNotFound]     = useState(false)
+  const [challenged, setChallenged] = useState(false)
 
   useEffect(() => {
     if (!userId) return
@@ -61,7 +63,7 @@ export default function PublicProfileScreen() {
       // 2 – Fetch books (reading + finished)
       const { data: ubs } = await supabase
         .from('user_books')
-        .select('id, status, current_page, rating, book:books(title, author, cover_url, pages, genres)')
+        .select('id, status, current_page, rating, book:books(title, author, cover_url, pages_default, genres)')
         .eq('user_id', userId)
         .in('status', ['reading', 'finished'])
 
@@ -74,7 +76,7 @@ export default function PublicProfileScreen() {
       let totalPages = 0
 
       for (const b of finished) {
-        if (b.book?.pages) totalPages += b.book.pages
+        if (b.book?.pages_default) totalPages += b.book.pages_default
         for (const g of b.book?.genres ?? []) {
           const key = g.toLowerCase()
           genreCounts[key] = (genreCounts[key] ?? 0) + 1
@@ -190,8 +192,13 @@ export default function PublicProfileScreen() {
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
                     <div style={{ fontFamily: 'Georgia, serif', fontSize: 15, color: theme.fg, lineHeight: 1.3 }}>{b.book?.title ?? 'Unknown'}</div>
                     <div style={{ fontSize: 12, color: theme.muted }}>{b.book?.author ?? ''}</div>
-                    {b.book?.pages && b.current_page ? (
-                      <div style={{ fontSize: 11, color: theme.muted }}>Page {b.current_page} / {b.book.pages} — {Math.round((b.current_page / b.book.pages) * 100)}%</div>
+                    {b.book?.pages_default && b.current_page ? (
+                      <>
+                        <div style={{ height: 3, borderRadius: 2, background: theme.border, overflow: 'hidden', marginTop: 4 }}>
+                          <div style={{ height: '100%', borderRadius: 2, background: primaryColor, width: `${Math.min(100, Math.round((b.current_page / b.book.pages_default) * 100))}%` }}/>
+                        </div>
+                        <div style={{ fontSize: 11, color: theme.muted }}>p. {b.current_page} / {b.book.pages_default} — {Math.min(100, Math.round((b.current_page / b.book.pages_default) * 100))}%</div>
+                      </>
                     ) : null}
                   </div>
                 </div>
@@ -230,6 +237,28 @@ export default function PublicProfileScreen() {
           <div style={{ textAlign: 'center', padding: '40px 0', color: theme.muted, fontSize: 14 }}>
             No books on the shelf yet.
           </div>
+        )}
+
+        {/* Interaction buttons */}
+        {user && user.id !== userId && (
+          <section style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
+            <button
+              onClick={async () => {
+                if (challenged) return
+                await supabase.from('notifications').insert({
+                  user_id: userId,
+                  type: 'challenge',
+                  title: 'Reading challenge!',
+                  body: `@${(user as any).user_metadata?.username ?? 'A friend'} challenged you to read more this week 📚`,
+                  data: { from_user_id: user.id },
+                })
+                setChallenged(true)
+              }}
+              style={{ padding: '11px 16px', background: challenged ? theme.bgSecondary : primaryColor, color: challenged ? theme.muted : '#000', borderRadius: 14, border: 'none', fontSize: 13, fontWeight: 600, cursor: challenged ? 'default' : 'pointer', transition: 'all .2s' }}
+            >
+              {challenged ? '✓ Challenge sent!' : '🏆 Challenge to read more'}
+            </button>
+          </section>
         )}
       </div>
     </div>
