@@ -267,9 +267,9 @@ export default function SessionScreen() {
 
     localStorage.removeItem('pendingSession')
 
-    // Note is non-critical — fire and forget
+    // Await the note insert so it actually fires before navigation
     if (note.trim()) {
-      supabase.from('book_notes').insert({
+      await supabase.from('book_notes').insert({
         user_id: user.id,
         book_id: userBook.book_id,
         page_number: parseInt(resolvedEndPage) || null,

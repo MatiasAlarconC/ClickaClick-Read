@@ -32,8 +32,25 @@ export default function StatsScreen() {
 
   const stats = useMemo(() => {
     const booksFinished = userBooks.filter(b => b.status === 'finished').length
-    // Total pages includes manual sessions (page updates outside timed sessions)
-    const pagesRead = sessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
+    // Sum all session pages (timed + manual)
+    const sessionPagesByBook: Record<string, number> = {}
+    for (const s of sessions) {
+      if (s.book_id) sessionPagesByBook[s.book_id] = (sessionPagesByBook[s.book_id] ?? 0) + (s.pages_read ?? 0)
+    }
+    let pagesRead = sessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
+    // For finished books where tracked sessions under-count (pre-session manual reads not in DB),
+    // add the gap so the total reflects the true pages read.
+    const thisYearStart = new Date(new Date().getFullYear(), 0, 1)
+    for (const b of userBooks) {
+      if (b.status !== 'finished') continue
+      const finishedAt = b.finished_at ? new Date(b.finished_at) : null
+      // Only count books finished this year (or no finish date recorded)
+      if (finishedAt && finishedAt < thisYearStart) continue
+      const bookPages = b.custom_pages ?? (b.book as { pages_default?: number | null } | undefined)?.pages_default ?? 0
+      if (!bookPages) continue
+      const tracked = sessionPagesByBook[b.book_id] ?? 0
+      if (bookPages > tracked) pagesRead += (bookPages - tracked)
+    }
     // Timed sessions only (exclude is_manual and zero-duration entries)
     const timedSessions = sessions.filter(s => !s.is_manual && (s.duration_seconds ?? 0) > 0)
     const timedPages = timedSessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)

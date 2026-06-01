@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { BookCover, TabBar, ProgressBar, SectionLabel } from '../components/UI'
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
@@ -8,7 +8,13 @@ import type { UserBook, ReadingSession } from '../types'
 
 export function HomeScreen() {
   const { theme } = useTheme()
-  const { user, profile } = useAuth()
+  const { user, profile, notifications, markNotificationsRead } = useAuth()
+  const [showNotifications, setShowNotifications] = useState(false)
+
+  // Show notification panel automatically on first render if there are unread ones
+  useEffect(() => {
+    if (notifications.length > 0) setShowNotifications(true)
+  }, [notifications.length])
   const navigate = useNavigate()
 
   const [currentBooks, setCurrentBooks] = useState<UserBook[]>([])
@@ -73,6 +79,51 @@ export function HomeScreen() {
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
+
+      {/* ── Notification overlay ───────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showNotifications && notifications.length > 0 && (
+          <motion.div
+            key="notif-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+            onClick={() => { setShowNotifications(false); markNotificationsRead() }}>
+            <motion.div
+              key="notif-sheet"
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 480, background: theme.bg, borderRadius: '22px 22px 0 0', padding: '20px 22px', paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))', maxHeight: '70vh', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg }}>Notifications</div>
+                <button onClick={() => { setShowNotifications(false); markNotificationsRead() }}
+                  style={{ background: 'none', border: 'none', fontSize: 13, color: theme.accent, fontWeight: 600, cursor: 'pointer', padding: '4px 8px' }}>Mark all read</button>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {notifications.map(n => (
+                  <div key={n.id} style={{ padding: '13px 14px', background: theme.bgSecondary, borderRadius: 14, border: `1px solid ${theme.border}`, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: n.type === 'achievement' ? '#F59E0B20' : `${theme.accent}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {n.type === 'achievement'
+                        ? <span style={{ fontSize: 18 }}>&#127942;</span>
+                        : <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke={theme.accent} strokeWidth="2" strokeLinecap="round"/><circle cx="9" cy="7" r="4" stroke={theme.accent} strokeWidth="2"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke={theme.accent} strokeWidth="2" strokeLinecap="round"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke={theme.accent} strokeWidth="2" strokeLinecap="round"/></svg>
+                      }
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: theme.fg, marginBottom: 2 }}>{n.title}</div>
+                      <div style={{ fontSize: 12, color: theme.muted, lineHeight: 1.4 }}>{n.body}</div>
+                      <div style={{ fontSize: 10, color: theme.muted, marginTop: 4 }}>{new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div style={{ flex: 1, padding: '64px 22px 0' }}>
 
         {/* Greeting */}

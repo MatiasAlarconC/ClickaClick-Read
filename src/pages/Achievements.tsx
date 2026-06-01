@@ -75,6 +75,36 @@ export default function AchievementsScreen() {
         genreCounts: countGenres(userBooks),
         sessionCount, notesCount,
       })
+
+      // Detect newly unlocked achievements and create notifications
+      if (user) {
+        const currentUnlocked = ACHIEVEMENTS.filter(a => a.check({
+          booksFinished, totalBooks, totalPages,
+          totalHours, streak,
+          genreCounts: countGenres(userBooks),
+          sessionCount, notesCount,
+        })).map(a => a.id)
+
+        const seenKey = `seen_achievements_${user.id}`
+        const seen: string[] = JSON.parse(localStorage.getItem(seenKey) ?? '[]')
+        const newlyUnlocked = currentUnlocked.filter(id => !seen.includes(id))
+
+        if (newlyUnlocked.length > 0) {
+          localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
+          const achToNotify = ACHIEVEMENTS.filter(a => newlyUnlocked.includes(a.id))
+          const notifRows = achToNotify.map(a => ({
+            user_id: user.id,
+            type: 'achievement',
+            title: 'Achievement unlocked',
+            body: `You unlocked "${a.name}".`,
+            data: { achievement_id: a.id },
+          }))
+          supabase.from('notifications').insert(notifRows).then(r => r)
+        } else if (seen.length === 0 && currentUnlocked.length > 0) {
+          // First time loading — seed localStorage without creating notifications
+          localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
+        }
+      }
     })
   }, [user])
 

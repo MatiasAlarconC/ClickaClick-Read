@@ -15,6 +15,18 @@ interface AuthContextValue {
   signOut: () => Promise<void>
   updateProfile: (updates: Partial<Profile>) => Promise<void>
   isAdmin: boolean
+  notifications: AppNotification[]
+  markNotificationsRead: () => Promise<void>
+}
+
+export interface AppNotification {
+  id: string
+  type: string
+  title: string
+  body: string
+  read: boolean
+  created_at: string
+  data?: Record<string, unknown>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -25,6 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -54,6 +67,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setProfile(data as Profile)
       setIsAdmin((data as Profile & { is_admin?: boolean }).is_admin ?? false)
     }
+    // Fetch unread notifications on every login
+    const { data: notifs } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('read', false)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    setNotifications((notifs ?? []) as AppNotification[])
+  }
+
+  async function markNotificationsRead() {
+    if (!user) return
+    await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false)
+    setNotifications([])
   }
 
   async function signUp(email: string, password: string, username: string) {
@@ -92,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, profile, loading, signUp, signIn, signOut, updateProfile, isAdmin }}>
+    <AuthContext.Provider value={{ user, session, profile, loading, signUp, signIn, signOut, updateProfile, isAdmin, notifications, markNotificationsRead }}>
       {children}
     </AuthContext.Provider>
   )

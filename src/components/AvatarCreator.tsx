@@ -77,7 +77,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-end' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-end' }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
 
       <motion.div
@@ -200,7 +200,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
 
         {/* Sticky select button — always visible when character is unlocked */}
         {!selectedLocked && (
-          <div style={{ padding: '12px 16px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${theme.border}`, background: theme.bg }}>
+          <div style={{ padding: '12px 16px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${theme.border}`, background: theme.bg }}>
             <button onClick={() => onSave(selected, primary, secondary)}
               style={{ width: '100%', padding: 15, background: primary, color: '#FFF', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: `0 4px 20px ${primary}60`, transition: 'opacity 0.2s' }}>
               Select Character

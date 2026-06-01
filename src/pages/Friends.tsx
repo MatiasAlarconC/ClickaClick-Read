@@ -98,12 +98,32 @@ export default function FriendsScreen() {
     if (!user) return
     setActionId(addresseeId)
     await supabase.from('friendships').insert({ requester_id: user.id, addressee_id: addresseeId, status: 'pending' })
+    // Notify the addressee that they received a friend request
+    const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
+    await supabase.from('notifications').insert({
+      user_id: addresseeId,
+      type: 'friend_request',
+      title: 'New friend request',
+      body: `${myProfile?.username ?? 'Someone'} sent you a friend request.`,
+      data: { from_user_id: user.id },
+    })
     await reload(); setActionId(null)
   }
 
-  const accept = async (fid: string) => {
+  const accept = async (fid: string, requesterId?: string) => {
     setActionId(fid)
     await supabase.from('friendships').update({ status: 'accepted' }).eq('id', fid)
+    // Notify the original requester that their request was accepted
+    if (requesterId && user) {
+      const { data: myProfile } = await supabase.from('profiles').select('username').eq('id', user.id).single()
+      await supabase.from('notifications').insert({
+        user_id: requesterId,
+        type: 'friend_accepted',
+        title: 'Friend request accepted',
+        body: `${myProfile?.username ?? 'Someone'} accepted your friend request.`,
+        data: { from_user_id: user.id },
+      })
+    }
     await reload(); setActionId(null)
   }
 
@@ -173,7 +193,7 @@ export default function FriendsScreen() {
                     </div>
                     {st === 'none' && <button disabled={busy} onClick={() => sendReq(p.id)} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: accent, color: accentFg, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>{busy ? '…' : 'Add'}</button>}
                     {st === 'outgoing' && <span style={{ fontSize: 12, color: muted }}>Sent ✓</span>}
-                    {st === 'incoming' && <button disabled={busy} onClick={() => { const f = incoming.find(i => i.profile.id === p.id); if (f) accept(f.id) }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: accent, color: accentFg, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{busy ? '…' : 'Accept'}</button>}
+                    {st === 'incoming' && <button disabled={busy} onClick={() => { const f = incoming.find(i => i.profile.id === p.id); if (f) accept(f.id, f.requester_id) }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: accent, color: accentFg, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{busy ? '…' : 'Accept'}</button>}
                     {st === 'friends' && <span style={{ fontSize: 12, color: muted }}>Friends ✓</span>}
                   </div>
                 )
@@ -197,7 +217,7 @@ export default function FriendsScreen() {
                     <div style={{ fontSize: 11, color: muted }}>Wants to be friends</div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    <button disabled={actionId === f.id} onClick={() => accept(f.id)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: accent, color: accentFg, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{actionId === f.id ? '…' : 'Accept'}</button>
+                    <button disabled={actionId === f.id} onClick={() => accept(f.id, f.requester_id)} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', background: accent, color: accentFg, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{actionId === f.id ? '…' : 'Accept'}</button>
                     <button disabled={actionId === f.id} onClick={() => remove(f.id)} style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${border}`, background: 'none', color: muted, fontSize: 12, cursor: 'pointer' }}>Decline</button>
                   </div>
                 </div>
