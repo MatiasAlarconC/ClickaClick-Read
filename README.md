@@ -1,73 +1,51 @@
-# React + TypeScript + Vite
+# ClickaClick — Reading Tracker App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+ClickaClick es una app web mobile-first para trackear tu vida lectora. La idea es simple: que leer sea tan satisfactorio de registrar como cualquier otro hábito. Podés cronometrar sesiones, ver tus stats, competir con amigos y recibir un recap anual épico.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## ¿Qué es?
 
-## React Compiler
+Una app de lectura personal con foco en la experiencia. No es solo una lista de libros — tiene sesiones cronometradas con música ambient, estadísticas detalladas, logros desbloqueables, recomendaciones por IA, y un "Year in Review" estilo Spotify Wrapped al final del año.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Está pensada para usarse desde el celular pero también funciona en desktop con sidebar.
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Funcionalidades principales
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+**📚 Biblioteca personal**
+Buscás libros con la API de Google Books y los agregás a tu estante con estado: *Quiero leer*, *Leyendo* o *Terminado*. Podés llevar la página actual y dar una puntuación en estrellas.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+**⏱ Sesiones de lectura**
+Timer en vivo para cronometrar cuánto leés. Al terminar se guardan las páginas avanzadas y los minutos. Tiene música ambient de fondo (Jamendo) que podés activar/pausar.
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+**📊 Estadísticas**
+Gráficos de actividad diaria, semanal y mensual. Racha de días consecutivos, progreso hacia tus metas (libros por año, minutos por día, páginas por día) y un heatmap de lectura.
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+**🤖 Recomendaciones por IA**
+Gemini analiza tu historial y géneros favoritos para sugerirte libros que probablemente te gusten.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+**🏅 Logros**
+Medallas desbloqueables por hitos: primer libro, rachas largas, cantidad de páginas, géneros explorados. Las medallas tienen render 3D.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+**🎬 Year in Review**
+Un recap anual cinematográfico con diapositivas animadas: estrellas en canvas, confetti, texto con gradiente, grain de película, música ambient y opción de guardar como imagen. Estilo Spotify Wrapped.
+
+**👥 Amigos**
+Podés seguir a otros usuarios, ver sus estantes públicos y sus stats, y ver la actividad reciente de tus amigos.
+
+**👤 Perfil**
+Avatar customizable (constructor 2D + preview 3D), nombre de usuario y título ganado según tus logros.
+
+---
+
+## Stack
+
+- **Frontend**: React 19 + TypeScript + Vite
+- **Backend / DB / Auth**: Supabase (PostgreSQL con Row Level Security)
+- **Deploy**: Vercel (auto-deploy desde `main`)
+- **Animaciones**: Framer Motion
+- **3D**: Three.js (`@react-three/fiber`)
+- **Charts**: Recharts
+- **APIs externas**: Google Books, Google Gemini, Jamendo (música)
