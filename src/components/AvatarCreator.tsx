@@ -99,7 +99,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
         </div>
 
         {/* Scrollable content */}
-        <div style={{ overflowY: 'auto', flex: 1, paddingBottom: 'env(safe-area-inset-bottom, 16px)' }}>
+        <div style={{ overflowY: 'auto', flex: 1, paddingBottom: 0 }}>
 
           {/* Live preview */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0 8px', gap: 6 }}>
@@ -179,9 +179,9 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
             </div>
           )}
 
-          {/* Save */}
-          <div style={{ padding: '4px 16px 24px' }}>
-            {selectedLocked ? (
+          {/* Save — rendered inside scroll for locked state; see sticky button below for unlocked */}
+          {selectedLocked && (
+            <div style={{ padding: '4px 16px 24px' }}>
               <div style={{ padding: '15px', background: theme.bgSecondary, borderRadius: 14, textAlign: 'center' }}>
                 <div style={{ fontSize: 13, color: theme.muted, marginBottom: unlockHint ? 6 : 0 }}>
                   Unlock <strong style={{ color: theme.fg }}>{def.name}</strong> to use this character
@@ -192,14 +192,21 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
                   </div>
                 )}
               </div>
-            ) : (
-              <button onClick={() => onSave(selected, primary, secondary)}
-                style={{ width: '100%', padding: 15, background: primary, color: '#FFF', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: `0 4px 20px ${primary}60`, transition: 'opacity 0.2s' }}>
-                Save Character
-              </button>
-            )}
-          </div>
+            </div>
+          )}
+          {/* Spacer so content isn't hidden behind sticky button */}
+          {!selectedLocked && <div style={{ height: 88 }} />}
         </div>
+
+        {/* Sticky select button — always visible when character is unlocked */}
+        {!selectedLocked && (
+          <div style={{ padding: '12px 16px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${theme.border}`, background: theme.bg }}>
+            <button onClick={() => onSave(selected, primary, secondary)}
+              style={{ width: '100%', padding: 15, background: primary, color: '#FFF', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: `0 4px 20px ${primary}60`, transition: 'opacity 0.2s' }}>
+              Select Character
+            </button>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   )

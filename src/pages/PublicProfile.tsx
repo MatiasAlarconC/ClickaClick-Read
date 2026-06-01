@@ -81,19 +81,22 @@ export default function PublicProfileScreen() {
         }
       }
 
-      // Also fetch session count for stats
+      // Also fetch sessions to compute real pages read and hours
       const { data: sessions } = await supabase
         .from('reading_sessions')
-        .select('duration_seconds')
+        .select('duration_seconds, pages_read, started_at')
         .eq('user_id', userId)
 
-      const totalHours = (sessions ?? []).reduce((acc, s) => acc + (s.duration_seconds ?? 0), 0) / 3600
-      const sessionCount = (sessions ?? []).length
+      const timedSessions = (sessions ?? []).filter((s: { duration_seconds?: number | null }) => (s.duration_seconds ?? 0) > 0)
+      const totalHours = timedSessions.reduce((acc: number, s: { duration_seconds?: number | null }) => acc + (s.duration_seconds ?? 0), 0) / 3600
+      const sessionCount = timedSessions.length
+      // Real pages read from all sessions (including manual page updates)
+      const realPagesRead = (sessions ?? []).reduce((acc: number, s: { pages_read?: number | null }) => acc + (s.pages_read ?? 0), 0)
 
       setStats({
         booksFinished: finished.length,
         totalBooks: bookList.length,
-        totalPages,
+        totalPages: realPagesRead,
         totalHours,
         streak: 0,   // not computed — not public
         genreCounts,
@@ -136,7 +139,7 @@ export default function PublicProfileScreen() {
 
   const statChips = [
     { label: 'Read',    value: String(stats?.booksFinished ?? 0) },
-    { label: 'Pages',   value: stats?.totalPages ? (stats.totalPages >= 1000 ? `${(stats.totalPages/1000).toFixed(1)}k` : String(stats.totalPages)) : '0' },
+    { label: 'Pages',   value: stats?.totalPages ? (stats.totalPages >= 10000 ? `${(stats.totalPages/1000).toFixed(1)}k` : String(stats.totalPages)) : '0' },
     { label: 'Hours',   value: stats?.totalHours ? `${Math.round(stats.totalHours)}h` : '0h' },
     { label: 'Chars',   value: String(unlockedChars.size) },
   ]

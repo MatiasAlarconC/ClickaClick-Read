@@ -32,30 +32,34 @@ export default function StatsScreen() {
 
   const stats = useMemo(() => {
     const booksFinished = userBooks.filter(b => b.status === 'finished').length
+    // Total pages includes manual sessions (page updates outside timed sessions)
     const pagesRead = sessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
-    const totalSeconds = sessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0)
-    const hours = Math.round(totalSeconds / 3600)
-    const totalMins = Math.round(totalSeconds / 60)
-    const days = new Set(sessions.map(s => new Date(s.started_at).toDateString())).size
-    // Reading pace: pages per hour — only from timed sessions (duration > 0)
-    const timedSessions = sessions.filter(s => (s.duration_seconds ?? 0) > 0)
+    // Timed sessions only (exclude is_manual and zero-duration entries)
+    const timedSessions = sessions.filter(s => !s.is_manual && (s.duration_seconds ?? 0) > 0)
     const timedPages = timedSessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
     const timedHours = timedSessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / 3600
+    const totalTimedSecs = timedSessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0)
+    const timedDays = new Set(timedSessions.map(s => new Date(s.started_at).toDateString())).size
+    const hours = Math.round(totalTimedSecs / 3600)
+    // Reading pace: pages per hour from timed sessions
     const pacePerHour = timedHours > 0 ? Math.round(timedPages / timedHours) : 0
-    const avgDailyMins = days > 0 ? Math.round(totalMins / days) : 0
-    // Today's actual progress (for daily goals)
+    // True daily averages: over all days that had timed sessions
+    const dailyAvgPages = timedDays > 0 ? Math.round(timedPages / timedDays) : 0
+    const avgDailyMins = timedDays > 0 ? Math.round(totalTimedSecs / 60 / timedDays) : 0
+    // Today's progress for goal tracking (timed sessions only)
     const todayStr = new Date().toDateString()
-    const todaySessions = sessions.filter(s => new Date(s.started_at).toDateString() === todayStr)
-    const todayPages = todaySessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
-    const todayMins = Math.round(todaySessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / 60)
-    return { booksFinished, pagesRead, hours, dailyAvgPages: todayPages, pacePerHour, avgDailyMins: todayMins }
+    const todayTimedSessions = timedSessions.filter(s => new Date(s.started_at).toDateString() === todayStr)
+    const todayPages = todayTimedSessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
+    const todayMins = Math.round(todayTimedSessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / 60)
+    return { booksFinished, pagesRead, hours, dailyAvgPages, pacePerHour, avgDailyMins, todayPages, todayMins }
   }, [sessions, userBooks])
 
-  // Heatmap: 52 weeks × 7 days
+  // Heatmap: 52 weeks × 7 days (timed sessions only for heatmap activity)
   const heatmap = useMemo(() => {
-    const sessionDates = new Set(sessions.map(s => new Date(s.started_at).toDateString()))
+    const timedOnly = sessions.filter(s => !s.is_manual && (s.duration_seconds ?? 0) > 0)
+    const sessionDates = new Set(timedOnly.map(s => new Date(s.started_at).toDateString()))
     const sessionPagesByDate: Record<string, number> = {}
-    for (const s of sessions) {
+    for (const s of timedOnly) {
       const d = new Date(s.started_at).toDateString()
       sessionPagesByDate[d] = (sessionPagesByDate[d] ?? 0) + (s.pages_read ?? 0)
     }
@@ -138,6 +142,10 @@ export default function StatsScreen() {
   }, [sessions])
 
   const CELL = 5.2; const GAP = 1.5
+  const heatmapRef = React.useRef<HTMLDivElement>(null)
+  React.useEffect(() => {
+    if (heatmapRef.current) heatmapRef.current.scrollLeft = heatmapRef.current.scrollWidth
+  }, [heatmap])
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
@@ -188,7 +196,7 @@ export default function StatsScreen() {
               <span style={{ fontSize: 9, color: theme.muted }}>more</span>
             </div>
           </div>
-          <div style={{ overflowX: 'auto' }}>
+          <div ref={heatmapRef} style={{ overflowX: 'auto' }}>
             <div style={{ display: 'flex', gap: GAP, width: 52 * (CELL + GAP) }}>
               {[...Array(52)].map((_, week) => (
                 <div key={week} style={{ display: 'flex', flexDirection: 'column', gap: GAP }}>
@@ -211,10 +219,13 @@ export default function StatsScreen() {
         {/* Monthly pages chart */}
         <div style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 16px 14px', marginBottom: 14 }}>
           <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: theme.muted, marginBottom: 14 }}>Pages per Month</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 72 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: 86 }}>
             {monthlyPages.map((pages, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <div title={pages > 0 ? `${pages} pages` : '—'} style={{ width: '100%', height: pages > 0 ? `${(pages / maxPages) * 58}px` : 3, background: pages > 0 ? theme.accent : theme.border, borderRadius: '3px 3px 0 0', opacity: i > new Date().getMonth() ? 0.25 : 1 }} />
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                {pages > 0 && (
+                  <span style={{ fontSize: 7, color: theme.muted, textAlign: 'center', lineHeight: 1, marginBottom: 1 }}>{pages >= 1000 ? `${(pages/1000).toFixed(1)}k` : pages}</span>
+                )}
+                <div title={pages > 0 ? `${pages} pages` : '—'} style={{ width: '100%', height: pages > 0 ? `${Math.max(4, (pages / maxPages) * 58)}px` : 3, background: pages > 0 ? theme.accent : theme.border, borderRadius: '3px 3px 0 0', opacity: i > new Date().getMonth() ? 0.25 : 1 }} />
                 <span style={{ fontSize: 8.5, color: theme.muted }}>{months[i]}</span>
               </div>
             ))}
@@ -246,8 +257,8 @@ export default function StatsScreen() {
           const goalStreak = (profile as any)?.reading_goal_streak_days
           const goals = [
             goalBooks  ? { label: 'Books this year', current: stats.booksFinished, target: goalBooks,  unit: 'books' }      : null,
-            goalPages  ? { label: 'Pages today',     current: stats.dailyAvgPages, target: goalPages,  unit: 'pages' }     : null,
-            goalMins   ? { label: 'Minutes today',   current: stats.avgDailyMins,  target: goalMins,   unit: 'min' }    : null,
+            goalPages  ? { label: 'Pages today',     current: stats.todayPages,    target: goalPages,  unit: 'pages' }     : null,
+            goalMins   ? { label: 'Minutes today',   current: stats.todayMins,     target: goalMins,   unit: 'min' }    : null,
             goalStreak ? { label: 'Reading streak',  current: currentStreak,       target: goalStreak, unit: 'days' }       : null,
           ].filter(Boolean) as { label: string; current: number; target: number; unit: string }[]
           if (goals.length === 0) return null
