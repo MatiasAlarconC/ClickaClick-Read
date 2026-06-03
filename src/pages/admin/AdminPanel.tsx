@@ -30,6 +30,14 @@ interface AchievementForm {
   tier: string
   rewardType: 'badge' | 'title' | 'character'
   rewardValue: string
+  // Inline new-character fields (only used when rewardType === 'character' and newChar === true)
+  newChar: boolean
+  newCharId: string
+  newCharName: string
+  newCharDescription: string
+  newCharPrimary: string
+  newCharSecondary: string
+  newCharGlb: File | null
   conditionType: 'stat' | 'genre' | 'genreDiversity' | 'genreDepth'
   statField: string
   statValue: string
@@ -43,6 +51,8 @@ interface AchievementForm {
 const EMPTY_ACHIEVEMENT_FORM: AchievementForm = {
   id: '', name: '', description: '', tier: 'bronze',
   rewardType: 'badge', rewardValue: '',
+  newChar: true, newCharId: '', newCharName: '', newCharDescription: '',
+  newCharPrimary: '#888888', newCharSecondary: '#444444', newCharGlb: null,
   conditionType: 'stat', statField: 'booksFinished', statValue: '1',
   genreList: '', genreValue: '5',
   diversityValue: '3',
@@ -186,17 +196,54 @@ export default function AdminPanel() {
     if (!achForm.id || !achForm.name || !achForm.description) {
       setAchError('ID, name and description are required.'); return
     }
-    if (achForm.rewardType !== 'badge' && !achForm.rewardValue) {
-      setAchError('Reward value is required for title/character rewards.'); return
+    if (achForm.rewardType === 'title' && !achForm.rewardValue) {
+      setAchError('Title text is required.'); return
+    }
+    if (achForm.rewardType === 'character') {
+      if (achForm.newChar) {
+        if (!achForm.newCharId || !achForm.newCharName || !achForm.newCharDescription) {
+          setAchError('Character ID, name and description are required.'); return
+        }
+        if (!achForm.newCharGlb) {
+          setAchError('A GLB file is required for the new character.'); return
+        }
+      } else if (!achForm.rewardValue) {
+        setAchError('Character ID is required.'); return
+      }
     }
     setAchSaving(true)
+
+    let characterId = achForm.rewardValue
+
+    // If creating a new character inline, upload GLB and insert record first
+    if (achForm.rewardType === 'character' && achForm.newChar) {
+      const filePath = `${achForm.newCharId}.glb`
+      const { error: uploadErr } = await supabase.storage
+        .from('character-models')
+        .upload(filePath, achForm.newCharGlb!, { upsert: true, contentType: 'model/gltf-binary' })
+      if (uploadErr) { setAchError(`GLB upload failed: ${uploadErr.message}`); setAchSaving(false); return }
+
+      const { data: urlData } = supabase.storage.from('character-models').getPublicUrl(filePath)
+      const { error: charErr } = await supabase.from('characters_config').upsert({
+        id: achForm.newCharId,
+        name: achForm.newCharName,
+        description: achForm.newCharDescription,
+        default_primary: achForm.newCharPrimary,
+        default_secondary: achForm.newCharSecondary,
+        glb_url: urlData.publicUrl,
+        enabled: true,
+      }, { onConflict: 'id' })
+      if (charErr) { setAchError(`Character save failed: ${charErr.message}`); setAchSaving(false); return }
+      characterId = achForm.newCharId
+    }
+
     const { error } = await supabase.from('achievements_config').upsert({
       id: achForm.id,
       name: achForm.name,
       description: achForm.description,
       tier: achForm.tier,
       reward_type: achForm.rewardType,
-      reward_value: achForm.rewardType === 'badge' ? null : achForm.rewardValue,
+      reward_value: achForm.rewardType === 'badge' ? null : characterId,
       condition: buildCondition(achForm),
       sort_order: dbAchievements.length,
       enabled: true,
@@ -206,6 +253,7 @@ export default function AdminPanel() {
     setShowAchForm(false)
     setAchForm(EMPTY_ACHIEVEMENT_FORM)
     loadAchievements()
+    if (achForm.rewardType === 'character') loadCharacters()
   }
 
   const deleteAchievement = async (id: string) => {
@@ -455,7 +503,7 @@ export default function AdminPanel() {
               {/* Reward */}
               <div style={{ marginBottom: 16, padding: '14px', background: theme.bgElevated ?? bg, borderRadius: 10 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: fg, marginBottom: 12 }}>Reward</div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                   {(['badge', 'title', 'character'] as const).map(r => (
                     <button key={r} onClick={() => setAchForm(f => ({ ...f, rewardType: r }))}
                       style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: `1px solid ${achForm.rewardType === r ? theme.accent : border}`, background: achForm.rewardType === r ? theme.accent : 'none', color: achForm.rewardType === r ? theme.accentFg : fg, fontSize: 13, cursor: 'pointer' }}>
@@ -463,11 +511,89 @@ export default function AdminPanel() {
                     </button>
                   ))}
                 </div>
-                {achForm.rewardType !== 'badge' && (
+
+                {achForm.rewardType === 'title' && (
                   <div>
-                    <span style={label}>{achForm.rewardType === 'title' ? 'Title text' : 'Character ID (must match a character in DB or code)'}</span>
+                    <span style={label}>Title text</span>
                     <input value={achForm.rewardValue} onChange={e => setAchForm(f => ({ ...f, rewardValue: e.target.value }))}
-                      placeholder={achForm.rewardType === 'title' ? 'e.g. The Speed Reader' : 'e.g. dragon'} style={input} />
+                      placeholder="e.g. The Speed Reader" style={input} />
+                  </div>
+                )}
+
+                {achForm.rewardType === 'character' && (
+                  <div>
+                    {/* Toggle: new character vs existing */}
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                      <button onClick={() => setAchForm(f => ({ ...f, newChar: true }))}
+                        style={{ flex: 1, padding: '7px 0', borderRadius: 8, fontSize: 12, cursor: 'pointer', border: `1px solid ${achForm.newChar ? theme.accent : border}`, background: achForm.newChar ? theme.accent : 'none', color: achForm.newChar ? theme.accentFg : fg }}>
+                        New character
+                      </button>
+                      <button onClick={() => setAchForm(f => ({ ...f, newChar: false }))}
+                        style={{ flex: 1, padding: '7px 0', borderRadius: 8, fontSize: 12, cursor: 'pointer', border: `1px solid ${!achForm.newChar ? theme.accent : border}`, background: !achForm.newChar ? theme.accent : 'none', color: !achForm.newChar ? theme.accentFg : fg }}>
+                        Existing character
+                      </button>
+                    </div>
+
+                    {achForm.newChar ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                          <div>
+                            <span style={label}>Character ID (unique)</span>
+                            <input value={achForm.newCharId} onChange={e => setAchForm(f => ({ ...f, newCharId: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. dragon" style={input} />
+                          </div>
+                          <div>
+                            <span style={label}>Character name</span>
+                            <input value={achForm.newCharName} onChange={e => setAchForm(f => ({ ...f, newCharName: e.target.value }))} placeholder="e.g. Ember" style={input} />
+                          </div>
+                        </div>
+                        <div>
+                          <span style={label}>Character description</span>
+                          <input value={achForm.newCharDescription} onChange={e => setAchForm(f => ({ ...f, newCharDescription: e.target.value }))} placeholder="e.g. The Ancient Flame" style={input} />
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                          <div>
+                            <span style={label}>Primary color</span>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input type="color" value={achForm.newCharPrimary} onChange={e => setAchForm(f => ({ ...f, newCharPrimary: e.target.value }))}
+                                style={{ width: 36, height: 32, border: 'none', borderRadius: 6, cursor: 'pointer', padding: 2 }} />
+                              <input value={achForm.newCharPrimary} onChange={e => setAchForm(f => ({ ...f, newCharPrimary: e.target.value }))} style={{ ...input, flex: 1 }} />
+                            </div>
+                          </div>
+                          <div>
+                            <span style={label}>Secondary color</span>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              <input type="color" value={achForm.newCharSecondary} onChange={e => setAchForm(f => ({ ...f, newCharSecondary: e.target.value }))}
+                                style={{ width: 36, height: 32, border: 'none', borderRadius: 6, cursor: 'pointer', padding: 2 }} />
+                              <input value={achForm.newCharSecondary} onChange={e => setAchForm(f => ({ ...f, newCharSecondary: e.target.value }))} style={{ ...input, flex: 1 }} />
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <span style={label}>GLB Model File</span>
+                          <div style={{ border: `2px dashed ${border}`, borderRadius: 10, padding: '16px', textAlign: 'center', background: bg }}>
+                            {achForm.newCharGlb ? (
+                              <div>
+                                <div style={{ fontSize: 13, color: fg, fontWeight: 500 }}>{achForm.newCharGlb.name}</div>
+                                <div style={{ fontSize: 11, color: muted }}>{(achForm.newCharGlb.size / 1024 / 1024).toFixed(2)} MB</div>
+                                <button onClick={() => setAchForm(f => ({ ...f, newCharGlb: null }))} style={{ marginTop: 6, fontSize: 12, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+                              </div>
+                            ) : (
+                              <label style={{ cursor: 'pointer' }}>
+                                <div style={{ fontSize: 13, color: muted }}>Tap to select .glb file</div>
+                                <input type="file" accept=".glb" style={{ display: 'none' }}
+                                  onChange={e => { const f = e.target.files?.[0]; if (f) setAchForm(prev => ({ ...prev, newCharGlb: f })) }} />
+                              </label>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <span style={label}>Existing character ID</span>
+                        <input value={achForm.rewardValue} onChange={e => setAchForm(f => ({ ...f, rewardValue: e.target.value }))}
+                          placeholder="e.g. lion, mage, dragon…" style={input} />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
