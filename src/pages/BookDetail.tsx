@@ -4,7 +4,9 @@ import { motion } from 'framer-motion'
 import { Stars, ProgressBar, BackButton, Spinner, ErrorBoundary } from '../components/UI'
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
-import { summarizeNotes } from '../services/gemini'
+import { summarizeNotes, detectBookSeries } from '../services/gemini'
+import type { SeriesInfo } from '../services/gemini'
+import { searchBooks } from '../services/books'
 import type { SearchResult, UserBook, BookNote, ReadingSession } from '../types'
 
 /** Strip HTML tags from Google Books / Open Library descriptions */
@@ -44,6 +46,7 @@ export default function BookDetailScreen() {
   const [bookDbId, setBookDbId] = useState<string | null>(null)
   // synopsis may come from nav state OR the DB books record — prefer DB
   const [synopsis, setSynopsis] = useState<string | null>(book?.synopsis ?? null)
+  const [seriesInfo, setSeriesInfo] = useState<SeriesInfo | null | undefined>(undefined)
 
   useEffect(() => {
     if (!user || !book) return
@@ -91,6 +94,13 @@ export default function BookDetailScreen() {
           .order('started_at', { ascending: false })
           .then(({ data }) => { if (data) setSessions(data as ReadingSession[]) })
       })
+
+    // Detect series in background (non-blocking)
+    if (book && user) {
+      detectBookSeries({ title: book.title, author: book.author, userId: user.id })
+        .then(info => setSeriesInfo(info))
+        .catch(() => setSeriesInfo(null))
+    }
 
     // Fetch synopsis from Google Books or Open Library if not already available
     const googleId = book.google_books_id ?? book.id
@@ -316,6 +326,33 @@ export default function BookDetailScreen() {
                   ))}
                 </div>
               </>
+            )}
+
+            {seriesInfo && (
+              <div style={{ marginBottom: 28 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 12 }}>Part of a Series</div>
+                <div style={{ padding: 16, background: theme.bgSecondary, borderRadius: 14, border: `1px solid ${theme.border}` }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.fg, marginBottom: 3 }}>{seriesInfo.seriesName}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, marginBottom: seriesInfo.nextTitle && seriesInfo.position < seriesInfo.totalBooks ? 14 : 0 }}>
+                    Book {seriesInfo.position} of {seriesInfo.totalBooks}
+                  </div>
+                  {seriesInfo.nextTitle && seriesInfo.position < seriesInfo.totalBooks && (
+                    <button
+                      onClick={async () => {
+                        const { results } = await searchBooks(`${seriesInfo.nextTitle} ${seriesInfo.nextAuthor}`, {})
+                        if (results[0]) navigate('/detail', { state: { book: results[0] } })
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, cursor: 'pointer', textAlign: 'left' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10.5, color: theme.muted, marginBottom: 2, fontWeight: 600, letterSpacing: 0.5 }}>NEXT BOOK</div>
+                        <div style={{ fontSize: 13, color: theme.fg, fontWeight: 500 }}>{seriesInfo.nextTitle}</div>
+                        <div style={{ fontSize: 12, color: theme.muted }}>{seriesInfo.nextAuthor}</div>
+                      </div>
+                      <svg width="6" height="11" viewBox="0 0 6 11" fill="none"><path d="M1 1L5 5.5L1 10" stroke={theme.muted} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  )}
+                </div>
+              </div>
             )}
 
           </div>

@@ -198,4 +198,12 @@ interface OpenLibraryDoc {
   isbn?: string[]
 }
 
+export async function searchByISBN(isbn: string): Promise<SearchResult | null> {
+  try {
+    const { results } = await searchGoogleBooks(`isbn:${isbn}`, 0)
+    return results[0] ?? null
+  } catch {
+    return null
+  }
+}
 

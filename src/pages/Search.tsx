@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BookCover, TabBar, Stars, Spinner } from '../components/UI'
 import { useTheme } from '../context/AppContext'
-import { searchBooks } from '../services/books'
+import { searchBooks, searchByISBN } from '../services/books'
+import ISBNScanner from '../components/ISBNScanner'
 import type { SearchResult } from '../types'
 
 const GENRES = ['All', 'Fiction', 'Non-Fiction', 'Science', 'History', 'Philosophy', 'Biography', 'Fantasy', 'Mystery', 'Thriller', 'Romance', 'Horror']
@@ -54,6 +55,8 @@ export default function SearchScreen() {
   const [yearFrom, setYearFrom] = useState(saved?.yearFrom ?? '')
   const [yearTo, setYearTo] = useState(saved?.yearTo ?? '')
   const [language, setLanguage] = useState(saved?.language ?? '')
+
+  const [showScanner, setShowScanner] = useState(false)
 
   // Manual book entry state
   const [showManual, setShowManual] = useState(false)
@@ -118,6 +121,23 @@ export default function SearchScreen() {
     navigate('/detail', { state: { book } })
   }
 
+  const handleISBNDetected = async (isbn: string) => {
+    setShowScanner(false)
+    setLoading(true)
+    try {
+      const book = await searchByISBN(isbn)
+      if (book) {
+        setLoading(false)
+        navigate('/detail', { state: { book } })
+      } else {
+        setQuery(isbn)
+        await handleSearch(isbn)
+      }
+    } catch {
+      setLoading(false)
+    }
+  }
+
   const activeFilterCount = [authorFilter, yearFrom, yearTo, language].filter(Boolean).length + (genre !== 'All' ? 1 : 0)
 
   // Client-side: only year filter (genre and author now handled server-side via API qualifiers)
@@ -149,6 +169,13 @@ export default function SearchScreen() {
           {!loading && query && (
             <button onClick={() => { setQuery(''); setResults([]); setSearched(false); sessionStorage.removeItem(SS_KEY) }} style={{ background: 'none', border: 'none', color: theme.muted, fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
           )}
+          {/* Camera / ISBN scanner button */}
+          <button onClick={() => setShowScanner(true)} style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', display: 'flex', alignItems: 'center', color: theme.muted }}>
+            <svg width="17" height="15" viewBox="0 0 24 20" fill="none">
+              <path d="M9 2L7.17 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4H16.83L15 2H9Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <circle cx="12" cy="12" r="3.5" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+          </button>
           {/* Filter toggle */}
           <button onClick={() => setShowFilters(f => !f)} style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, position: 'relative' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -320,6 +347,9 @@ export default function SearchScreen() {
       </div>
 
       <TabBar activeTab="search" onTabChange={t => navigate(`/${t === 'home' ? 'home' : t}`)} theme={theme} />
+
+      {/* ISBN Scanner overlay */}
+      {showScanner && <ISBNScanner onDetected={handleISBNDetected} onClose={() => setShowScanner(false)} />}
 
       {/* Manual book entry modal */}
       {showManual && (

@@ -15,7 +15,28 @@ const PALETTES = [
   { bg: '#06000D', grad: 'radial-gradient(ellipse at 50% 50%,#2A0052 0%,#06000D 65%)', accent: '#E879F9', accent2: '#C084FC', text: '#fff' },
 ]
 
+const MONTHS_FULL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
 const GRAIN_STYLE = `@keyframes grain{0%,100%{transform:translate(0,0)}10%{transform:translate(-2%,-2%)}30%{transform:translate(2%,-1%)}50%{transform:translate(-1%,2%)}70%{transform:translate(1%,1%)}90%{transform:translate(-1%,-1%)}}.yr-grain::after{content:'';position:absolute;inset:-50%;width:200%;height:200%;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");opacity:0.04;animation:grain 0.4s steps(1) infinite;pointer-events:none;z-index:2;}`
+
+type Palette = typeof PALETTES[0]
+
+interface MonthData { month: string; sessions: number; pages: number }
+
+interface YearStats {
+  booksFinished: number
+  pagesRead: number
+  totalMinutes: number
+  topGenre: string
+  topGenreCount: number
+  longestStreak: number
+  topAuthor: string
+  topAuthorCount: number
+  uniqueAuthors: number
+  monthlyData: MonthData[]
+  bestMonth: string
+  bookCovers: string[]
+}
 
 function StarField({ accent }: { accent: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -114,11 +135,11 @@ function FloatingPills({ items, accent }: { items: string[]; accent: string }) {
   )
 }
 
-function IntroSlide({ year, p, username }: { year: number; p: typeof PALETTES[0]; username: string }) {
+function IntroSlide({ year, p, username }: { year: number; p: Palette; username: string }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 32px', position: 'relative' }}>
       <StarField accent={p.accent} />
-      <FloatingPills items={['📚 reading', '✨ growth', '🔥 streak', '🌍 worlds', '💡 insight']} accent={p.accent} />
+      <FloatingPills items={['reading', 'growth', 'streak', 'new worlds', 'insight', 'curiosity', 'discovery']} accent={p.accent} />
       <motion.div animate={{ scale: [1, 1.14, 1], opacity: [0.35, 0.65, 0.35] }} transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
         style={{ position: 'absolute', top: '26%', left: '50%', transform: 'translateX(-50%)', width: 280, height: 280, borderRadius: '50%', background: `radial-gradient(circle,${p.accent}55 0%,transparent 70%)`, pointerEvents: 'none', zIndex: 0 }} />
       <div style={{ position: 'relative', zIndex: 3 }}>
@@ -140,12 +161,12 @@ function IntroSlide({ year, p, username }: { year: number; p: typeof PALETTES[0]
         </motion.div>
       </div>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.8 }}
-        style={{ position: 'absolute', bottom: 38, zIndex: 3, color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Swipe →</motion.div>
+        style={{ position: 'absolute', bottom: 38, zIndex: 3, color: 'rgba(255,255,255,0.3)', fontSize: 12 }}>Swipe</motion.div>
     </div>
   )
 }
 
-function StatSlide({ label, value, suffix = '', subtext, p, icon }: { label: string; value: number; suffix?: string; subtext?: string; p: typeof PALETTES[0]; icon: React.ReactNode }) {
+function StatSlide({ label, value, suffix = '', subtext, p, icon }: { label: string; value: number; suffix?: string; subtext?: string; p: Palette; icon: React.ReactNode }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px', position: 'relative' }}>
       <StarField accent={p.accent} />
@@ -171,7 +192,125 @@ function StatSlide({ label, value, suffix = '', subtext, p, icon }: { label: str
   )
 }
 
-function GenreSlide({ topGenre, bookCount, p }: { topGenre: string; bookCount: number; p: typeof PALETTES[0] }) {
+function TopAuthorSlide({ topAuthor, topAuthorCount, p }: { topAuthor: string; topAuthorCount: number; p: Palette }) {
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px', position: 'relative' }}>
+      <StarField accent={p.accent} />
+      <motion.div animate={{ opacity: [0.2, 0.5, 0.2] }} transition={{ duration: 3, repeat: Infinity }}
+        style={{ position: 'absolute', top: '-8%', left: '-12%', width: 280, height: 280, borderRadius: '50%', background: `radial-gradient(circle,${p.accent}50 0%,transparent 65%)`, pointerEvents: 'none', zIndex: 0 }} />
+      <div style={{ position: 'relative', zIndex: 3 }}>
+        {/* Large quote-mark SVG decoration */}
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
+          <svg width="42" height="34" viewBox="0 0 42 34" fill="none" style={{ marginBottom: 16, opacity: 0.5 }}>
+            <path d="M0 34V20.8C0 14.4 1.6 9.6 4.8 6.4C8 3.2 12.8 1.2 19.2 0.4L20.4 4C16.8 4.8 14 6.4 12 9C10 11.4 9 14.6 9 18.6H18V34H0ZM24 34V20.8C24 14.4 25.6 9.6 28.8 6.4C32 3.2 36.8 1.2 43.2 0.4L44.4 4C40.8 4.8 38 6.4 36 9C34 11.4 33 14.6 33 18.6H42V34H24Z" fill={p.accent}/>
+          </svg>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.55 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 18 }}>You loved this author</div>
+        </motion.div>
+        <motion.div initial={{ opacity: 0, scale: 0.82 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, duration: 0.7, ease: [0.34, 1.56, 0.64, 1] }}>
+          <div style={{
+            fontFamily: 'Georgia, serif', fontSize: 46, lineHeight: 1.15, letterSpacing: -1.5, marginBottom: 20,
+            background: `linear-gradient(135deg,#fff 30%,${p.accent})`,
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
+            filter: `drop-shadow(0 0 28px ${p.accent}66)`,
+          }}>
+            {topAuthor}
+          </div>
+        </motion.div>
+        <motion.div initial={{ width: 0 }} animate={{ width: 60 }} transition={{ delay: 0.55, duration: 0.5 }}
+          style={{ height: 3, background: `linear-gradient(90deg,${p.accent},${p.accent2})`, borderRadius: 2, marginBottom: 22 }} />
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65, duration: 0.5 }}>
+          <div style={{ fontSize: 17, color: `${p.text}88`, fontFamily: 'Georgia, serif', lineHeight: 1.65 }}>
+            You read{' '}
+            <span style={{ background: `linear-gradient(90deg,${p.accent},${p.accent2})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontWeight: 700 }}>
+              {topAuthorCount} {topAuthorCount === 1 ? 'book' : 'books'}
+            </span>
+            {' '}by this author this year.
+          </div>
+        </motion.div>
+      </div>
+    </div>
+  )
+}
+
+function MonthlySlide({ monthlyData, bestMonth, p }: { monthlyData: MonthData[]; bestMonth: string; p: Palette }) {
+  const maxSessions = Math.max(...monthlyData.map(m => m.sessions), 1)
+  const CHART_HEIGHT = 90
+
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px', position: 'relative' }}>
+      <StarField accent={p.accent} />
+      <motion.div animate={{ opacity: [0.2, 0.45, 0.2] }} transition={{ duration: 3.5, repeat: Infinity }}
+        style={{ position: 'absolute', bottom: '10%', right: '-8%', width: 260, height: 260, borderRadius: '50%', background: `radial-gradient(circle,${p.accent}40 0%,transparent 65%)`, pointerEvents: 'none', zIndex: 0 }} />
+      <div style={{ position: 'relative', zIndex: 3 }}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 8 }}>Your Reading Rhythm</div>
+          <div style={{ fontSize: 16, color: `${p.text}88`, fontFamily: 'Georgia, serif', marginBottom: 30 }}>
+            Best month:{' '}
+            <span style={{ background: `linear-gradient(90deg,${p.accent},${p.accent2})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontWeight: 700 }}>{bestMonth}</span>
+          </div>
+        </motion.div>
+
+        {/* Bar chart */}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, height: CHART_HEIGHT + 24, paddingBottom: 24 }}>
+          {monthlyData.map((m, i) => {
+            const isBest = m.month === bestMonth
+            const barH = maxSessions > 0 ? Math.max(4, Math.round((m.sessions / maxSessions) * CHART_HEIGHT)) : 4
+            return (
+              <div key={m.month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                <motion.div
+                  initial={{ scaleY: 0 }} animate={{ scaleY: 1 }}
+                  transition={{ delay: 0.05 * i, duration: 0.35, ease: 'backOut' }}
+                  style={{
+                    width: '100%', height: barH, borderRadius: 4,
+                    background: isBest ? `linear-gradient(180deg,${p.accent},${p.accent2})` : `${p.text}22`,
+                    boxShadow: isBest ? `0 0 12px ${p.accent}` : 'none',
+                    transformOrigin: 'bottom',
+                  }}
+                />
+                <div style={{ fontSize: 8, color: isBest ? p.accent : `${p.text}44`, fontWeight: isBest ? 700 : 400, letterSpacing: 0.2 }}>
+                  {m.month.slice(0, 1)}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MosaicSlide({ bookCovers, p }: { bookCovers: string[]; p: Palette }) {
+  return (
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px', position: 'relative' }}>
+      <StarField accent={p.accent} />
+      <div style={{ position: 'relative', zIndex: 3 }}>
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 6 }}>Your Year in Books</div>
+          <div style={{ fontSize: 14, color: `${p.text}66`, fontFamily: 'Georgia, serif', marginBottom: 22 }}>
+            {bookCovers.length} cover{bookCovers.length !== 1 ? 's' : ''} from your reading year
+          </div>
+        </motion.div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {bookCovers.slice(0, 24).map((url, i) => (
+            <motion.img
+              key={i}
+              src={url}
+              alt=""
+              initial={{ opacity: 0, scale: 0.85 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.03 * i, duration: 0.3 }}
+              style={{ width: 55, height: 82, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GenreSlide({ topGenre, bookCount, p }: { topGenre: string; bookCount: number; p: Palette }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px', position: 'relative' }}>
       <StarField accent={p.accent} />
@@ -203,8 +342,7 @@ function GenreSlide({ topGenre, bookCount, p }: { topGenre: string; bookCount: n
   )
 }
 
-function StreakSlide({ streak, p }: { streak: number; p: typeof PALETTES[0] }) {
-  const bars = Array.from({ length: 7 }, (_, i) => i < Math.min(streak, 7))
+function StreakSlide({ streak, p }: { streak: number; p: Palette }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px', position: 'relative' }}>
       <StarField accent={p.accent} />
@@ -222,13 +360,12 @@ function StreakSlide({ streak, p }: { streak: number; p: typeof PALETTES[0] }) {
             <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, color: `${p.text}66`, marginBottom: 16 }}>days</div>
           </div>
         </motion.div>
-        <div style={{ display: 'flex', gap: 7, marginBottom: 22 }}>
-          {bars.map((active, i) => (
-            <motion.div key={i} initial={{ opacity: 0, scaleY: 0 }} animate={{ opacity: 1, scaleY: 1 }}
-              transition={{ delay: 0.3 + i * 0.08, duration: 0.4, ease: 'backOut' }}
-              style={{ width: 30, height: 30, borderRadius: 9, background: active ? `linear-gradient(180deg,${p.accent},${p.accent2})` : `${p.text}14`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
-              {active ? '🔥' : ''}
-            </motion.div>
+        <div style={{ display: 'flex', gap: 6, marginBottom: 22 }}>
+          {Array.from({ length: Math.min(streak, 7) }).map((_, i) => (
+            <motion.div key={i}
+              initial={{ opacity: 0, scaleY: 0 }} animate={{ opacity: 1, scaleY: 1 }}
+              transition={{ delay: 0.3 + i * 0.07, duration: 0.35, ease: 'backOut' }}
+              style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(180deg,${p.accent},${p.accent2})`, boxShadow: `0 4px 14px ${p.accent}66`, transformOrigin: 'bottom' }} />
           ))}
         </div>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }}>
@@ -241,7 +378,7 @@ function StreakSlide({ streak, p }: { streak: number; p: typeof PALETTES[0] }) {
   )
 }
 
-function PersonalitySlide({ personality, p }: { personality: string; p: typeof PALETTES[0] }) {
+function PersonalitySlide({ personality, p }: { personality: string; p: Palette }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px', position: 'relative' }}>
       <StarField accent={p.accent} />
@@ -251,7 +388,12 @@ function PersonalitySlide({ personality, p }: { personality: string; p: typeof P
         style={{ position: 'absolute', bottom: '10%', right: '-8%', width: 230, height: 230, borderRadius: '50%', border: `1px solid ${p.accent}38`, pointerEvents: 'none', zIndex: 0 }} />
       <div style={{ position: 'relative', zIndex: 3 }}>
         <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.65, ease: [0.34, 1.56, 0.64, 1] }}>
-          <div style={{ width: 58, height: 58, borderRadius: 18, background: `linear-gradient(135deg,${p.accent}33,${p.accent2}22)`, border: `1.5px solid ${p.accent}66`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 26, fontSize: 28 }}>✨</div>
+          <div style={{ width: 58, height: 58, borderRadius: 18, background: `linear-gradient(135deg,${p.accent}33,${p.accent2}22)`, border: `1.5px solid ${p.accent}66`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 26 }}>
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
+              <path d="M12 2L13.8 8.2L20 10L13.8 11.8L12 18L10.2 11.8L4 10L10.2 8.2L12 2Z" stroke={p.accent} strokeWidth="1.5" strokeLinejoin="round"/>
+              <path d="M19 15L19.9 17.1L22 18L19.9 18.9L19 21L18.1 18.9L16 18L18.1 17.1L19 15Z" fill={p.accent} opacity="0.7"/>
+            </svg>
+          </div>
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.5 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 22 }}>Your reading personality</div>
@@ -264,7 +406,22 @@ function PersonalitySlide({ personality, p }: { personality: string; p: typeof P
   )
 }
 
-function OutroSlide({ booksFinished, pagesRead, hours, p }: { booksFinished: number; pagesRead: number; hours: number; p: typeof PALETTES[0] }) {
+function OutroSlide({ booksFinished, pagesRead, hours, p }: { booksFinished: number; pagesRead: number; hours: number; p: Palette }) {
+  const rows = [
+    {
+      label: 'Books finished', value: booksFinished,
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,
+    },
+    {
+      label: 'Pages read', value: pagesRead,
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/><line x1="7" y1="8" x2="17" y2="8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="7" y1="12" x2="14" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+    },
+    {
+      label: 'Hours reading', value: hours,
+      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/><path d="M12 7V12L15 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+    },
+  ]
+
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px 96px', position: 'relative' }}>
       <StarField accent={p.accent} />
@@ -278,10 +435,12 @@ function OutroSlide({ booksFinished, pagesRead, hours, p }: { booksFinished: num
             What a year<br/>of reading.
           </div>
         </motion.div>
-        {[{ label: 'Books finished', value: booksFinished, emoji: '📚' }, { label: 'Pages read', value: pagesRead, emoji: '📄' }, { label: 'Hours reading', value: hours, emoji: '⏱' }].map(({ label, value, emoji }, i) => (
+        {rows.map(({ label, value, icon }, i) => (
           <motion.div key={label} initial={{ opacity: 0, x: -26 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.18 + i * 0.13, duration: 0.5 }}
             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: `1px solid ${p.text}13` }}>
-            <span style={{ fontSize: 15, color: `${p.text}77` }}>{emoji} {label}</span>
+            <span style={{ fontSize: 15, color: `${p.text}77`, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ color: `${p.text}66` }}>{icon}</span> {label}
+            </span>
             <span style={{ fontFamily: 'Georgia, serif', fontSize: 24, background: `linear-gradient(90deg,#fff,${p.accent})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{value.toLocaleString()}</span>
           </motion.div>
         ))}
@@ -302,7 +461,12 @@ export default function YearInReviewScreen() {
   const [musicOn, setMusicOn] = useState(false)
   const touchStart = useRef<{ x: number; y: number } | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const [yearStats, setYearStats] = useState({ booksFinished: 0, pagesRead: 0, totalMinutes: 0, topGenre: 'Fiction', topGenreCount: 0, longestStreak: 0 })
+  const [yearStats, setYearStats] = useState<YearStats>({
+    booksFinished: 0, pagesRead: 0, totalMinutes: 0, topGenre: 'Fiction', topGenreCount: 0, longestStreak: 0,
+    topAuthor: '', topAuthorCount: 0, uniqueAuthors: 0,
+    monthlyData: MONTHS_FULL.map(month => ({ month, sessions: 0, pages: 0 })),
+    bestMonth: 'Jan', bookCovers: [],
+  })
   const year = new Date().getFullYear()
 
   useEffect(() => {
@@ -314,24 +478,64 @@ export default function YearInReviewScreen() {
     ]).then(([booksRes, sessRes]) => {
       const books = (booksRes.data ?? []) as UserBook[]
       const sessions = (sessRes.data ?? []) as ReadingSession[]
+
       const pagesRead = sessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
       const totalSeconds = sessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0)
+
+      // Genre
       const genreCount: Record<string, number> = {}
-      for (const b of books) for (const g of b.book?.genres ?? []) genreCount[g] = (genreCount[g] ?? 0) + 1
-      const topEntry = Object.entries(genreCount).sort((a, b) => b[1] - a[1])[0]
-      const sessionDates = new Set(sessions.map(s => new Date(s.started_at).toDateString()))
+      for (const b of books) for (const g of (b.book as any)?.genres ?? []) genreCount[g] = (genreCount[g] ?? 0) + 1
+      const topGenreEntry = Object.entries(genreCount).sort((a, b) => b[1] - a[1])[0]
+
+      // Streak — filter out manual sessions, sort by date
+      const nonManualDates = sessions
+        .filter(s => !s.is_manual)
+        .map(s => new Date(s.started_at).toDateString())
+      const sessionDates = [...new Set(nonManualDates)]
+        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+
       let longest = 0, run = 0
-      const sorted = [...sessionDates].sort()
-      for (let i = 0; i < sorted.length; i++) {
+      for (let i = 0; i < sessionDates.length; i++) {
         if (i === 0) { run = 1; longest = 1; continue }
-        const prev = new Date(sorted[i - 1]), cur = new Date(sorted[i])
+        const prev = new Date(sessionDates[i - 1]), cur = new Date(sessionDates[i])
         if ((cur.getTime() - prev.getTime()) / 86400000 <= 1) { run++; longest = Math.max(longest, run) } else run = 1
       }
-      setYearStats({ booksFinished: books.length, pagesRead, totalMinutes: Math.round(totalSeconds / 60), topGenre: topEntry?.[0] ?? 'Fiction', topGenreCount: topEntry?.[1] ?? 0, longestStreak: longest })
+
+      // topAuthor
+      const authorCount: Record<string, number> = {}
+      for (const b of books) {
+        const a = (b.book as any)?.author ?? 'Unknown'
+        authorCount[a] = (authorCount[a] ?? 0) + 1
+      }
+      const topAuthorEntry = Object.entries(authorCount).sort((a, b) => b[1] - a[1])[0]
+      const topAuthor = topAuthorEntry?.[0] ?? ''
+      const topAuthorCount = topAuthorEntry?.[1] ?? 0
+      const uniqueAuthors = Object.keys(authorCount).length
+
+      // monthlyData
+      const monthMap: Record<number, { sessions: number; pages: number }> = {}
+      for (let i = 0; i < 12; i++) monthMap[i] = { sessions: 0, pages: 0 }
+      for (const s of sessions) {
+        const m = new Date(s.started_at).getMonth()
+        monthMap[m].sessions++
+        monthMap[m].pages += (s as any).pages_read ?? 0
+      }
+      const monthlyData: MonthData[] = MONTHS_FULL.map((month, i) => ({ month, ...monthMap[i] }))
+      const bestMonthIdx = monthlyData.reduce((best, m, i) => m.sessions > monthlyData[best].sessions ? i : best, 0)
+      const bestMonth = MONTHS_FULL[bestMonthIdx]
+
+      // bookCovers
+      const bookCovers = books.map(b => (b.book as any)?.cover_url).filter((u: unknown): u is string => typeof u === 'string' && !!u).slice(0, 24)
+
+      setYearStats({
+        booksFinished: books.length, pagesRead, totalMinutes: Math.round(totalSeconds / 60),
+        topGenre: topGenreEntry?.[0] ?? 'Fiction', topGenreCount: topGenreEntry?.[1] ?? 0,
+        longestStreak: longest, topAuthor, topAuthorCount, uniqueAuthors, monthlyData, bestMonth, bookCovers,
+      })
       setLoading(false)
-      getReadingPersonality({ booksFinished: books.length, pagesRead, topGenre: topEntry?.[0] ?? 'Fiction', longestStreak: longest, userId: user.id }).then(p => setPersonality(p))
+      getReadingPersonality({ booksFinished: books.length, pagesRead, topGenre: topGenreEntry?.[0] ?? 'Fiction', longestStreak: longest, userId: user.id }).then(p => setPersonality(p))
     })
-  }, [user])
+  }, [user, year])
 
   useEffect(() => {
     fetch('/api/music?tag=ambient').then(r => r.json()).then(data => {
@@ -352,11 +556,19 @@ export default function YearInReviewScreen() {
 
   const hours = Math.round(yearStats.totalMinutes / 60)
   const username = profile?.username ?? 'Reader'
+
   const slides = [
-    { id: 'intro', p: PALETTES[0] }, { id: 'books', p: PALETTES[1] }, { id: 'pages', p: PALETTES[2] },
-    { id: 'hours', p: PALETTES[3] }, { id: 'genre', p: PALETTES[4] }, { id: 'streak', p: PALETTES[0] },
+    { id: 'intro', p: PALETTES[0] },
+    { id: 'books', p: PALETTES[1] },
+    ...(yearStats.topAuthorCount >= 2 ? [{ id: 'author', p: PALETTES[5] }] : []),
+    { id: 'pages', p: PALETTES[2] },
+    { id: 'monthly', p: PALETTES[3] },
+    ...(yearStats.bookCovers.length >= 4 ? [{ id: 'mosaic', p: PALETTES[4] }] : []),
+    { id: 'hours', p: PALETTES[0] },
+    { id: 'genre', p: PALETTES[1] },
+    { id: 'streak', p: PALETTES[2] },
     ...(personality ? [{ id: 'personality', p: PALETTES[5] }] : []),
-    { id: 'outro', p: PALETTES[1] },
+    { id: 'outro', p: PALETTES[3] },
   ]
 
   const goTo = useCallback((dir: number) => {
@@ -414,9 +626,12 @@ export default function YearInReviewScreen() {
       case 'books': return <StatSlide label="Books finished" value={yearStats.booksFinished} p={cur.p}
         subtext={yearStats.booksFinished >= 12 ? 'More than a book a month.' : yearStats.booksFinished > 0 ? 'Every page counts.' : 'Start your reading journey.'}
         icon={<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" strokeLinecap="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" strokeLinejoin="round"/></svg>} />
+      case 'author': return <TopAuthorSlide topAuthor={yearStats.topAuthor} topAuthorCount={yearStats.topAuthorCount} p={cur.p} />
       case 'pages': return <StatSlide label="Pages read" value={yearStats.pagesRead} p={cur.p}
-        subtext={yearStats.pagesRead >= 10000 ? "You've read a small library." : yearStats.pagesRead >= 1000 ? 'Over a thousand pages of worlds.' : 'Every page is a new world.'}
+        subtext={yearStats.pagesRead >= 1000 ? `That's like reading ${Math.round(yearStats.pagesRead / 300)} full-length novels back to back` : yearStats.pagesRead > 0 ? 'Every page is a new world.' : 'Start reading today.'}
         icon={<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="7" y1="8" x2="17" y2="8" strokeLinecap="round"/><line x1="7" y1="12" x2="17" y2="12" strokeLinecap="round"/><line x1="7" y1="16" x2="13" y2="16" strokeLinecap="round"/></svg>} />
+      case 'monthly': return <MonthlySlide monthlyData={yearStats.monthlyData} bestMonth={yearStats.bestMonth} p={cur.p} />
+      case 'mosaic': return <MosaicSlide bookCovers={yearStats.bookCovers} p={cur.p} />
       case 'hours': return <StatSlide label="Hours reading" value={hours} suffix="h" p={cur.p}
         subtext={hours >= 100 ? 'More than 100 hours in other worlds.' : hours >= 24 ? `${hours} hours of pure focus.` : 'Time well spent.'}
         icon={<svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7V12L15 15" strokeLinecap="round"/></svg>} />
@@ -490,8 +705,12 @@ export default function YearInReviewScreen() {
           <motion.div initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }}
             style={{ position: 'fixed', bottom: 24, left: 22, right: 22, zIndex: 20 }}>
             <button onClick={handleShare} disabled={sharing}
-              style={{ width: '100%', padding: '15px', background: 'rgba(255,255,255,0.95)', color: '#0A0A0A', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
-              {sharing ? 'Saving…' : '📸 Save as Image'}
+              style={{ width: '100%', padding: '15px', background: 'rgba(255,255,255,0.95)', color: '#0A0A0A', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <svg width="16" height="14" viewBox="0 0 24 20" fill="none">
+                <path d="M9 2L7.17 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4H16.83L15 2H9Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="12" cy="12" r="3.5" stroke="currentColor" strokeWidth="1.5"/>
+              </svg>
+              {sharing ? 'Saving…' : 'Save as Image'}
             </button>
           </motion.div>
         )}
