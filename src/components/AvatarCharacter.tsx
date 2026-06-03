@@ -382,9 +382,26 @@ function CosmicSVG({ p, s }: { p: string; s: string }) {
   )
 }
 
+// ─── Generic fallback for dynamic characters ──────────────────────────────────
+function FallbackSVG({ p, s }: { p: string; s: string }) {
+  return (
+    <svg viewBox="0 0 200 260" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ width: '100%', height: '100%' }}>
+      <ellipse cx="100" cy="250" rx="55" ry="8" fill={hex(s, 0.3)}/>
+      <circle cx="100" cy="140" r="80" fill={hex(p, 0.15)}/>
+      <circle cx="100" cy="140" r="60" fill={hex(p, 0.25)}/>
+      <circle cx="100" cy="140" r="40" fill={p} opacity="0.7"/>
+      <ellipse cx="88" cy="130" rx="8" ry="8" fill="white" opacity="0.9"/>
+      <ellipse cx="112" cy="130" rx="8" ry="8" fill="white" opacity="0.9"/>
+      <ellipse cx="88" cy="130" rx="5" ry="5" fill={s}/>
+      <ellipse cx="112" cy="130" rx="5" ry="5" fill={s}/>
+      <path d="M88 148 Q100 156 112 148" stroke={s} strokeWidth="2" fill="none" strokeLinecap="round"/>
+    </svg>
+  )
+}
+
 // ─── Main export ───────────────────────────────────────────────────────────────
 interface AvatarCharacterProps {
-  character: CharacterId
+  character: string
   primaryColor: string
   secondaryColor: string
   size?: number
@@ -393,7 +410,7 @@ interface AvatarCharacterProps {
 
 export function AvatarCharacter({ character, primaryColor, secondaryColor, size = 160, style }: AvatarCharacterProps) {
   const props = { p: primaryColor, s: secondaryColor }
-  const el: Record<CharacterId, React.ReactElement> = {
+  const el: Record<string, React.ReactElement> = {
     lion: <LionSVG {...props}/>,
     mage: <MageSVG {...props}/>,
     fox: <FoxSVG {...props}/>,
@@ -406,7 +423,7 @@ export function AvatarCharacter({ character, primaryColor, secondaryColor, size 
 
   return (
     <div style={{ width: size, height: Math.round(size * 1.3), ...style }}>
-      {el[character]}
+      {el[character] ?? <FallbackSVG {...props}/>}
     </div>
   )
 }
