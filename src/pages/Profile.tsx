@@ -23,7 +23,7 @@ function Chevron({ down, color }: { down: boolean; color: string }) {
 
 export default function ProfileScreen() {
   const { theme } = useTheme()
-  const { user, profile, updateProfile, signOut } = useAuth()
+  const { user, profile, updateProfile, signOut, isAdmin } = useAuth()
   const { dark, toggle } = useTheme()
   const navigate = useNavigate()
 
@@ -442,6 +442,23 @@ export default function ProfileScreen() {
             )}
           </AnimatePresence>
         </div>
+
+        {/* ── Admin panel link (only visible to admins) ─────────────────────── */}
+        {isAdmin && (
+          <button onClick={() => navigate('/admin')} style={{ ...sectionHeadStyle, marginTop: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <circle cx="10" cy="10" r="3" stroke={theme.accent} strokeWidth="1.5"/>
+                <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42" stroke={theme.accent} strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: theme.accent }}>Admin Panel</div>
+                <div style={{ fontSize: 11, color: theme.muted }}>Manage achievements & characters</div>
+              </div>
+            </div>
+            <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M1 1L6 6L1 11" stroke={theme.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </button>
+        )}
 
         {/* ── Preferences row ────────────────────────────────────────────────── */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 4px' }}>
