@@ -136,9 +136,11 @@ export async function getRecommendations(params: {
   try {
     const { text, tokens } = await callGemini(prompt, cfg.model)
     await logUsage('recommendations', tokens, cfg.model, params.userId)
-    const json = text.match(/\[[\s\S]*\]/)?.[0]
+    // Strip markdown code fences if present, then extract JSON array
+    const stripped = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+    const json = stripped.match(/\[[\s\S]*\]/)?.[0]
     if (!json) throw new Error('Gemini returned a response with no JSON array')
-    return json ? JSON.parse(json) : []
+    return JSON.parse(json)
   } catch (err) {
     console.error('[ClickaClick AI] recommendations failed:', err)
     throw err   // propagate so callers can show the real error
@@ -162,6 +164,25 @@ export async function getReadingPersonality(params: {
     console.error('[ClickaClick AI] wrapped_personality failed:', err)
     return null
   }
+}
+
+export async function summarizeNotes(params: {
+  notes: Array<{ page_number: number | null; content: string }>
+  bookTitle: string
+  userId: string | null
+}): Promise<string> {
+  const cfg = await getConfig()
+  if (!cfg.enabled || !cfg.summary_enabled) throw new Error('AI summaries are disabled')
+
+  const notesText = params.notes
+    .map(n => `[p.${n.page_number ?? '?'}] ${n.content}`)
+    .join('\n')
+
+  const prompt = `I'm reading "${params.bookTitle}". Here are my reading notes:\n\n${notesText}\n\nWrite a concise 3-5 sentence summary of my reading progress and key insights based on these notes. Focus on themes, questions, and ideas I seem to be tracking. Write in second person ("You've been following...").`
+
+  const { text, tokens } = await callGemini(prompt, cfg.model)
+  await logUsage('notes_summary', tokens, cfg.model, params.userId)
+  return text.trim()
 }
 
 export { getConfig as getGeminiConfig }

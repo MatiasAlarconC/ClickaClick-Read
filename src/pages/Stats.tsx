@@ -71,7 +71,8 @@ export default function StatsScreen() {
     return { booksFinished, pagesRead, hours, dailyAvgPages, pacePerHour, avgDailyMins, todayPages, todayMins }
   }, [sessions, userBooks])
 
-  // Heatmap: 52 weeks × 7 days (timed sessions only for heatmap activity)
+  // Heatmap: last 16 weeks × 7 days (timed sessions only)
+  const WEEKS = 16
   const heatmap = useMemo(() => {
     const timedOnly = sessions.filter(s => !s.is_manual && (s.duration_seconds ?? 0) > 0)
     const sessionDates = new Set(timedOnly.map(s => new Date(s.started_at).toDateString()))
@@ -82,21 +83,22 @@ export default function StatsScreen() {
     }
 
     const today = new Date()
-    const cells: Array<{ date: Date; value: 0|1|2 }> = []
+    const cells: Array<{ date: Date; value: 0|1|2; isToday: boolean }> = []
+    const todayStr = today.toDateString()
 
-    // Start from 52 weeks ago Monday
+    // Start from WEEKS weeks ago Monday
     const start = new Date(today)
-    start.setDate(start.getDate() - 364)
+    start.setDate(start.getDate() - (WEEKS - 1) * 7)
     const dow = start.getDay()
     start.setDate(start.getDate() - (dow === 0 ? 6 : dow - 1))
 
-    for (let i = 0; i < 52 * 7; i++) {
+    for (let i = 0; i < WEEKS * 7; i++) {
       const d = new Date(start)
       d.setDate(start.getDate() + i)
-      if (d > today) { cells.push({ date: d, value: 0 }); continue }
+      if (d > today) { cells.push({ date: d, value: 0, isToday: false }); continue }
       const p = sessionPagesByDate[d.toDateString()] ?? 0
       const hasSession = sessionDates.has(d.toDateString())
-      cells.push({ date: d, value: hasSession ? (p > 30 ? 2 : 1) : 0 })
+      cells.push({ date: d, value: hasSession ? (p > 30 ? 2 : 1) : 0, isToday: d.toDateString() === todayStr })
     }
     return cells
   }, [sessions])
@@ -158,12 +160,10 @@ export default function StatsScreen() {
     return { thisData, lastData, hasLast, lastMonthName }
   }, [sessions])
 
-  const CELL = 5.2; const GAP = 1.5
-
   const heatmapMonthLabels = useMemo(() => {
     const labels: { text: string; col: number }[] = []
     let lastMonth = -1
-    for (let week = 0; week < 52; week++) {
+    for (let week = 0; week < WEEKS; week++) {
       const cell = heatmap[week * 7]
       if (!cell) continue
       const m = cell.date.getMonth()
@@ -175,10 +175,6 @@ export default function StatsScreen() {
     return labels
   }, [heatmap])
 
-  const heatmapRef = React.useRef<HTMLDivElement>(null)
-  React.useEffect(() => {
-    if (heatmapRef.current) heatmapRef.current.scrollLeft = heatmapRef.current.scrollWidth
-  }, [heatmap])
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
@@ -217,42 +213,65 @@ export default function StatsScreen() {
           <LightningIcon size={36} color={theme.accent} style={{ opacity: 0.7 }}/>
         </motion.div>
 
-        {/* Heatmap */}
-        <div style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 16px 14px', marginBottom: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: theme.muted }}>Reading Heatmap {new Date().getFullYear()}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <span style={{ fontSize: 9, color: theme.muted }}>less</span>
-              {[0,1,2].map(v => (
-                <div key={v} style={{ width: 8, height: 8, borderRadius: 2, background: v === 0 ? theme.border : v === 1 ? (dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)') : theme.accent }} />
-              ))}
-              <span style={{ fontSize: 9, color: theme.muted }}>more</span>
-            </div>
-          </div>
-          <div ref={heatmapRef} style={{ overflowX: 'auto' }}>
-            <div style={{ width: 52 * (CELL + GAP) }}>
-              <div style={{ display: 'flex', gap: GAP }}>
-                {[...Array(52)].map((_, week) => (
-                  <div key={week} style={{ display: 'flex', flexDirection: 'column', gap: GAP }}>
-                    {[...Array(7)].map((_, day) => {
-                      const cell = heatmap[week * 7 + day]
-                      const isFuture = cell?.date && cell.date > new Date()
-                      if (isFuture) return <div key={day} style={{ width: CELL, height: CELL }} />
-                      const val = cell?.value ?? 0
-                      const bg = val === 0 ? theme.border : val === 1 ? (dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.28)') : theme.accent
-                      return <div key={day} style={{ width: CELL, height: CELL, borderRadius: 1.2, background: bg }} />
-                    })}
+        {/* Heatmap — last 16 weeks */}
+        {(() => {
+          const HCELL = 13; const HGAP = 3
+          const DAY_LABELS = ['M','T','W','T','F','S','S']
+          const LABEL_W = 14
+          return (
+            <div style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 16px 14px', marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: theme.muted }}>Last 4 months</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ fontSize: 9, color: theme.muted }}>None</span>
+                  <div style={{ width: 10, height: 10, borderRadius: 3, background: theme.border }} />
+                  <div style={{ width: 10, height: 10, borderRadius: 3, background: dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.22)' }} />
+                  <div style={{ width: 10, height: 10, borderRadius: 3, background: theme.accent }} />
+                  <span style={{ fontSize: 9, color: theme.muted }}>Active</span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 0 }}>
+                {/* Day labels */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: HGAP, marginRight: 6, paddingTop: 18 }}>
+                  {DAY_LABELS.map((d, i) => (
+                    <div key={i} style={{ height: HCELL, display: 'flex', alignItems: 'center', fontSize: 9, color: theme.muted, width: LABEL_W, justifyContent: 'flex-end' }}>{i % 2 === 0 ? d : ''}</div>
+                  ))}
+                </div>
+                {/* Grid */}
+                <div style={{ flex: 1, overflowX: 'auto' }}>
+                  <div style={{ width: WEEKS * (HCELL + HGAP) }}>
+                    {/* Month labels */}
+                    <div style={{ position: 'relative', height: 16, marginBottom: 2 }}>
+                      {heatmapMonthLabels.map(({ text, col }) => (
+                        <span key={col} style={{ position: 'absolute', left: col * (HCELL + HGAP), fontSize: 10, fontWeight: 600, color: theme.muted, whiteSpace: 'nowrap' }}>{text}</span>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: HGAP }}>
+                      {[...Array(WEEKS)].map((_, week) => (
+                        <div key={week} style={{ display: 'flex', flexDirection: 'column', gap: HGAP }}>
+                          {[...Array(7)].map((_, day) => {
+                            const cell = heatmap[week * 7 + day]
+                            const isFuture = cell?.date && cell.date > new Date()
+                            if (isFuture) return <div key={day} style={{ width: HCELL, height: HCELL }} />
+                            const val = cell?.value ?? 0
+                            const isToday = cell?.isToday
+                            const bg = val === 0 ? theme.border : val === 1 ? (dark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.22)') : theme.accent
+                            return (
+                              <div key={day} title={cell?.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                style={{ width: HCELL, height: HCELL, borderRadius: 3, background: bg,
+                                  boxShadow: isToday ? `0 0 0 2px ${theme.accent}` : 'none',
+                                  transition: 'background 0.15s' }} />
+                            )
+                          })}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
-              </div>
-              <div style={{ position: 'relative', height: 14, marginTop: 4 }}>
-                {heatmapMonthLabels.map(({ text, col }) => (
-                  <span key={col} style={{ position: 'absolute', left: col * (CELL + GAP), fontSize: 9, color: theme.muted, whiteSpace: 'nowrap' }}>{text}</span>
-                ))}
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          )
+        })()}
 
         {/* Monthly pages chart */}
         <div style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 16px 14px', marginBottom: 14 }}>

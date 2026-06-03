@@ -4,6 +4,7 @@ import { motion } from 'framer-motion'
 import { Stars, ProgressBar, BackButton, Spinner, ErrorBoundary } from '../components/UI'
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
+import { summarizeNotes } from '../services/gemini'
 import type { SearchResult, UserBook, BookNote, ReadingSession } from '../types'
 
 /** Strip HTML tags from Google Books / Open Library descriptions */
@@ -35,6 +36,9 @@ export default function BookDetailScreen() {
   const [newNote, setNewNote] = useState('')
   const [newNotePage, setNewNotePage] = useState('')
   const [addingToLib, setAddingToLib] = useState(false)
+  const [notesSummary, setNotesSummary] = useState<string | null>(null)
+  const [summarizing, setSummarizing] = useState(false)
+  const [summaryError, setSummaryError] = useState(false)
   const [customPages, setCustomPages] = useState<string>('')
   const [pagesSaved, setPagesSaved] = useState(false)
   const [bookDbId, setBookDbId] = useState<string | null>(null)
@@ -353,6 +357,36 @@ export default function BookDetailScreen() {
               <textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Write a note…" rows={3} style={{ width: '100%', padding: '10px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 14, color: theme.fg, resize: 'none' }} />
               <button onClick={addNote} disabled={!newNote.trim()} style={{ marginTop: 10, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500, opacity: newNote.trim() ? 1 : 0.5 }}>Add Note</button>
             </div>
+
+            {notes.length >= 2 && (
+              <div style={{ marginBottom: 20, background: theme.bgSecondary, borderRadius: 14, padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: notesSummary ? 12 : 0 }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: theme.fg }}>AI Reading Recap</div>
+                    <div style={{ fontSize: 11, color: theme.muted, marginTop: 1 }}>Summary based on your {notes.length} notes</div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setSummarizing(true); setSummaryError(false); setNotesSummary(null)
+                      try {
+                        const s = await summarizeNotes({ notes, bookTitle: book?.title ?? 'this book', userId: user?.id ?? null })
+                        setNotesSummary(s)
+                      } catch { setSummaryError(true) }
+                      setSummarizing(false)
+                    }}
+                    disabled={summarizing}
+                    style={{ padding: '7px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: summarizing ? 'default' : 'pointer', opacity: summarizing ? 0.7 : 1, flexShrink: 0 }}>
+                    {summarizing ? 'Analyzing…' : notesSummary ? 'Refresh' : 'Summarize'}
+                  </button>
+                </div>
+                {notesSummary && (
+                  <div style={{ fontSize: 13, color: theme.fg, lineHeight: 1.7, borderTop: `1px solid ${theme.border}`, paddingTop: 12 }}>{notesSummary}</div>
+                )}
+                {summaryError && (
+                  <div style={{ fontSize: 12, color: theme.muted, marginTop: 8 }}>Could not generate summary. Try again.</div>
+                )}
+              </div>
+            )}
 
             {notes.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '32px 0', color: theme.muted, fontSize: 14 }}>No notes yet</div>

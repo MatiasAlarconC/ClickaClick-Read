@@ -77,14 +77,14 @@ export function HomeScreen() {
 
       {/* ── Notification overlay ───────────────────────────────────────────── */}
       <AnimatePresence>
-        {showNotifications && notifications.length > 0 && (
+        {showNotifications && (
           <motion.div
             key="notif-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-            onClick={() => { setShowNotifications(false); markNotificationsRead() }}>
+            onClick={() => { setShowNotifications(false); if (notifications.length > 0) markNotificationsRead() }}>
             <motion.div
               key="notif-sheet"
               initial={{ y: '100%' }}
@@ -95,9 +95,20 @@ export function HomeScreen() {
               style={{ width: '100%', maxWidth: 480, background: theme.bg, borderRadius: '22px 22px 0 0', padding: '20px 22px', paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))', maxHeight: '70vh', overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg }}>Notifications</div>
-                <button onClick={() => { setShowNotifications(false); markNotificationsRead() }}
-                  style={{ background: 'none', border: 'none', fontSize: 13, color: theme.accent, fontWeight: 600, cursor: 'pointer', padding: '4px 8px' }}>Mark all read</button>
+                {notifications.length > 0 && (
+                  <button onClick={() => { setShowNotifications(false); markNotificationsRead() }}
+                    style={{ background: 'none', border: 'none', fontSize: 13, color: theme.accent, fontWeight: 600, cursor: 'pointer', padding: '4px 8px' }}>Mark all read</button>
+                )}
               </div>
+              {notifications.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.25, marginBottom: 10 }}>
+                    <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={theme.fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M13.73 21a2 2 0 01-3.46 0" stroke={theme.fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <div style={{ fontSize: 14, color: theme.muted }}>No notifications</div>
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {notifications.map(n => (
                   <div key={n.id} style={{ padding: '13px 14px', background: theme.bgSecondary, borderRadius: 14, border: `1px solid ${theme.border}`, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
