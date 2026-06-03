@@ -77,7 +77,7 @@ const EMPTY_CHARACTER_FORM: CharacterForm = {
 
 export default function AdminPanel() {
   const { theme } = useTheme()
-  const { user, isAdmin } = useAuth()
+  const { user, isAdmin, loading } = useAuth()
   const navigate = useNavigate()
 
   const [tab, setTab] = useState<AdminTab>('config')
@@ -115,10 +115,11 @@ export default function AdminPanel() {
   const secondary = theme.bgSecondary
 
   useEffect(() => {
+    if (loading) return
     if (!user) { navigate('/'); return }
     if (!isAdmin) { navigate('/home'); return }
     loadConfig()
-  }, [user, isAdmin])
+  }, [user, isAdmin, loading])
 
   useEffect(() => {
     if (tab === 'users') loadUsers()
