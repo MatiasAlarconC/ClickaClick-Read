@@ -21,7 +21,7 @@ interface UserBookEntry {
   id: string
   status: string
   current_page: number | null
-  rating: number | null
+  user_rating: number | null
   book: {
     title: string
     author: string
@@ -63,7 +63,7 @@ export default function PublicProfileScreen() {
       // 2 – Fetch books (reading + finished)
       const { data: ubs } = await supabase
         .from('user_books')
-        .select('id, status, current_page, rating, book:books(title, author, cover_url, pages_default, genres)')
+        .select('id, status, current_page, user_rating, book:books(title, author, cover_url, pages_default, genres)')
         .eq('user_id', userId)
         .in('status', ['reading', 'finished'])
 

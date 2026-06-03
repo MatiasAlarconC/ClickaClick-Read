@@ -52,7 +52,7 @@ async function getConfig(): Promise<GeminiConfig> {
   return configCache
 }
 
-async function callGemini(prompt: string, model: string): Promise<{ text: string; tokens: number }> {
+async function callGemini(prompt: string, model: string, jsonMode = false): Promise<{ text: string; tokens: number }> {
   if (!GEMINI_API_KEY) {
     console.error('[ClickaClick AI] VITE_GEMINI_API_KEY is not set — check Vercel environment variables')
     throw new Error('No Gemini API key')
@@ -69,7 +69,11 @@ async function callGemini(prompt: string, model: string): Promise<{ text: string
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.7 },
+        generationConfig: {
+          maxOutputTokens: 2048,
+          temperature: 0.7,
+          ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+        },
       }),
     })
     if (res.ok) {
@@ -129,16 +133,15 @@ export async function getRecommendations(params: {
   if (!cfg.enabled || !cfg.recommendations_enabled) return []
 
   const count = params.count ?? 10
-  const booksStr = params.finishedBooks.map(b => `"${b.title}" by ${b.author} (rating: ${b.rating ?? 'unrated'})`).join(', ')
-  const excludeStr = params.exclude?.length ? ` Do not include these already shown: ${params.exclude.map(t => `"${t}"`).join(', ')}.` : ''
-  const prompt = `Based on this reader's history: ${booksStr}, recommend ${count} books they haven't read.${excludeStr} For each, provide: title, author, and a one-sentence reason why it matches their taste. Respond in JSON only, as an array: [{"title":"...","author":"...","reason":"..."}]`
+  const booksStr = params.finishedBooks.map(b => `"${b.title}" by ${b.author}${b.rating ? ` (rated ${b.rating}/5)` : ''}${b.genres?.length ? ` [${b.genres.join(', ')}]` : ''}`).join('\n')
+  const excludeStr = params.exclude?.length ? `\nDo NOT include: ${params.exclude.map(t => `"${t}"`).join(', ')}.` : ''
+  const prompt = `You are a book recommendation engine. Output ONLY a JSON array with no other text.\n\nReader's books:\n${booksStr}${excludeStr}\n\nRecommend exactly ${count} books they would enjoy. Return this exact format:\n[{"title":"Book Title","author":"Author Name","reason":"One sentence why this matches their taste"}]`
 
   try {
-    const { text, tokens } = await callGemini(prompt, cfg.model)
+    const { text, tokens } = await callGemini(prompt, cfg.model, true)
     await logUsage('recommendations', tokens, cfg.model, params.userId)
-    // Strip markdown code fences if present, then extract JSON array
     const stripped = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
-    const json = stripped.match(/\[[\s\S]*\]/)?.[0]
+    const json = stripped.match(/\[[\s\S]*\]/)?.[0] ?? (stripped.startsWith('[') ? stripped : null)
     if (!json) throw new Error('Gemini returned a response with no JSON array')
     return JSON.parse(json)
   } catch (err) {

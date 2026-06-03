@@ -358,12 +358,12 @@ export default function BookDetailScreen() {
               <button onClick={addNote} disabled={!newNote.trim()} style={{ marginTop: 10, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500, opacity: newNote.trim() ? 1 : 0.5 }}>Add Note</button>
             </div>
 
-            {notes.length >= 2 && (
+            {notes.length >= 1 && (
               <div style={{ marginBottom: 20, background: theme.bgSecondary, borderRadius: 14, padding: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: notesSummary ? 12 : 0 }}>
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: theme.fg }}>AI Reading Recap</div>
-                    <div style={{ fontSize: 11, color: theme.muted, marginTop: 1 }}>Summary based on your {notes.length} notes</div>
+                    <div style={{ fontSize: 11, color: theme.muted, marginTop: 1 }}>Summary based on your {notes.length} note{notes.length !== 1 ? 's' : ''}</div>
                   </div>
                   <button
                     onClick={async () => {
@@ -389,7 +389,10 @@ export default function BookDetailScreen() {
             )}
 
             {notes.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 0', color: theme.muted, fontSize: 14 }}>No notes yet</div>
+              <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                <div style={{ fontSize: 14, color: theme.muted, marginBottom: 6 }}>No notes yet</div>
+                <div style={{ fontSize: 12, color: theme.muted, opacity: 0.6 }}>Add a note above — once you have one, AI can summarize your reading progress</div>
+              </div>
             ) : (
               notes.map(note => (
                 <div key={note.id} style={{ padding: '14px 0', borderBottom: `1px solid ${theme.border}` }}>
