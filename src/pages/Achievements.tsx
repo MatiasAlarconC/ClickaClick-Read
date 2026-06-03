@@ -5,12 +5,20 @@ import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import {
   ACHIEVEMENTS, TIER_COLORS, getUnlockedCharacters, getUnlockedTitles, getAchievementProgress,
-  type AchievementTier, type AchievementStats
+  type Achievement, type AchievementTier, type AchievementStats
 } from '../data/achievements'
 import { CHARACTERS, type CharacterId } from '../components/AvatarCharacter'
 import Medal3D from '../components/Medal3D'
 import MedalIcon from '../components/MedalIcon'
 import Character3D from '../components/Character3D'
+import {
+  evaluateCondition, getConditionProgress,
+  type DBAchievement, type DBCharacter, type AchievementCondition,
+} from '../lib/achievementEvaluator'
+
+interface UnifiedAchievement extends Achievement {
+  condition?: AchievementCondition
+}
 
 // ─── Genre count helper ───────────────────────────────────────────────────────
 function countGenres(userBooks: { book?: { genres?: string[] | null } | null }[]): Record<string, number> {
@@ -41,6 +49,15 @@ export default function AchievementsScreen() {
   )
   const [savingTitle, setSavingTitle] = useState(false)
   const [showTitlePicker, setShowTitlePicker] = useState(false)
+  const [dbAchievements, setDbAchievements] = useState<DBAchievement[]>([])
+  const [dbCharacters, setDbCharacters] = useState<DBCharacter[]>([])
+
+  useEffect(() => {
+    supabase.from('achievements_config').select('*').eq('enabled', true).order('sort_order')
+      .then(({ data }) => { if (data) setDbAchievements(data as DBAchievement[]) })
+    supabase.from('characters_config').select('*').eq('enabled', true)
+      .then(({ data }) => { if (data) setDbCharacters(data as DBCharacter[]) })
+  }, [])
 
   useEffect(() => {
     if (!user) return
@@ -78,12 +95,25 @@ export default function AchievementsScreen() {
 
       // Detect newly unlocked achievements and create notifications
       if (user) {
-        const currentUnlocked = ACHIEVEMENTS.filter(a => a.check({
+        const evalStats = {
           booksFinished, totalBooks, totalPages,
           totalHours, streak,
           genreCounts: countGenres(userBooks),
           sessionCount, notesCount,
-        })).map(a => a.id)
+        }
+        const dbConverted: UnifiedAchievement[] = dbAchievements.map(a => ({
+          id: a.id, name: a.name, description: a.description,
+          tier: a.tier as AchievementTier,
+          reward: a.reward_type === 'badge'
+            ? { type: 'badge' as const }
+            : a.reward_type === 'title'
+            ? { type: 'title' as const, value: a.reward_value! }
+            : { type: 'character' as const, characterId: a.reward_value! },
+          check: (s: AchievementStats) => evaluateCondition(a.condition, s),
+          condition: a.condition,
+        }))
+        const allAchievements = [...ACHIEVEMENTS, ...dbConverted]
+        const currentUnlocked = allAchievements.filter(a => a.check(evalStats)).map(a => a.id)
 
         const seenKey = `seen_achievements_${user.id}`
         const seen: string[] = JSON.parse(localStorage.getItem(seenKey) ?? '[]')
@@ -91,7 +121,7 @@ export default function AchievementsScreen() {
 
         if (newlyUnlocked.length > 0) {
           localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
-          const achToNotify = ACHIEVEMENTS.filter(a => newlyUnlocked.includes(a.id))
+          const achToNotify = allAchievements.filter(a => newlyUnlocked.includes(a.id))
           const notifRows = achToNotify.map(a => ({
             user_id: user.id,
             type: 'achievement',
@@ -101,18 +131,44 @@ export default function AchievementsScreen() {
           }))
           supabase.from('notifications').insert(notifRows).then(r => r)
         } else if (seen.length === 0 && currentUnlocked.length > 0) {
-          // First time loading — seed localStorage without creating notifications
           localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
         }
       }
     })
-  }, [user])
+  }, [user, dbAchievements])
 
-  const unlockedSet = stats ? new Set(ACHIEVEMENTS.filter(a => a.check(stats)).map(a => a.id)) : new Set<string>()
-  const unlockedCharacters = stats ? getUnlockedCharacters(stats) : new Set(['lion'])
-  const unlockedTitles = stats ? getUnlockedTitles(stats) : []
+  const dbConverted: UnifiedAchievement[] = dbAchievements.map(a => ({
+    id: a.id, name: a.name, description: a.description,
+    tier: a.tier as AchievementTier,
+    reward: a.reward_type === 'badge'
+      ? { type: 'badge' as const }
+      : a.reward_type === 'title'
+      ? { type: 'title' as const, value: a.reward_value! }
+      : { type: 'character' as const, characterId: a.reward_value! },
+    check: (s: AchievementStats) => evaluateCondition(a.condition, s),
+    condition: a.condition,
+  }))
+  const allAchievements: UnifiedAchievement[] = [...ACHIEVEMENTS, ...dbConverted]
+
+  const unlockedSet = stats ? new Set(allAchievements.filter(a => a.check(stats)).map(a => a.id)) : new Set<string>()
+  const unlockedCharacters = stats
+    ? new Set([
+        ...getUnlockedCharacters(stats),
+        ...dbConverted
+          .filter(a => a.reward.type === 'character' && a.check(stats))
+          .map(a => (a.reward as { type: 'character'; characterId: string }).characterId),
+      ])
+    : new Set(['lion'])
+  const unlockedTitles = stats
+    ? [
+        ...getUnlockedTitles(stats),
+        ...dbConverted
+          .filter(a => a.reward.type === 'title' && a.check(stats))
+          .map(a => (a.reward as { type: 'title'; value: string }).value),
+      ]
+    : []
   const unlockedCount = unlockedSet.size
-  const total = ACHIEVEMENTS.length
+  const total = allAchievements.length
 
   const equipTitle = async (title: string | null) => {
     setSelectedTitle(title)
@@ -187,21 +243,29 @@ export default function AchievementsScreen() {
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 14 }}>Unlocked Characters</div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {/* Static characters */}
               {CHARACTERS.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
                     <div style={{ background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.defaultPrimary + '80' : theme.border}`, overflow: 'hidden' }}>
-                      <Character3D
-                        character={c.id}
-                        primaryColor={c.defaultPrimary}
-                        secondaryColor={c.defaultSecondary}
-                        size={72}
-                        locked={!unlocked}
-                      />
+                      <Character3D character={c.id} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} size={72} locked={!unlocked} />
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{c.name}</div>
-                    {!unlocked && <div style={{ fontSize: 10, color: theme.muted, textAlign: 'center', marginTop: 2 }}>locked</div>}
+                    {!unlocked && <div style={{ fontSize: 10, color: theme.muted }}>locked</div>}
+                  </div>
+                )
+              })}
+              {/* Dynamic characters from DB */}
+              {dbCharacters.map(c => {
+                const unlocked = unlockedCharacters.has(c.id)
+                return (
+                  <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
+                    <div style={{ background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.default_primary + '80' : theme.border}`, overflow: 'hidden' }}>
+                      <Character3D character={c.id} primaryColor={c.default_primary} secondaryColor={c.default_secondary} size={72} locked={!unlocked} glbUrl={c.glb_url} />
+                    </div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{c.name}</div>
+                    {!unlocked && <div style={{ fontSize: 10, color: theme.muted }}>locked</div>}
                   </div>
                 )
               })}
@@ -211,7 +275,7 @@ export default function AchievementsScreen() {
 
         {/* Achievements by tier */}
         {tiers.map(tier => {
-          const tierAchievements = ACHIEVEMENTS.filter(a => a.tier === tier)
+          const tierAchievements = allAchievements.filter(a => a.tier === tier)
           return (
             <div key={tier} style={{ marginBottom: 28 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
@@ -237,18 +301,23 @@ export default function AchievementsScreen() {
                       }}
                     >
                       {/* Left icon: mini 3D character if this achievement unlocks one, else SVG medal */}
-                      {ach.reward.type === 'character' ? (
-                        <div style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden',
-                          border: `2px solid ${unlocked ? TIER_COLORS[ach.tier] + '60' : theme.border}`,
-                          background: theme.bg }}>
-                          <Character3D
-                            character={(ach.reward as any).characterId}
-                            locked={!unlocked}
-                            size={72}
-                            interactive={false}
-                          />
-                        </div>
-                      ) : (
+                      {ach.reward.type === 'character' ? (() => {
+                        const charId = (ach.reward as { type: 'character'; characterId: string }).characterId
+                        const dynChar = dbCharacters.find(c => c.id === charId)
+                        return (
+                          <div style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden',
+                            border: `2px solid ${unlocked ? TIER_COLORS[ach.tier] + '60' : theme.border}`,
+                            background: theme.bg }}>
+                            <Character3D
+                              character={charId}
+                              locked={!unlocked}
+                              size={72}
+                              interactive={false}
+                              glbUrl={dynChar?.glb_url}
+                            />
+                          </div>
+                        )
+                      })() : (
                         <MedalIcon tier={ach.tier} locked={!unlocked} size={72} />
                       )}
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -263,7 +332,11 @@ export default function AchievementsScreen() {
                           )}
                           {ach.reward.type === 'character' && (
                             <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 999, background: unlocked ? TIER_COLORS[ach.tier] + '15' : theme.bg, border: `1px solid ${unlocked ? TIER_COLORS[ach.tier] + '80' : theme.border}`, fontSize: 11, color: unlocked ? TIER_COLORS[ach.tier] : theme.muted }}>
-                              ✶ Unlocks: {CHARACTERS.find(c => c.id === (ach.reward as { type: 'character'; characterId: CharacterId }).characterId)?.name ?? (ach.reward as any).characterId}
+                              ✶ Unlocks: {
+                                CHARACTERS.find(c => c.id === (ach.reward as { type: 'character'; characterId: string }).characterId)?.name
+                                ?? dbCharacters.find(c => c.id === (ach.reward as { type: 'character'; characterId: string }).characterId)?.name
+                                ?? (ach.reward as any).characterId
+                              }
                             </span>
                           )}
                           {ach.reward.type === 'badge' && (
@@ -274,7 +347,9 @@ export default function AchievementsScreen() {
                         </div>
                         {/* Progress bar */}
                         {!unlocked && stats && (() => {
-                          const p = getAchievementProgress(ach.id, stats)
+                          const p = (ach as UnifiedAchievement).condition
+                            ? getConditionProgress((ach as UnifiedAchievement).condition!, stats)
+                            : getAchievementProgress(ach.id, stats)
                           if (!p) return null
                           const pct = p.target > 0 ? Math.min(100, (p.current / p.target) * 100) : 0
                           const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k` : String(n)

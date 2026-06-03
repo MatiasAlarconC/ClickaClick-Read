@@ -15,37 +15,37 @@ import * as THREE from 'three'
 import type { CharacterId } from './AvatarCharacter'
 
 // ─── Model registry ───────────────────────────────────────────────────────────
-const MODEL_PATH: Record<CharacterId, string> = {
+const MODEL_PATH: Record<string, string> = {
   lion:    '/models/lion.glb',
   mage:    '/models/mage.glb',
   fox:     '/models/fox.glb',
   owl:     '/models/owl.glb',
   knight:  '/models/knight.glb',
   cosmic:  '/models/cosmic.glb',
-  phoenix:    '/models/phoenix.glb',
-  shadow:     '/models/void.glb',
+  phoenix: '/models/phoenix.glb',
+  shadow:  '/models/void.glb',
 }
 
-const CHARACTER_COLOR: Record<CharacterId, string> = {
+const CHARACTER_COLOR: Record<string, string> = {
   lion:    '#C17F24',
   mage:    '#7C3AED',
   fox:     '#D97706',
   owl:     '#0F766E',
   knight:  '#475569',
   cosmic:  '#DB2777',
-  phoenix:    '#F97316',
-  shadow:     '#4C1D95',
+  phoenix: '#F97316',
+  shadow:  '#4C1D95',
 }
 
-const CHARACTER_SECONDARY: Record<CharacterId, string> = {
+const CHARACTER_SECONDARY: Record<string, string> = {
   lion:    '#7B4F00',
   mage:    '#2D1B69',
   fox:     '#7C2D12',
   owl:     '#042F2E',
   knight:  '#0F172A',
   cosmic:  '#4C0519',
-  phoenix:    '#7C2D12',
-  shadow:     '#0A0014',
+  phoenix: '#7C2D12',
+  shadow:  '#0A0014',
 }
 
 // ─── Fit loaded GLB into a normalised ±1 bounding box ─────────────────────────
@@ -73,8 +73,10 @@ function FitToBox({ children }: { children: ReactNode }) {
 }
 
 // ─── GLB model — colorised ─────────────────────────────────────────────────────
-function CharacterModel({ id, primaryColor, locked }: { id: CharacterId; primaryColor?: string; locked?: boolean }) {
-  const { scene } = useGLTF(MODEL_PATH[id])
+function CharacterModel({ id, primaryColor, locked, glbUrl }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string }) {
+  const modelPath = glbUrl ?? MODEL_PATH[id]
+  if (!modelPath) throw new Error(`No GLB for character: ${id}`)
+  const { scene } = useGLTF(modelPath)
   const cloned = useMemo(() => scene.clone(true), [scene])
 
   useEffect(() => {
@@ -92,8 +94,8 @@ function CharacterModel({ id, primaryColor, locked }: { id: CharacterId; primary
       return
     }
 
-    const primary   = new THREE.Color(primaryColor ?? CHARACTER_COLOR[id])
-    const secondary = new THREE.Color(CHARACTER_SECONDARY[id])
+    const primary   = new THREE.Color(primaryColor ?? CHARACTER_COLOR[id] ?? '#888888')
+    const secondary = new THREE.Color(CHARACTER_SECONDARY[id] ?? '#444444')
 
     const meshes: { mesh: THREE.Mesh; centerY: number }[] = []
     cloned.traverse(node => {
@@ -128,7 +130,7 @@ function CharacterModel({ id, primaryColor, locked }: { id: CharacterId; primary
                     id === 'cosmic'  ? 0.12
                   : id === 'phoenix' ? 0.28
                   : id === 'shadow'  ? 0.40
-                  : 0.04,
+                  : id in CHARACTER_COLOR ? 0.04 : 0.10,
       })
     })
   }, [id, primaryColor, locked, cloned])
@@ -140,7 +142,7 @@ function CharacterModel({ id, primaryColor, locked }: { id: CharacterId; primary
 Object.values(MODEL_PATH).forEach(p => useGLTF.preload(p))
 
 // ─── Animated placeholder sphere ─────────────────────────────────────────────
-function Placeholder({ id, locked }: { id: CharacterId; locked?: boolean }) {
+function Placeholder({ id, locked }: { id: string; locked?: boolean }) {
   const ref = useRef<THREE.Mesh>(null!)
   const color = locked ? '#555' : CHARACTER_COLOR[id]
   useFrame(({ clock }) => {
@@ -159,10 +161,10 @@ function Placeholder({ id, locked }: { id: CharacterId; locked?: boolean }) {
 
 // ─── Error boundary (missing GLB) ────────────────────────────────────────────
 class ModelErrorBoundary extends Component<
-  { id: CharacterId; locked?: boolean; children: ReactNode },
+  { id: string; locked?: boolean; children: ReactNode },
   { failed: boolean }
 > {
-  constructor(props: { id: CharacterId; locked?: boolean; children: ReactNode }) {
+  constructor(props: { id: string; locked?: boolean; children: ReactNode }) {
     super(props); this.state = { failed: false }
   }
   static getDerivedStateFromError() { return { failed: true } }
@@ -173,27 +175,28 @@ class ModelErrorBoundary extends Component<
   }
 }
 
+const DEFAULT_ANIM = { height: 0.35, spins: 1, squash: 0.10 }
+
 // ─── Animated scene group (bounce on tap) ─────────────────────────────────────
-// Each character has its own animation flavour
-const ANIM_PROFILE: Record<CharacterId, { height: number; spins: number; squash: number }> = {
+const ANIM_PROFILE: Record<string, { height: number; spins: number; squash: number }> = {
   lion:    { height: 0.45, spins: 1,   squash: 0.15 },
   mage:    { height: 0.30, spins: 2,   squash: 0.05 },
   fox:     { height: 0.55, spins: 1.5, squash: 0.20 },
   owl:     { height: 0.20, spins: 0.5, squash: 0.25 },
   knight:  { height: 0.25, spins: 0.5, squash: 0.10 },
   cosmic:  { height: 0.35, spins: 3,   squash: 0.05 },
-  phoenix:    { height: 0.60, spins: 2,   squash: 0.08 },
-  shadow:     { height: 0.15, spins: 4,   squash: 0.02 },
+  phoenix: { height: 0.60, spins: 2,   squash: 0.08 },
+  shadow:  { height: 0.15, spins: 4,   squash: 0.02 },
 }
 
 function AnimGroup({
   id, locked, tapCount, children,
 }: {
-  id: CharacterId; locked?: boolean; tapCount: number; children: ReactNode
+  id: string; locked?: boolean; tapCount: number; children: ReactNode
 }) {
   const ref = useRef<THREE.Group>(null!)
   const anim = useRef({ active: false, t: 0 })
-  const { height, spins, squash } = ANIM_PROFILE[id]
+  const { height, spins, squash } = ANIM_PROFILE[id] ?? DEFAULT_ANIM
 
   useEffect(() => {
     if (tapCount > 0 && !locked) anim.current = { active: true, t: 0 }
@@ -236,9 +239,9 @@ function AutoRotateGroup({ locked, children }: { locked?: boolean; children: Rea
 
 // ─── Full scene ───────────────────────────────────────────────────────────────
 function CharacterScene({
-  id, locked, interactive, tapCount, primaryColor,
+  id, locked, interactive, tapCount, primaryColor, glbUrl,
 }: {
-  id: CharacterId; locked?: boolean; interactive?: boolean; tapCount: number; primaryColor?: string
+  id: string; locked?: boolean; interactive?: boolean; tapCount: number; primaryColor?: string; glbUrl?: string
 }) {
   const { gl } = useThree()
 
@@ -251,7 +254,7 @@ function CharacterScene({
     <AnimGroup id={id} locked={locked} tapCount={tapCount}>
       <ModelErrorBoundary id={id} locked={locked}>
         <Suspense fallback={<Placeholder id={id} locked={locked} />}>
-          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} />
+          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} />
         </Suspense>
       </ModelErrorBoundary>
     </AnimGroup>
@@ -292,21 +295,23 @@ function CharacterScene({
 
 // ─── Public component ─────────────────────────────────────────────────────────
 interface Character3DProps {
-  characterId?: CharacterId
+  characterId?: string
   /** Legacy prop — same as characterId */
-  character?: CharacterId
+  character?: string
   locked?: boolean
   size?: number
   /** Enable drag-to-rotate and tap animation (default true for large views) */
   interactive?: boolean
   primaryColor?: string
   secondaryColor?: string
+  /** For dynamic characters not in the static MODEL_PATH registry */
+  glbUrl?: string
 }
 
 export default function Character3D({
-  characterId, character, locked, size = 160, interactive, primaryColor,
+  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl,
 }: Character3DProps) {
-  const id: CharacterId = characterId ?? character ?? 'lion'
+  const id: string = characterId ?? character ?? 'lion'
   const isInteractive = interactive ?? size >= 120
 
   // Tap detection on the outer div — avoids OrbitControls pointer event conflict
@@ -335,7 +340,7 @@ export default function Character3D({
         camera={{ position: [0, 0.1, 3.2], fov: 42 }}
         style={{ width: '100%', height: '100%' }}
       >
-        <CharacterScene id={id} locked={locked} interactive={isInteractive} tapCount={tapCount} primaryColor={primaryColor} />
+        <CharacterScene id={id} locked={locked} interactive={isInteractive} tapCount={tapCount} primaryColor={primaryColor} glbUrl={glbUrl} />
       </Canvas>
     </div>
   )
