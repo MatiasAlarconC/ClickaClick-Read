@@ -104,6 +104,7 @@ export default function PublicProfileScreen() {
         genreCounts,
         sessionCount,
         notesCount: 0,
+        seriesBooks: 0,
       })
 
       setLoading(false)

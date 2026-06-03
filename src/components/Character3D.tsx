@@ -11,7 +11,6 @@
 import { Suspense, useRef, useEffect, useMemo, useState, Component, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, Environment, ContactShadows, OrbitControls, useAnimations } from '@react-three/drei'
-import { SkeletonUtils } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
 import type { CharacterId } from './AvatarCharacter'
 
@@ -78,7 +77,7 @@ function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount }: { id: st
   const modelPath = glbUrl ?? MODEL_PATH[id]
   if (!modelPath) throw new Error(`No GLB for character: ${id}`)
   const { scene, animations } = useGLTF(modelPath)
-  const cloned = useMemo(() => { try { return SkeletonUtils.clone(scene) } catch { return scene.clone(true) } }, [scene])
+  const cloned = useMemo(() => scene.clone(true), [scene])
   const groupRef = useRef<THREE.Group>(null!)
   const { actions } = useAnimations(animations, groupRef)
 
@@ -111,7 +110,7 @@ function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount }: { id: st
   useEffect(() => {
     if (locked) {
       // Show greyed-out model for locked characters (not a sphere)
-      cloned.traverse(node => {
+      cloned.traverse((node: THREE.Object3D) => {
         if ((node as THREE.Mesh).isMesh) {
           const mesh = node as THREE.Mesh
           mesh.castShadow = false
@@ -127,7 +126,7 @@ function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount }: { id: st
     const secondary = new THREE.Color(CHARACTER_SECONDARY[id] ?? '#444444')
 
     const meshes: { mesh: THREE.Mesh; centerY: number }[] = []
-    cloned.traverse(node => {
+    cloned.traverse((node: THREE.Object3D) => {
       if ((node as THREE.Mesh).isMesh) {
         const mesh = node as THREE.Mesh
         mesh.castShadow = true; mesh.receiveShadow = true

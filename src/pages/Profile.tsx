@@ -122,6 +122,7 @@ export default function ProfileScreen() {
         streak, genreCounts,
         sessionCount:  allSessions.length,
         notesCount:    (notesRes.data ?? []).length,
+        seriesBooks:   0,
       })
     })
   }, [user])

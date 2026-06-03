@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore — @zxing/browser uses 'typings' not 'types'; works at runtime
 import { BrowserMultiFormatReader } from '@zxing/browser'
 
 interface Props {
@@ -31,7 +33,8 @@ export default function ISBNScanner({ onDetected, onClose }: Props) {
         const controls = await reader.decodeFromConstraints(
           { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
           videoRef.current,
-          (result) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (result: any) => {
             if (!result || doneRef.current || cancelled) return
             const text = result.getText()
             if (/^\d{10,13}$/.test(text)) {
