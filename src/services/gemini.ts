@@ -70,7 +70,7 @@ async function callGemini(prompt: string, model: string, jsonMode = false): Prom
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
-          maxOutputTokens: 2048,
+          maxOutputTokens: jsonMode ? 4096 : 2048,
           temperature: 0.7,
           ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
         },
@@ -135,7 +135,7 @@ export async function getRecommendations(params: {
   const count = params.count ?? 10
   const booksStr = params.finishedBooks.map(b => `"${b.title}" by ${b.author}${b.rating ? ` (rated ${b.rating}/5)` : ''}${b.genres?.length ? ` [${b.genres.join(', ')}]` : ''}`).join('\n')
   const excludeStr = params.exclude?.length ? `\nDo NOT include: ${params.exclude.map(t => `"${t}"`).join(', ')}.` : ''
-  const prompt = `You are a book recommendation engine. Output ONLY a JSON array with no other text.\n\nReader's books:\n${booksStr}${excludeStr}\n\nRecommend exactly ${count} books they would enjoy. Return this exact format:\n[{"title":"Book Title","author":"Author Name","reason":"One sentence why this matches their taste"}]`
+  const prompt = `You are a book recommendation engine. Output ONLY a valid JSON array, no markdown, no explanation.\n\nReader's books:\n${booksStr}${excludeStr}\n\nRecommend exactly ${count} books. Keep "reason" under 15 words. Return:\n[{"title":"...","author":"...","reason":"..."}]`
 
   try {
     const { text, tokens } = await callGemini(prompt, cfg.model, true)
