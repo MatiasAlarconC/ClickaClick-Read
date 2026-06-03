@@ -81,7 +81,7 @@ export async function searchBooks(
 
   const [googleRes, openLibGen] = await Promise.allSettled([
     searchGoogleBooks(googleQuery, startIndex),
-    startIndex === 0 ? searchOpenLibrary(q, 'q', options.genre, options.author) : Promise.resolve({ results: [], totalItems: 0 }),
+    searchOpenLibrary(q, 'q', options.genre, options.author, startIndex),
   ])
 
   const seen = new Set<string>()
@@ -98,7 +98,7 @@ export async function searchBooks(
   }
 
   if (googleRes.status === 'fulfilled')  { addUnique(googleRes.value.results); totalItems = Math.max(totalItems, googleRes.value.totalItems) }
-  if (openLibGen.status === 'fulfilled') { addUnique(openLibGen.value.results) }
+  if (openLibGen.status === 'fulfilled') { addUnique(openLibGen.value.results); totalItems = Math.max(totalItems, openLibGen.value.totalItems) }
 
   cache.set(cacheKey, { results, totalItems, ts: Date.now() })
   return { results, totalItems }
@@ -139,8 +139,8 @@ async function searchGoogleBooks(query: string, startIndex = 0): Promise<{ resul
 }
 
 // field: 'q' (general) or 'title' (title-specific for obscure books)
-async function searchOpenLibrary(query: string, field: 'q' | 'title' = 'q', genre?: string, author?: string): Promise<{ results: SearchResult[]; totalItems: number }> {
-  let urlStr = `https://openlibrary.org/search.json?${field}=${encodeURIComponent(query)}&limit=20&fields=key,title,author_name,cover_i,number_of_pages_median,subject,first_publish_year,isbn`
+async function searchOpenLibrary(query: string, field: 'q' | 'title' = 'q', genre?: string, author?: string, startIndex = 0): Promise<{ results: SearchResult[]; totalItems: number }> {
+  let urlStr = `https://openlibrary.org/search.json?${field}=${encodeURIComponent(query)}&limit=25&offset=${startIndex}&fields=key,title,author_name,cover_i,number_of_pages_median,subject,first_publish_year,isbn`
   if (author) urlStr += `&author=${encodeURIComponent(author)}`
   if (genre && genre !== 'All') urlStr += `&subject=${encodeURIComponent(genre)}`
   const res = await fetch(urlStr)
@@ -149,7 +149,7 @@ async function searchOpenLibrary(query: string, field: 'q' | 'title' = 'q', genr
 
   return {
     totalItems: data.numFound ?? 0,
-    results: (data.docs ?? []).slice(0, 20).map((doc: OpenLibraryDoc): SearchResult => ({
+    results: (data.docs ?? []).slice(0, 25).map((doc: OpenLibraryDoc): SearchResult => ({
       id: doc.key,
       title: doc.title ?? 'Unknown Title',
       author: (doc.author_name ?? ['Unknown Author']).slice(0, 2).join(', '),
