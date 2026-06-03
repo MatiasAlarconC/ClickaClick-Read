@@ -53,13 +53,13 @@ const CACHE_TTL = 5 * 60 * 1000 // 5 min
 
 export async function searchBooks(
   query: string,
-  options: { startIndex?: number; genre?: string; author?: string } = {}
+  options: { startIndex?: number; genre?: string; author?: string; language?: string } = {}
 ): Promise<{ results: SearchResult[]; totalItems: number }> {
   const q = query.trim()
   if (!q && !options.genre && !options.author) return { results: [], totalItems: 0 }
 
   const startIndex = options.startIndex ?? 0
-  const cacheKey = `${q}|${options.genre ?? ''}|${options.author ?? ''}|${startIndex}`
+  const cacheKey = `${q}|${options.genre ?? ''}|${options.author ?? ''}|${options.language ?? ''}|${startIndex}`
 
   const cached = cache.get(cacheKey)
   if (cached && Date.now() - cached.ts < CACHE_TTL) return { results: cached.results, totalItems: cached.totalItems ?? cached.results.length }
@@ -80,8 +80,8 @@ export async function searchBooks(
   if (options.author) googleQuery += ` inauthor:${options.author}`
 
   const [googleRes, openLibGen] = await Promise.allSettled([
-    searchGoogleBooks(googleQuery, startIndex),
-    searchOpenLibrary(q, 'q', options.genre, options.author, startIndex),
+    searchGoogleBooks(googleQuery, startIndex, options.language),
+    searchOpenLibrary(q, 'q', options.genre, options.author, startIndex, options.language),
   ])
 
   const seen = new Set<string>()
@@ -104,12 +104,19 @@ export async function searchBooks(
   return { results, totalItems }
 }
 
-async function searchGoogleBooks(query: string, startIndex = 0): Promise<{ results: SearchResult[]; totalItems: number }> {
+// Maps ISO 639-1 code → MARC language code for Open Library
+const LANG_TO_MARC: Record<string, string> = {
+  en: 'eng', es: 'spa', fr: 'fre', de: 'ger', it: 'ita',
+  pt: 'por', ja: 'jpn', zh: 'chi', ru: 'rus', ar: 'ara',
+}
+
+async function searchGoogleBooks(query: string, startIndex = 0, language?: string): Promise<{ results: SearchResult[]; totalItems: number }> {
   const url = new URL('https://www.googleapis.com/books/v1/volumes')
   url.searchParams.set('q', query)
   url.searchParams.set('maxResults', '25')
   url.searchParams.set('startIndex', String(startIndex))
   url.searchParams.set('printType', 'books')
+  if (language) url.searchParams.set('langRestrict', language)
   if (GOOGLE_API_KEY) url.searchParams.set('key', GOOGLE_API_KEY)
 
   const res = await fetch(url.toString())
@@ -139,10 +146,11 @@ async function searchGoogleBooks(query: string, startIndex = 0): Promise<{ resul
 }
 
 // field: 'q' (general) or 'title' (title-specific for obscure books)
-async function searchOpenLibrary(query: string, field: 'q' | 'title' = 'q', genre?: string, author?: string, startIndex = 0): Promise<{ results: SearchResult[]; totalItems: number }> {
+async function searchOpenLibrary(query: string, field: 'q' | 'title' = 'q', genre?: string, author?: string, startIndex = 0, language?: string): Promise<{ results: SearchResult[]; totalItems: number }> {
   let urlStr = `https://openlibrary.org/search.json?${field}=${encodeURIComponent(query)}&limit=25&offset=${startIndex}&fields=key,title,author_name,cover_i,number_of_pages_median,subject,first_publish_year,isbn`
   if (author) urlStr += `&author=${encodeURIComponent(author)}`
   if (genre && genre !== 'All') urlStr += `&subject=${encodeURIComponent(genre)}`
+  if (language && LANG_TO_MARC[language]) urlStr += `&language=${LANG_TO_MARC[language]}`
   const res = await fetch(urlStr)
   if (!res.ok) throw new Error(`Open Library ${res.status}`)
   const data = await res.json()

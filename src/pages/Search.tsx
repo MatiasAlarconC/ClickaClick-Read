@@ -8,11 +8,25 @@ import type { SearchResult } from '../types'
 
 const GENRES = ['All', 'Fiction', 'Non-Fiction', 'Science', 'History', 'Philosophy', 'Biography', 'Fantasy', 'Mystery', 'Thriller', 'Romance', 'Horror']
 
+const LANGUAGES: { code: string; label: string }[] = [
+  { code: '',   label: 'Any' },
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'it', label: 'Italian' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'ru', label: 'Russian' },
+  { code: 'ar', label: 'Arabic' },
+]
+
 const SS_KEY = 'clickaclick_search_state'
 
 interface SavedSearch {
   query: string; genre: string; results: SearchResult[]
-  authorFilter: string; yearFrom: string; yearTo: string
+  authorFilter: string; yearFrom: string; yearTo: string; language: string
 }
 
 export default function SearchScreen() {
@@ -39,6 +53,7 @@ export default function SearchScreen() {
   const [authorFilter, setAuthorFilter] = useState(saved?.authorFilter ?? '')
   const [yearFrom, setYearFrom] = useState(saved?.yearFrom ?? '')
   const [yearTo, setYearTo] = useState(saved?.yearTo ?? '')
+  const [language, setLanguage] = useState(saved?.language ?? '')
 
   // Manual book entry state
   const [showManual, setShowManual] = useState(false)
@@ -48,12 +63,13 @@ export default function SearchScreen() {
   const [manualCover, setManualCover] = useState('')
   const [manualYear, setManualYear] = useState('')
 
-  const persistState = useCallback((q: string, g: string, r: SearchResult[], af: string, yf: string, yt: string) => {
-    sessionStorage.setItem(SS_KEY, JSON.stringify({ query: q, genre: g, results: r, authorFilter: af, yearFrom: yf, yearTo: yt }))
+  const persistState = useCallback((q: string, g: string, r: SearchResult[], af: string, yf: string, yt: string, lang: string) => {
+    sessionStorage.setItem(SS_KEY, JSON.stringify({ query: q, genre: g, results: r, authorFilter: af, yearFrom: yf, yearTo: yt, language: lang }))
   }, [])
 
-  const handleSearch = useCallback(async (q: string, af?: string, g?: string, page = 0) => {
+  const handleSearch = useCallback(async (q: string, af?: string, g?: string, page = 0, lang?: string) => {
     const effectiveGenre = g ?? genre
+    const effectiveLang = lang !== undefined ? lang : language
     const effectiveQuery = q.trim() || (effectiveGenre !== 'All' ? effectiveGenre : '')
     if (!effectiveQuery) { setResults([]); setSearched(false); return }
     setLoading(true); setSearched(true)
@@ -63,18 +79,19 @@ export default function SearchScreen() {
       const { results: data, totalItems: total } = await searchBooks(effectiveQuery, {
         genre: effectiveGenre !== 'All' ? effectiveGenre : undefined,
         author: authorTerm || undefined,
+        language: effectiveLang || undefined,
         startIndex: page * PAGE_SIZE,
       })
       setResults(data)
       setTotalItems(total)
       setCurrentPage(page)
-      persistState(q, effectiveGenre, data, af ?? authorFilter, yearFrom, yearTo)
+      persistState(q, effectiveGenre, data, af ?? authorFilter, yearFrom, yearTo, effectiveLang)
     } catch {
       setResults([])
       setTotalItems(0)
     }
     setLoading(false)
-  }, [genre, authorFilter, yearFrom, yearTo, persistState, PAGE_SIZE])
+  }, [genre, authorFilter, language, yearFrom, yearTo, persistState, PAGE_SIZE])
 
   const handleQueryChange = (val: string) => {
     setQuery(val)
@@ -101,7 +118,7 @@ export default function SearchScreen() {
     navigate('/detail', { state: { book } })
   }
 
-  const activeFilterCount = [authorFilter, yearFrom, yearTo].filter(Boolean).length + (genre !== 'All' ? 1 : 0)
+  const activeFilterCount = [authorFilter, yearFrom, yearTo, language].filter(Boolean).length + (genre !== 'All' ? 1 : 0)
 
   // Client-side: only year filter (genre and author now handled server-side via API qualifiers)
   const filtered = results.filter(b => {
@@ -179,9 +196,21 @@ export default function SearchScreen() {
                         style={{ flex: 1, padding: '8px 11px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 14, color: theme.fg }}/>
                     </div>
                   </div>
+                  {/* Language */}
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.muted, marginBottom: 7 }}>Language</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {LANGUAGES.map(l => (
+                        <button key={l.code} onClick={() => setLanguage(l.code)}
+                          style={{ padding: '6px 12px', borderRadius: 999, background: l.code === language ? theme.accent : theme.bg, color: l.code === language ? theme.accentFg : theme.muted, border: `1px solid ${l.code === language ? theme.accent : theme.border}`, whiteSpace: 'nowrap', fontSize: 12, fontWeight: 500 }}>
+                          {l.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => { setShowFilters(false); handleSearch(query) }} style={{ flex: 1, padding: '9px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Apply</button>
-                    <button onClick={() => { setAuthorFilter(''); setYearFrom(''); setYearTo(''); setGenre('All') }} style={{ padding: '9px 14px', background: theme.bg, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 13 }}>Clear</button>
+                    <button onClick={() => { setAuthorFilter(''); setYearFrom(''); setYearTo(''); setGenre('All'); setLanguage('') }} style={{ padding: '9px 14px', background: theme.bg, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 13 }}>Clear</button>
                   </div>
                 </div>
               </div>
@@ -259,17 +288,17 @@ export default function SearchScreen() {
             const atLast = currentPage + 1 >= cap
             return (
               <div style={{ borderTop: `1px solid ${theme.border}`, marginTop: 8, padding: '16px 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
-                <button disabled={atFirst} onClick={() => handleSearch(query, authorFilter, genre, currentPage - 1)}
+                <button disabled={atFirst} onClick={() => handleSearch(query, authorFilter, genre, currentPage - 1, language)}
                   style={{ height: 38, padding: '0 14px', borderRadius: 10, border: `1px solid ${theme.border}`, background: 'none', color: atFirst ? theme.muted : theme.fg, fontSize: 13, fontWeight: 500, cursor: atFirst ? 'default' : 'pointer', opacity: atFirst ? 0.35 : 1 }}>
                   ← Prev
                 </button>
                 {pages.map(p => (
-                  <button key={p} onClick={() => handleSearch(query, authorFilter, genre, p)}
+                  <button key={p} onClick={() => handleSearch(query, authorFilter, genre, p, language)}
                     style={{ width: 38, height: 38, borderRadius: 10, border: `1px solid ${p === currentPage ? theme.accent : theme.border}`, background: p === currentPage ? theme.accent : 'none', color: p === currentPage ? theme.accentFg : theme.fg, fontSize: 13, fontWeight: p === currentPage ? 700 : 400, cursor: p === currentPage ? 'default' : 'pointer', transition: 'all 0.15s' }}>
                     {p + 1}
                   </button>
                 ))}
-                <button disabled={atLast} onClick={() => handleSearch(query, authorFilter, genre, currentPage + 1)}
+                <button disabled={atLast} onClick={() => handleSearch(query, authorFilter, genre, currentPage + 1, language)}
                   style={{ height: 38, padding: '0 14px', borderRadius: 10, border: `1px solid ${theme.border}`, background: 'none', color: atLast ? theme.muted : theme.fg, fontSize: 13, fontWeight: 500, cursor: atLast ? 'default' : 'pointer', opacity: atLast ? 0.35 : 1 }}>
                   Next →
                 </button>
