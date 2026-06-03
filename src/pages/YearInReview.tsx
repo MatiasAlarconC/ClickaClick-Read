@@ -147,11 +147,13 @@ function IntroSlide({ year, p, username }: { year: number; p: Palette; username:
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', color: `${p.accent}bb`, marginBottom: 20 }}>Your Reading Year</div>
         </motion.div>
         <motion.div initial={{ opacity: 0, scale: 0.65 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35, duration: 0.85, ease: [0.34, 1.56, 0.64, 1] }}>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 100, fontWeight: 400, lineHeight: 1, letterSpacing: -4, marginBottom: 22,
-            background: `linear-gradient(135deg,#fff 40%,${p.accent})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-            filter: `drop-shadow(0 0 40px ${p.accent}88)` }}>
+          <motion.div
+            animate={{ filter: [`drop-shadow(0 0 30px ${p.accent}44)`, `drop-shadow(0 0 60px ${p.accent}88)`, `drop-shadow(0 0 30px ${p.accent}44)`] }}
+            transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
+            style={{ fontFamily: 'Georgia, serif', fontSize: 100, fontWeight: 400, lineHeight: 1, letterSpacing: -4, marginBottom: 22,
+              background: `linear-gradient(135deg,#fff 40%,${p.accent})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
             {year}
-          </div>
+          </motion.div>
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.85, duration: 0.6 }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: `${p.text}cc`, lineHeight: 1.5 }}>
@@ -177,8 +179,15 @@ function StatSlide({ label, value, suffix = '', subtext, p, icon }: { label: str
           <motion.div animate={{ rotate: [0, 10, -5, 0] }} transition={{ delay: 0.7, duration: 1.6 }}
             style={{ color: p.accent, marginBottom: 22, display: 'inline-block' }}>{icon}</motion.div>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 18 }}>{label}</div>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 90, fontWeight: 400, lineHeight: 1, letterSpacing: -4, marginBottom: 20, filter: `drop-shadow(0 0 35px ${p.accent}88)` }}>
-            <CountUp to={value} suffix={suffix} accent={p.accent} />
+          <div style={{ position: 'relative', display: 'inline-block', marginBottom: 20 }}>
+            <motion.div
+              animate={{ scale: [1, 1.15, 1], opacity: [0.15, 0.35, 0.15] }}
+              transition={{ duration: 2.5, repeat: Infinity }}
+              style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 160, height: 160, borderRadius: '50%', background: `radial-gradient(circle,${p.accent} 0%,transparent 70%)`, pointerEvents: 'none' }}
+            />
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 90, fontWeight: 400, lineHeight: 1, letterSpacing: -4, filter: `drop-shadow(0 0 35px ${p.accent}88)`, position: 'relative' }}>
+              <CountUp to={value} suffix={suffix} accent={p.accent} />
+            </div>
           </div>
         </motion.div>
         {subtext && (
@@ -218,6 +227,8 @@ function TopAuthorSlide({ topAuthor, topAuthorCount, p }: { topAuthor: string; t
             {topAuthor}
           </div>
         </motion.div>
+        <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ delay: 0.8, duration: 0.7 }}
+          style={{ height: 2, background: `linear-gradient(90deg,${p.accent},${p.accent2})`, marginBottom: 16 }} />
         <motion.div initial={{ width: 0 }} animate={{ width: 60 }} transition={{ delay: 0.55, duration: 0.5 }}
           style={{ height: 3, background: `linear-gradient(90deg,${p.accent},${p.accent2})`, borderRadius: 2, marginBottom: 22 }} />
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65, duration: 0.5 }}>
@@ -268,6 +279,13 @@ function MonthlySlide({ monthlyData, bestMonth, p }: { monthlyData: MonthData[];
                     boxShadow: isBest ? `0 0 12px ${p.accent}` : 'none',
                     transformOrigin: 'bottom',
                   }}
+                  {...(isBest ? {
+                    animate: {
+                      scaleY: 1,
+                      boxShadow: [`0 0 12px ${p.accent}88`, `0 0 24px ${p.accent}cc`, `0 0 12px ${p.accent}88`],
+                    },
+                    transition: { scaleY: { delay: 0.05 * i, duration: 0.35, ease: 'backOut' }, boxShadow: { duration: 1.8, repeat: Infinity, delay: 1.5 } },
+                  } : {})}
                 />
                 <div style={{ fontSize: 8, color: isBest ? p.accent : `${p.text}44`, fontWeight: isBest ? 700 : 400, letterSpacing: 0.2 }}>
                   {m.month.slice(0, 1)}
@@ -436,7 +454,7 @@ function OutroSlide({ booksFinished, pagesRead, hours, p }: { booksFinished: num
           </div>
         </motion.div>
         {rows.map(({ label, value, icon }, i) => (
-          <motion.div key={label} initial={{ opacity: 0, x: -26 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.18 + i * 0.13, duration: 0.5 }}
+          <motion.div key={label} initial={{ opacity: 0, x: -26 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + i * 0.18, duration: 0.6, ease: [0.34, 1.56, 0.64, 1] }}
             style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: `1px solid ${p.text}13` }}>
             <span style={{ fontSize: 15, color: `${p.text}77`, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ color: `${p.text}66` }}>{icon}</span> {label}
@@ -474,30 +492,29 @@ export default function YearInReviewScreen() {
     const startOfYear = new Date(year, 0, 1).toISOString()
     Promise.all([
       supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'finished').gte('finished_at', startOfYear),
-      supabase.from('reading_sessions').select('*').eq('user_id', user.id).gte('started_at', startOfYear),
+      supabase.from('reading_sessions').select('*').eq('user_id', user.id),
     ]).then(([booksRes, sessRes]) => {
       const books = (booksRes.data ?? []) as UserBook[]
       const sessions = (sessRes.data ?? []) as ReadingSession[]
+      const yearSessions = sessions.filter(s => new Date(s.started_at) >= new Date(startOfYear))
 
-      const pagesRead = sessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
-      const totalSeconds = sessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0)
+      // All-time stats (matching Stats screen)
+      const pagesRead = sessions.reduce((s, r) => s + ((r as any).pages_read ?? 0), 0)
+      const totalSeconds = sessions.filter(s => !(s as any).is_manual).reduce((s, r) => s + ((r as any).duration_seconds ?? 0), 0)
 
-      // Genre
+      // Genre (from year's finished books)
       const genreCount: Record<string, number> = {}
       for (const b of books) for (const g of (b.book as any)?.genres ?? []) genreCount[g] = (genreCount[g] ?? 0) + 1
       const topGenreEntry = Object.entries(genreCount).sort((a, b) => b[1] - a[1])[0]
 
-      // Streak — filter out manual sessions, sort by date
-      const nonManualDates = sessions
-        .filter(s => !s.is_manual)
-        .map(s => new Date(s.started_at).toDateString())
-      const sessionDates = [...new Set(nonManualDates)]
-        .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+      // Streak — use year sessions, filter out manual sessions, sort by date
+      const sessionDates = new Set(yearSessions.filter(s => !(s as any).is_manual).map(s => new Date(s.started_at).toDateString()))
+      const sorted = [...sessionDates].sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
 
       let longest = 0, run = 0
-      for (let i = 0; i < sessionDates.length; i++) {
+      for (let i = 0; i < sorted.length; i++) {
         if (i === 0) { run = 1; longest = 1; continue }
-        const prev = new Date(sessionDates[i - 1]), cur = new Date(sessionDates[i])
+        const prev = new Date(sorted[i - 1]), cur = new Date(sorted[i])
         if ((cur.getTime() - prev.getTime()) / 86400000 <= 1) { run++; longest = Math.max(longest, run) } else run = 1
       }
 
@@ -512,10 +529,10 @@ export default function YearInReviewScreen() {
       const topAuthorCount = topAuthorEntry?.[1] ?? 0
       const uniqueAuthors = Object.keys(authorCount).length
 
-      // monthlyData
+      // monthlyData — uses yearSessions
       const monthMap: Record<number, { sessions: number; pages: number }> = {}
       for (let i = 0; i < 12; i++) monthMap[i] = { sessions: 0, pages: 0 }
-      for (const s of sessions) {
+      for (const s of yearSessions) {
         const m = new Date(s.started_at).getMonth()
         monthMap[m].sessions++
         monthMap[m].pages += (s as any).pages_read ?? 0

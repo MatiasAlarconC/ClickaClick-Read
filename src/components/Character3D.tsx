@@ -10,7 +10,8 @@
 
 import { Suspense, useRef, useEffect, useMemo, useState, Component, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useGLTF, Environment, ContactShadows, OrbitControls } from '@react-three/drei'
+import { useGLTF, Environment, ContactShadows, OrbitControls, useAnimations } from '@react-three/drei'
+import { SkeletonUtils } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import * as THREE from 'three'
 import type { CharacterId } from './AvatarCharacter'
 
@@ -73,11 +74,39 @@ function FitToBox({ children }: { children: ReactNode }) {
 }
 
 // ─── GLB model — colorised ─────────────────────────────────────────────────────
-function CharacterModel({ id, primaryColor, locked, glbUrl }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string }) {
+function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string; tapCount?: number }) {
   const modelPath = glbUrl ?? MODEL_PATH[id]
   if (!modelPath) throw new Error(`No GLB for character: ${id}`)
-  const { scene } = useGLTF(modelPath)
-  const cloned = useMemo(() => scene.clone(true), [scene])
+  const { scene, animations } = useGLTF(modelPath)
+  const cloned = useMemo(() => { try { return SkeletonUtils.clone(scene) } catch { return scene.clone(true) } }, [scene])
+  const groupRef = useRef<THREE.Group>(null!)
+  const { actions } = useAnimations(animations, groupRef)
+
+  useEffect(() => {
+    if (!actions || Object.keys(actions).length === 0) return
+    const idle = actions['Idle'] ?? actions['idle'] ?? actions['mixamo.com'] ?? Object.values(actions)[0]
+    if (idle) idle.reset().fadeIn(0.4).play()
+  }, [actions])
+
+  const prevTapRef = useRef(0)
+  useEffect(() => {
+    if (!tapCount || tapCount === prevTapRef.current || !actions) return
+    prevTapRef.current = tapCount
+    const keys = Object.keys(actions)
+    if (keys.length === 0) return
+    const actionKey = keys.find(k => !k.toLowerCase().includes('idle')) ?? keys[0]
+    const action = actions[actionKey]
+    if (!action) return
+    action.reset().setLoop(THREE.LoopOnce, 1).play()
+    action.clampWhenFinished = true
+    setTimeout(() => {
+      const idleKey = keys.find(k => k.toLowerCase().includes('idle')) ?? keys[0]
+      if (idleKey !== actionKey && actions[idleKey]) {
+        action.fadeOut(0.3)
+        actions[idleKey]!.reset().fadeIn(0.3).play()
+      }
+    }, 1500)
+  }, [tapCount, actions])
 
   useEffect(() => {
     if (locked) {
@@ -135,7 +164,7 @@ function CharacterModel({ id, primaryColor, locked, glbUrl }: { id: string; prim
     })
   }, [id, primaryColor, locked, cloned])
 
-  return <FitToBox><primitive object={cloned} /></FitToBox>
+  return <FitToBox><group ref={groupRef}><primitive object={cloned} /></group></FitToBox>
 }
 
 // Pre-warm GLTF cache
@@ -254,7 +283,7 @@ function CharacterScene({
     <AnimGroup id={id} locked={locked} tapCount={tapCount}>
       <ModelErrorBoundary id={id} locked={locked}>
         <Suspense fallback={<Placeholder id={id} locked={locked} />}>
-          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} />
+          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} tapCount={tapCount} />
         </Suspense>
       </ModelErrorBoundary>
     </AnimGroup>

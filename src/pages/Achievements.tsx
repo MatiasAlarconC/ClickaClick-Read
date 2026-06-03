@@ -86,11 +86,14 @@ export default function AchievementsScreen() {
         else if (i > 0) break
       }
 
+      // TODO: seriesBooks needs a series_name column on user_books/books to be computed properly
+      const seriesBooks = 0
+
       setStats({
         booksFinished, totalBooks, totalPages,
         totalHours, streak,
         genreCounts: countGenres(userBooks),
-        sessionCount, notesCount,
+        sessionCount, notesCount, seriesBooks,
       })
 
       // Detect newly unlocked achievements and create notifications
@@ -99,7 +102,7 @@ export default function AchievementsScreen() {
           booksFinished, totalBooks, totalPages,
           totalHours, streak,
           genreCounts: countGenres(userBooks),
-          sessionCount, notesCount,
+          sessionCount, notesCount, seriesBooks,
         }
         const dbConverted: UnifiedAchievement[] = dbAchievements.map(a => ({
           id: a.id, name: a.name, description: a.description,

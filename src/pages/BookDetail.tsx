@@ -48,6 +48,12 @@ export default function BookDetailScreen() {
   const [synopsis, setSynopsis] = useState<string | null>(book?.synopsis ?? null)
   const [seriesInfo, setSeriesInfo] = useState<SeriesInfo | null | undefined>(undefined)
 
+  const SECKRY_SERIES: Record<string, import('../services/gemini').SeriesInfo> = {
+    'seckry-1': { seriesName: 'Seckry Sevenstars', position: 1, totalBooks: 3, nextTitle: 'Seckry Sevenstars and the Trinity Awakening', nextAuthor: 'Joseph Evans' },
+    'seckry-2': { seriesName: 'Seckry Sevenstars', position: 2, totalBooks: 3, nextTitle: 'Seckry Sevenstars and the Fate of the Fractured Part One', nextAuthor: 'Joseph Evans' },
+    'seckry-3': { seriesName: 'Seckry Sevenstars', position: 3, totalBooks: 3, nextTitle: '', nextAuthor: 'Joseph Evans' },
+  }
+
   useEffect(() => {
     if (!user || !book) return
 
@@ -96,7 +102,10 @@ export default function BookDetailScreen() {
       })
 
     // Detect series in background (non-blocking)
-    if (book && user) {
+    const bookId = book.id ?? book.google_books_id ?? ''
+    if (SECKRY_SERIES[bookId]) {
+      setSeriesInfo(SECKRY_SERIES[bookId])
+    } else if (book && user) {
       detectBookSeries({ title: book.title, author: book.author, userId: user.id })
         .then(info => setSeriesInfo(info))
         .catch(() => setSeriesInfo(null))
