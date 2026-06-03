@@ -43,7 +43,6 @@ export default function ProfileScreen() {
   const [showCreator,     setShowCreator]     = useState(false)
   const [showGoals,       setShowGoals]       = useState(false)
   const [showAccount,     setShowAccount]     = useState(false)
-  const [showTitlePicker, setShowTitlePicker] = useState(false)
   const [showEmailForm,   setShowEmailForm]   = useState(false)
   const [showPwForm,      setShowPwForm]      = useState(false)
 
@@ -131,11 +130,6 @@ export default function ProfileScreen() {
   const unlockedCharacters = achievementStats ? getUnlockedCharacters(achievementStats) : undefined
   const unlockedTitles     = achievementStats ? getUnlockedTitles(achievementStats) : []
   const profileTitle: string | null = (profile as any)?.title ?? null
-  const availableTitles    = (() => {
-    const base = ['Reader', ...unlockedTitles.filter(t => t !== 'Reader')]
-    if (profileTitle && !base.includes(profileTitle)) base.push(profileTitle)
-    return base
-  })()
   const memberYear = user?.created_at ? new Date(user.created_at).getFullYear() : null
   const heroStats = [
     { icon: <BookOpenIcon size={14} color={primaryColor}/>, label: 'Books',  value: String(profileStats.booksFinished) },
@@ -204,11 +198,6 @@ export default function ProfileScreen() {
     if (!error) { setNewPassword(''); setConfirmPassword('') }
   }
 
-  const handleSelectTitle = async (title: string) => {
-    await updateProfile({ title } as any)
-    setShowTitlePicker(false)
-  }
-
   const handleSignOut = async () => { await signOut(); navigate('/') }
 
   const inputStyle: React.CSSProperties = {
@@ -235,11 +224,9 @@ export default function ProfileScreen() {
 
         <div style={{ textAlign: 'center', marginBottom: 8, zIndex: 1 }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, color: theme.fg, letterSpacing: -0.5 }}>{profile?.username ?? 'Reader'}</div>
-          {/* Title with edit pencil */}
-          <button onClick={() => setShowTitlePicker(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 2, padding: '2px 6px', borderRadius: 6 }}>
-            <span style={{ fontSize: 12, color: primaryColor, fontWeight: 600 }}>{profileTitle ?? 'Reader'}</span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.828 2.828 0 014 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke={primaryColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
+          {profileTitle && (
+            <div style={{ fontSize: 12, color: primaryColor, fontWeight: 600, marginTop: 2 }}>{profileTitle}</div>
+          )}
           <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{memberYear ? `member since ${memberYear}` : charDef.description}</div>
         </div>
 
@@ -475,39 +462,6 @@ export default function ProfileScreen() {
         </div>
 
       </div>
-
-      {/* ── Title picker sheet ────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showTitlePicker && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}
-            onClick={() => setShowTitlePicker(false)}>
-            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              style={{ background: theme.bgElevated, borderRadius: '20px 20px 0 0', padding: 24, width: '100%', paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}
-              onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <div style={{ fontSize: 17, fontWeight: 700, color: theme.fg }}>Your Titles</div>
-                <div style={{ fontSize: 11, color: theme.muted }}>{unlockedTitles.length} unlocked</div>
-              </div>
-              {availableTitles.length === 0 ? (
-                <div style={{ fontSize: 13, color: theme.muted, textAlign: 'center', padding: '24px 0' }}>Earn achievements to unlock titles.</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '50vh', overflowY: 'auto' }}>
-                  {availableTitles.map(title => {
-                    const isActive = (profileTitle ?? 'Reader') === title
-                    return (
-                      <button key={title} onClick={() => handleSelectTitle(title)} style={{ padding: '13px 16px', background: isActive ? `${primaryColor}15` : theme.bgSecondary, border: `1px solid ${isActive ? primaryColor + '50' : 'transparent'}`, borderRadius: 12, textAlign: 'left', fontSize: 14, color: isActive ? primaryColor : theme.fg, fontWeight: isActive ? 700 : 400, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        {title}
-                        {isActive && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke={primaryColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* ── Avatar creator ────────────────────────────────────────────────────── */}
       <AnimatePresence>

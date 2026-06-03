@@ -103,7 +103,7 @@ export default function StatsScreen() {
 
   // Streak
   const { currentStreak, longestStreak } = useMemo(() => {
-    const sessionDates = new Set(sessions.map(s => new Date(s.started_at).toDateString()))
+    const sessionDates = new Set(sessions.filter(s => !s.is_manual).map(s => new Date(s.started_at).toDateString()))
     let current = 0; const today = new Date()
     for (let i = 0; i < 366; i++) {
       const d = new Date(today); d.setDate(today.getDate() - i)
@@ -111,7 +111,7 @@ export default function StatsScreen() {
       else if (i > 0) break
     }
     let longest = 0, run = 0
-    const sorted = [...sessionDates].sort()
+    const sorted = [...sessionDates].sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
     for (let i = 0; i < sorted.length; i++) {
       if (i === 0) { run = 1; longest = 1; continue }
       const prev = new Date(sorted[i-1]); const cur = new Date(sorted[i])
@@ -159,6 +159,22 @@ export default function StatsScreen() {
   }, [sessions])
 
   const CELL = 5.2; const GAP = 1.5
+
+  const heatmapMonthLabels = useMemo(() => {
+    const labels: { text: string; col: number }[] = []
+    let lastMonth = -1
+    for (let week = 0; week < 52; week++) {
+      const cell = heatmap[week * 7]
+      if (!cell) continue
+      const m = cell.date.getMonth()
+      if (m !== lastMonth) {
+        labels.push({ text: cell.date.toLocaleString('default', { month: 'short' }), col: week })
+        lastMonth = m
+      }
+    }
+    return labels
+  }, [heatmap])
+
   const heatmapRef = React.useRef<HTMLDivElement>(null)
   React.useEffect(() => {
     if (heatmapRef.current) heatmapRef.current.scrollLeft = heatmapRef.current.scrollWidth
@@ -214,22 +230,27 @@ export default function StatsScreen() {
             </div>
           </div>
           <div ref={heatmapRef} style={{ overflowX: 'auto' }}>
-            <div style={{ display: 'flex', gap: GAP, width: 52 * (CELL + GAP) }}>
-              {[...Array(52)].map((_, week) => (
-                <div key={week} style={{ display: 'flex', flexDirection: 'column', gap: GAP }}>
-                  {[...Array(7)].map((_, day) => {
-                    const cell = heatmap[week * 7 + day]
-                    const val = cell?.value ?? 0
-                    const isFuture = cell?.date > new Date()
-                    const bg = isFuture ? theme.border : val === 0 ? theme.border : val === 1 ? (dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.28)') : theme.accent
-                    return <div key={day} style={{ width: CELL, height: CELL, borderRadius: 1.2, background: bg, opacity: isFuture ? 0.4 : 1 }} />
-                  })}
-                </div>
-              ))}
+            <div style={{ width: 52 * (CELL + GAP) }}>
+              <div style={{ display: 'flex', gap: GAP }}>
+                {[...Array(52)].map((_, week) => (
+                  <div key={week} style={{ display: 'flex', flexDirection: 'column', gap: GAP }}>
+                    {[...Array(7)].map((_, day) => {
+                      const cell = heatmap[week * 7 + day]
+                      const isFuture = cell?.date && cell.date > new Date()
+                      if (isFuture) return <div key={day} style={{ width: CELL, height: CELL }} />
+                      const val = cell?.value ?? 0
+                      const bg = val === 0 ? theme.border : val === 1 ? (dark ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.28)') : theme.accent
+                      return <div key={day} style={{ width: CELL, height: CELL, borderRadius: 1.2, background: bg }} />
+                    })}
+                  </div>
+                ))}
+              </div>
+              <div style={{ position: 'relative', height: 14, marginTop: 4 }}>
+                {heatmapMonthLabels.map(({ text, col }) => (
+                  <span key={col} style={{ position: 'absolute', left: col * (CELL + GAP), fontSize: 9, color: theme.muted, whiteSpace: 'nowrap' }}>{text}</span>
+                ))}
+              </div>
             </div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-            {['Jan','Mar','May','Jul','Sep','Nov'].map(m => <span key={m} style={{ fontSize: 9, color: theme.muted }}>{m}</span>)}
           </div>
         </div>
 
