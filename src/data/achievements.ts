@@ -17,7 +17,7 @@ export type AchievementTier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamo
 export type AchievementReward =
   | { type: 'badge' }
   | { type: 'title'; value: string }
-  | { type: 'character'; characterId: CharacterId }
+  | { type: 'character'; characterId: string }
 
 export interface Achievement {
   id: string
@@ -448,11 +448,11 @@ export const ACHIEVEMENTS: Achievement[] = [
 ]
 
 // ─── Characters unlocked by default ──────────────────────────────────────────
-export const DEFAULT_UNLOCKED: CharacterId[] = ['lion']
+export const DEFAULT_UNLOCKED: string[] = ['lion']
 
 /** Returns the set of character IDs the user has unlocked from achievements */
-export function getUnlockedCharacters(stats: AchievementStats): Set<CharacterId> {
-  const unlocked = new Set<CharacterId>(DEFAULT_UNLOCKED)
+export function getUnlockedCharacters(stats: AchievementStats): Set<string> {
+  const unlocked = new Set<string>(DEFAULT_UNLOCKED)
   for (const ach of ACHIEVEMENTS) {
     if (ach.reward.type === 'character' && ach.check(stats)) {
       unlocked.add(ach.reward.characterId)

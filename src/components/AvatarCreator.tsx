@@ -44,7 +44,7 @@ interface AvatarCreatorProps {
   initialPrimary?: string
   initialSecondary?: string
   theme: Theme
-  unlockedCharacters?: Set<CharacterId>
+  unlockedCharacters?: Set<string>
 }
 
 export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lion', initialPrimary, initialSecondary, theme, unlockedCharacters }: AvatarCreatorProps) {
