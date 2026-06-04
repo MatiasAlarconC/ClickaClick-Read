@@ -52,11 +52,18 @@ const CHARACTER_SECONDARY: Record<string, string> = {
 
 // ─── Fit loaded GLB into a normalised ±1 bounding box ─────────────────────────
 // Uses useFrame so it retries every frame until geometry is ready (fixes timing issues)
-function FitToBox({ children }: { children: ReactNode }) {
+function FitToBox({ children, modelScale = 1 }: { children: ReactNode; modelScale?: number }) {
   const ref = useRef<THREE.Group>(null!)
   const fitted = useRef(false)
+  const prevScale = useRef(modelScale)
 
   useFrame(() => {
+    // Reset when modelScale changes so zoom updates are applied immediately
+    if (prevScale.current !== modelScale) {
+      prevScale.current = modelScale
+      fitted.current = false
+      if (ref.current) { ref.current.scale.setScalar(1); ref.current.position.set(0, 0, 0) }
+    }
     if (fitted.current || !ref.current) return
     ref.current.updateMatrixWorld(true)
     // Use geometry bounding boxes (local space × matrixWorld) so skinned-mesh
@@ -75,7 +82,7 @@ function FitToBox({ children }: { children: ReactNode }) {
     const size = new THREE.Vector3(); box.getSize(size)
     const maxDim = Math.max(size.x, size.y, size.z)
     if (maxDim > 0) {
-      const s = 1.8 / maxDim
+      const s = (1.8 / maxDim) * modelScale
       ref.current.scale.setScalar(s)
       ref.current.updateMatrixWorld(true)
       const box2 = new THREE.Box3()
@@ -95,7 +102,7 @@ function FitToBox({ children }: { children: ReactNode }) {
 }
 
 // ─── GLB model — colorised ─────────────────────────────────────────────────────
-function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string; tapCount?: number }) {
+function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount, modelScale }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string; tapCount?: number; modelScale?: number }) {
   const modelPath = glbUrl ?? MODEL_PATH[id]
   if (!modelPath) throw new Error(`No GLB for character: ${id}`)
   const { scene, animations } = useGLTF(modelPath)
@@ -187,7 +194,7 @@ function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount }: { id: st
     })
   }, [id, primaryColor, locked, cloned])
 
-  return <FitToBox><group ref={groupRef}><primitive object={cloned} /></group></FitToBox>
+  return <FitToBox modelScale={modelScale}><group ref={groupRef}><primitive object={cloned} /></group></FitToBox>
 }
 
 // Pre-warm GLTF cache
@@ -291,9 +298,9 @@ function AutoRotateGroup({ locked, children }: { locked?: boolean; children: Rea
 
 // ─── Full scene ───────────────────────────────────────────────────────────────
 function CharacterScene({
-  id, locked, interactive, tapCount, primaryColor, glbUrl,
+  id, locked, interactive, tapCount, primaryColor, glbUrl, modelScale,
 }: {
-  id: string; locked?: boolean; interactive?: boolean; tapCount: number; primaryColor?: string; glbUrl?: string
+  id: string; locked?: boolean; interactive?: boolean; tapCount: number; primaryColor?: string; glbUrl?: string; modelScale?: number
 }) {
   const { gl } = useThree()
 
@@ -306,7 +313,7 @@ function CharacterScene({
     <AnimGroup id={id} locked={locked} tapCount={tapCount}>
       <ModelErrorBoundary id={id} locked={locked}>
         <Suspense fallback={<Placeholder id={id} locked={locked} />}>
-          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} tapCount={tapCount} />
+          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} tapCount={tapCount} modelScale={modelScale} />
         </Suspense>
       </ModelErrorBoundary>
     </AnimGroup>
@@ -358,10 +365,12 @@ interface Character3DProps {
   secondaryColor?: string
   /** For dynamic characters not in the static MODEL_PATH registry */
   glbUrl?: string
+  /** Multiplier on top of FitToBox normalisation (1.0 = default fill) */
+  modelScale?: number
 }
 
 export default function Character3D({
-  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl,
+  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl, modelScale,
 }: Character3DProps) {
   const id: string = characterId ?? character ?? 'lion'
   const isInteractive = interactive ?? size >= 120
@@ -392,7 +401,7 @@ export default function Character3D({
         camera={{ position: [0, 0.1, 3.2], fov: 42 }}
         style={{ width: '100%', height: '100%' }}
       >
-        <CharacterScene id={id} locked={locked} interactive={isInteractive} tapCount={tapCount} primaryColor={primaryColor} glbUrl={glbUrl} />
+        <CharacterScene id={id} locked={locked} interactive={isInteractive} tapCount={tapCount} primaryColor={primaryColor} glbUrl={glbUrl} modelScale={modelScale} />
       </Canvas>
     </div>
   )

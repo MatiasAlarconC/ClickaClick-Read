@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, useTheme } from '../../context/AppContext'
 import { supabase } from '../../lib/supabase'
 import type { AchievementCondition, DBAchievement, DBCharacter } from '../../lib/achievementEvaluator'
 import { ACHIEVEMENTS } from '../../data/achievements'
+import Character3D from '../../components/Character3D'
 
 interface Config { key: string; value: string }
 interface UserSummary { id: string; username: string | null; created_at: string }
@@ -69,6 +70,7 @@ interface CharacterForm {
   rarity: string
   defaultPrimary: string
   defaultSecondary: string
+  zoomScale: number
   glbFile: File | null
   existingGlbUrl: string
 }
@@ -78,6 +80,7 @@ const CHAR_RARITIES = ['common', 'uncommon', 'rare', 'legendary', 'mythic'] as c
 const EMPTY_CHARACTER_FORM: CharacterForm = {
   id: '', name: '', description: '', rarity: 'rare',
   defaultPrimary: '#888888', defaultSecondary: '#444444',
+  zoomScale: 1.0,
   glbFile: null, existingGlbUrl: '',
 }
 
@@ -271,6 +274,7 @@ export default function AdminPanel() {
       rarity: charForm.rarity,
       default_primary: charForm.defaultPrimary,
       default_secondary: charForm.defaultSecondary,
+      zoom_scale: charForm.zoomScale,
       glb_url: glbUrl,
       enabled: true,
     }, { onConflict: 'id' })
@@ -284,7 +288,7 @@ export default function AdminPanel() {
   }
 
   const startEditCharacter = (c: DBCharacter) => {
-    setCharForm({ id: c.id, name: c.name, description: c.description, rarity: c.rarity ?? 'rare', defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, glbFile: null, existingGlbUrl: c.glb_url })
+    setCharForm({ id: c.id, name: c.name, description: c.description, rarity: c.rarity ?? 'rare', defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, zoomScale: c.zoom_scale ?? 1.0, glbFile: null, existingGlbUrl: c.glb_url })
     setEditingCharId(c.id)
     setCharError('')
     setShowCharForm(true)
@@ -769,6 +773,25 @@ export default function AdminPanel() {
                   </div>
                 </div>
               </div>
+
+              {/* Live preview + zoom — only visible when a GLB is already saved */}
+              {charForm.existingGlbUrl && (
+                <div style={{ marginBottom: 16 }}>
+                  <span style={label}>Preview & scale</span>
+                  <div style={{ background: bg, borderRadius: 12, padding: '12px 0 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                    <Character3D character={charForm.id} glbUrl={charForm.existingGlbUrl} primaryColor={charForm.defaultPrimary} size={160} modelScale={charForm.zoomScale} />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <button onClick={() => setCharForm(f => ({ ...f, zoomScale: Math.max(0.2, parseFloat((f.zoomScale - 0.1).toFixed(2))) }))}
+                        style={{ width: 36, height: 36, borderRadius: '50%', border: `1px solid ${border}`, background: 'none', color: fg, fontSize: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                      <div style={{ minWidth: 52, textAlign: 'center', fontSize: 14, color: fg, fontWeight: 600 }}>{Math.round(charForm.zoomScale * 100)}%</div>
+                      <button onClick={() => setCharForm(f => ({ ...f, zoomScale: Math.min(3.0, parseFloat((f.zoomScale + 0.1).toFixed(2))) }))}
+                        style={{ width: 36, height: 36, borderRadius: '50%', border: `1px solid ${border}`, background: 'none', color: fg, fontSize: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                      <button onClick={() => setCharForm(f => ({ ...f, zoomScale: 1.0 }))}
+                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div style={{ marginBottom: 20 }}>
                 <span style={label}>GLB Model File{editingCharId ? ' (leave empty to keep current)' : ''}</span>

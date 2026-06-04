@@ -74,5 +74,6 @@ export interface DBCharacter {
   default_secondary: string
   glb_url: string
   rarity?: string
+  zoom_scale?: number
   enabled: boolean
 }
