@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CHARACTERS, type CharacterId } from './AvatarCharacter'
 import Character3D from './Character3D'
 import type { Theme } from '../types'
+import type { DBCharacter } from '../lib/achievementEvaluator'
 
 // ─── Color palettes per character class ───────────────────────────────────────
 const PALETTES: Record<string, Array<[string, string]>> = {
@@ -39,38 +40,48 @@ const UNLOCK_HINT: Partial<Record<CharacterId, { name: string; hint: string }>> 
 
 interface AvatarCreatorProps {
   onClose: () => void
-  onSave: (character: CharacterId, primary: string, secondary: string) => void
-  initialCharacter?: CharacterId
+  onSave: (character: string, primary: string, secondary: string) => void
+  initialCharacter?: string
   initialPrimary?: string
   initialSecondary?: string
   theme: Theme
   unlockedCharacters?: Set<string>
+  dbCharacters?: DBCharacter[]
 }
 
-export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lion', initialPrimary, initialSecondary, theme, unlockedCharacters }: AvatarCreatorProps) {
-  const [selected, setSelected] = useState<CharacterId>(initialCharacter)
-  const def = CHARACTERS.find(c => c.id === selected)!
-  const [primary, setPrimary] = useState(initialPrimary ?? def.defaultPrimary)
-  const [secondary, setSecondary] = useState(initialSecondary ?? def.defaultSecondary)
+export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lion', initialPrimary, initialSecondary, theme, unlockedCharacters, dbCharacters }: AvatarCreatorProps) {
+  const [selected, setSelected] = useState<string>(initialCharacter)
 
-  const isUnlocked = (id: CharacterId) => !unlockedCharacters || unlockedCharacters.has(id)
+  const builtinDef = CHARACTERS.find(c => c.id === selected)
+  const customDef  = dbCharacters?.find(c => c.id === selected)
+  const charName        = builtinDef?.name        ?? customDef?.name        ?? selected
+  const charDescription = builtinDef?.description ?? customDef?.description ?? ''
+  const charDefaultPrimary   = builtinDef?.defaultPrimary   ?? customDef?.default_primary   ?? '#888888'
+  const charDefaultSecondary = builtinDef?.defaultSecondary ?? customDef?.default_secondary ?? '#444444'
 
-  const handleSelectCharacter = (id: CharacterId) => {
-    // Always allow preview — just change what's displayed. Saving is blocked if locked.
-    const d = CHARACTERS.find(c => c.id === id)!
+  const [primary, setPrimary]     = useState(initialPrimary   ?? charDefaultPrimary)
+  const [secondary, setSecondary] = useState(initialSecondary ?? charDefaultSecondary)
+
+  const isUnlocked = (id: string) => !unlockedCharacters || unlockedCharacters.has(id)
+
+  const handleSelectCharacter = (id: string) => {
+    const d    = CHARACTERS.find(c => c.id === id)
+    const cust = dbCharacters?.find(c => c.id === id)
     setSelected(id)
-    setPrimary(d.defaultPrimary)
-    setSecondary(d.defaultSecondary)
+    setPrimary(d?.defaultPrimary ?? cust?.default_primary ?? '#888888')
+    setSecondary(d?.defaultSecondary ?? cust?.default_secondary ?? '#444444')
   }
 
   const handlePalette = (pal: [string, string]) => {
-    if (!isUnlocked(selected)) return // can't change colors on locked chars
+    if (!isUnlocked(selected)) return
     setPrimary(pal[0]); setSecondary(pal[1])
   }
 
   const selectedLocked = !isUnlocked(selected)
-  const rarity = RARITY[selected]
-  const unlockHint = UNLOCK_HINT[selected]
+  const rarity    = (RARITY as Record<string, { label: string; color: string }>)[selected] ?? { label: 'Custom', color: '#C8A96E' }
+  const unlockHint = (UNLOCK_HINT as Record<string, { name: string; hint: string } | undefined>)[selected]
+  const isCustom  = !builtinDef && !!customDef
+  const hasColorPalette = !!PALETTES[selected]
 
   return (
     <motion.div
@@ -105,7 +116,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0 8px', gap: 6 }}>
             <div style={{ position: 'relative' }}>
               <motion.div key={selected} initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: selectedLocked ? 0.55 : 1 }} transition={{ type: 'spring', damping: 20 }}>
-                <Character3D character={selected} primaryColor={primary} secondaryColor={secondary} size={140} locked={selectedLocked}/>
+                <Character3D character={selected} glbUrl={customDef?.glb_url} primaryColor={primary} secondaryColor={secondary} size={140} locked={selectedLocked}/>
               </motion.div>
               {selectedLocked && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -117,10 +128,10 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: selectedLocked ? theme.muted : theme.fg }}>{def.name}</div>
+              <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: selectedLocked ? theme.muted : theme.fg }}>{charName}</div>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: 0.8, textTransform: 'uppercase', color: rarity.color, background: `${rarity.color}20`, padding: '3px 8px', borderRadius: 999 }}>{rarity.label}</span>
             </div>
-            <div style={{ fontSize: 12, color: theme.muted }}>{def.description}</div>
+            <div style={{ fontSize: 12, color: theme.muted }}>{charDescription}</div>
             {selectedLocked && unlockHint && (
               <div style={{ marginTop: 8, background: `${rarity.color}15`, border: `1px solid ${rarity.color}40`, borderRadius: 12, padding: '10px 14px', textAlign: 'center', maxWidth: 260 }}>
                 <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: rarity.color, marginBottom: 4 }}>
@@ -143,26 +154,44 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
                 const locked = !isUnlocked(c.id)
                 const r = RARITY[c.id]
                 return (
-                <button key={c.id} onClick={() => handleSelectCharacter(c.id)}
-                  style={{ padding: 8, borderRadius: 14, border: `2px solid ${selected === c.id ? (locked ? theme.muted : primary) : theme.border}`, background: selected === c.id ? (locked ? `${theme.muted}18` : `${primary}18`) : theme.bgSecondary, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 0.2s', position: 'relative' }}>
-                  <div style={{ opacity: locked ? 0.5 : 1, filter: locked ? 'grayscale(0.7)' : 'none' }}>
-                    <Character3D character={c.id} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} size={52} locked={locked}/>
-                  </div>
-                  <span style={{ fontSize: 11, color: selected === c.id ? theme.fg : theme.muted, fontWeight: selected === c.id ? 600 : 400 }}>{c.name}</span>
-                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: locked ? theme.muted : r.color }}>{r.label}</span>
-                  {locked && (
-                    <div style={{ position: 'absolute', top: 6, right: 6 }}>
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke={theme.muted} strokeWidth="2.5"/><path d="M7 11V7a5 5 0 0110 0v4" stroke={theme.muted} strokeWidth="2.5" strokeLinecap="round"/></svg>
+                  <button key={c.id} onClick={() => handleSelectCharacter(c.id)}
+                    style={{ padding: 8, borderRadius: 14, border: `2px solid ${selected === c.id ? (locked ? theme.muted : primary) : theme.border}`, background: selected === c.id ? (locked ? `${theme.muted}18` : `${primary}18`) : theme.bgSecondary, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 0.2s', position: 'relative' }}>
+                    <div style={{ opacity: locked ? 0.5 : 1, filter: locked ? 'grayscale(0.7)' : 'none' }}>
+                      <Character3D character={c.id} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} size={52} locked={locked}/>
                     </div>
-                  )}
-                </button>
+                    <span style={{ fontSize: 11, color: selected === c.id ? theme.fg : theme.muted, fontWeight: selected === c.id ? 600 : 400 }}>{c.name}</span>
+                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: locked ? theme.muted : r.color }}>{r.label}</span>
+                    {locked && (
+                      <div style={{ position: 'absolute', top: 6, right: 6 }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke={theme.muted} strokeWidth="2.5"/><path d="M7 11V7a5 5 0 0110 0v4" stroke={theme.muted} strokeWidth="2.5" strokeLinecap="round"/></svg>
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+              {(dbCharacters ?? []).map(c => {
+                const locked = !isUnlocked(c.id)
+                return (
+                  <button key={c.id} onClick={() => handleSelectCharacter(c.id)}
+                    style={{ padding: 8, borderRadius: 14, border: `2px solid ${selected === c.id ? (locked ? theme.muted : primary) : theme.border}`, background: selected === c.id ? (locked ? `${theme.muted}18` : `${primary}18`) : theme.bgSecondary, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 0.2s', position: 'relative' }}>
+                    <div style={{ opacity: locked ? 0.5 : 1, filter: locked ? 'grayscale(0.7)' : 'none' }}>
+                      <Character3D character={c.id} glbUrl={c.glb_url} primaryColor={c.default_primary} secondaryColor={c.default_secondary} size={52} locked={locked}/>
+                    </div>
+                    <span style={{ fontSize: 11, color: selected === c.id ? theme.fg : theme.muted, fontWeight: selected === c.id ? 600 : 400 }}>{c.name}</span>
+                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: locked ? theme.muted : '#C8A96E' }}>Custom</span>
+                    {locked && (
+                      <div style={{ position: 'absolute', top: 6, right: 6 }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke={theme.muted} strokeWidth="2.5"/><path d="M7 11V7a5 5 0 0110 0v4" stroke={theme.muted} strokeWidth="2.5" strokeLinecap="round"/></svg>
+                      </div>
+                    )}
+                  </button>
                 )
               })}
             </div>
           </div>
 
-          {/* Color palettes — disabled for locked chars */}
-          {!selectedLocked && (
+          {/* Color palettes — only for built-in unlocked chars that have a palette */}
+          {!selectedLocked && hasColorPalette && (
             <div style={{ padding: '0 16px 12px' }}>
               <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10 }}>Color scheme</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -184,18 +213,22 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
             <div style={{ padding: '4px 16px 24px' }}>
               <div style={{ padding: '15px', background: theme.bgSecondary, borderRadius: 14, textAlign: 'center' }}>
                 <div style={{ fontSize: 13, color: theme.muted, marginBottom: unlockHint ? 6 : 0 }}>
-                  Unlock <strong style={{ color: theme.fg }}>{def.name}</strong> to use this character
+                  Unlock <strong style={{ color: theme.fg }}>{charName}</strong> to use this character
                 </div>
-                {unlockHint && (
+                {unlockHint ? (
                   <div style={{ fontSize: 11, color: rarity.color, fontWeight: 600 }}>
                     Achievement: {unlockHint.name}
                   </div>
-                )}
+                ) : isCustom ? (
+                  <div style={{ fontSize: 11, color: rarity.color, fontWeight: 600 }}>
+                    Complete the linked achievement to unlock
+                  </div>
+                ) : null}
               </div>
             </div>
           )}
           {/* Spacer so content isn't hidden behind sticky button */}
-          {!selectedLocked && <div style={{ height: 88 }} />}
+          {!selectedLocked && <div style={{ height: hasColorPalette ? 88 : 20 }} />}
         </div>
 
         {/* Sticky select button — always visible when character is unlocked */}

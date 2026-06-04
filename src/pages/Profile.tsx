@@ -8,6 +8,8 @@ import { CHARACTERS, type CharacterId } from '../components/AvatarCharacter'
 import Character3D from '../components/Character3D'
 import { getUnlockedCharacters, getUnlockedTitles } from '../data/achievements'
 import type { AchievementStats } from '../data/achievements'
+import { evaluateCondition } from '../lib/achievementEvaluator'
+import type { DBAchievement, DBCharacter } from '../lib/achievementEvaluator'
 import AvatarCreator from '../components/AvatarCreator'
 import { FlameIcon, BookOpenIcon, ClockIcon, LightningIcon, MoonIcon, SunIcon } from '../components/Icons'
 import type { AvatarConfig } from '../types'
@@ -59,15 +61,18 @@ export default function ProfileScreen() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
-  const avatarCfg: AvatarConfig | null = (profile?.avatar_config as AvatarConfig) ?? null
-  const char: CharacterId  = avatarCfg?.character    ?? 'lion'
-  const primaryColor       = avatarCfg?.primaryColor ?? CHARACTERS.find(c => c.id === char)!.defaultPrimary
-  const secondaryColor     = avatarCfg?.secondaryColor ?? CHARACTERS.find(c => c.id === char)!.defaultSecondary
-  const charDef            = CHARACTERS.find(c => c.id === char)!
-
   // ── Profile stats ──────────────────────────────────────────────────────────
   const [profileStats, setProfileStats] = useState({ booksFinished: 0, pagesRead: 0, hours: 0, streak: 0 })
   const [achievementStats, setAchievementStats] = useState<AchievementStats | null>(null)
+  const [dbCharacters, setDbCharacters] = useState<DBCharacter[]>([])
+  const [dbAchievements, setDbAchievements] = useState<DBAchievement[]>([])
+
+  const avatarCfg: AvatarConfig | null = (profile?.avatar_config as AvatarConfig) ?? null
+  const char: string = avatarCfg?.character ?? 'lion'
+  const builtinChar  = CHARACTERS.find(c => c.id === char)
+  const customChar   = dbCharacters.find(c => c.id === char)
+  const primaryColor   = avatarCfg?.primaryColor   ?? builtinChar?.defaultPrimary   ?? customChar?.default_primary   ?? '#888888'
+  const secondaryColor = avatarCfg?.secondaryColor ?? builtinChar?.defaultSecondary ?? customChar?.default_secondary ?? '#444444'
 
   useEffect(() => {
     if (!user) return
@@ -125,10 +130,23 @@ export default function ProfileScreen() {
         seriesBooks:   0,
       })
     })
+    supabase.from('characters_config').select('*').eq('enabled', true)
+      .then(({ data }) => { if (data) setDbCharacters(data as DBCharacter[]) })
+    supabase.from('achievements_config').select('*').eq('enabled', true)
+      .then(({ data }) => { if (data) setDbAchievements(data as DBAchievement[]) })
   }, [user])
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const unlockedCharacters = achievementStats ? getUnlockedCharacters(achievementStats) : undefined
+  const unlockedCharacters = (() => {
+    if (!achievementStats) return undefined
+    const set = getUnlockedCharacters(achievementStats)
+    for (const a of dbAchievements) {
+      if (a.reward_type === 'character' && a.reward_value && evaluateCondition(a.condition, achievementStats)) {
+        set.add(a.reward_value)
+      }
+    }
+    return set
+  })()
   const unlockedTitles     = achievementStats ? getUnlockedTitles(achievementStats) : []
   const profileTitle: string | null = (profile as any)?.title ?? null
   const memberYear = user?.created_at ? new Date(user.created_at).getFullYear() : null
@@ -140,7 +158,7 @@ export default function ProfileScreen() {
   ]
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleSaveAvatar = async (character: CharacterId, primary: string, secondary: string) => {
+  const handleSaveAvatar = async (character: string, primary: string, secondary: string) => {
     setShowCreator(false)
     await updateProfile({ avatar_config: { character, primaryColor: primary, secondaryColor: secondary } as any })
   }
@@ -228,13 +246,13 @@ export default function ProfileScreen() {
           {profileTitle && (
             <div style={{ fontSize: 12, color: primaryColor, fontWeight: 600, marginTop: 2 }}>{profileTitle}</div>
           )}
-          <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{memberYear ? `member since ${memberYear}` : charDef.description}</div>
+          <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{memberYear ? `member since ${memberYear}` : (builtinChar?.description ?? customChar?.description ?? '')}</div>
         </div>
 
         {/* Character — click to animate only (Customize is its own button) */}
         <div style={{ zIndex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}>
-            <Character3D character={char} primaryColor={primaryColor} secondaryColor={secondaryColor} size={180}/>
+            <Character3D character={char} glbUrl={customChar?.glb_url} primaryColor={primaryColor} secondaryColor={secondaryColor} size={180}/>
           </motion.div>
           <button onClick={() => setShowCreator(true)} style={{ background: primaryColor, color: '#FFF', border: 'none', borderRadius: 999, padding: '6px 18px', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: 'pointer', boxShadow: `0 2px 12px ${primaryColor}55`, textTransform: 'uppercase' }}>
             Customize
@@ -469,7 +487,7 @@ export default function ProfileScreen() {
         {showCreator && (
           <AvatarCreator onClose={() => setShowCreator(false)} onSave={handleSaveAvatar}
             initialCharacter={char} initialPrimary={primaryColor} initialSecondary={secondaryColor} theme={theme}
-            unlockedCharacters={unlockedCharacters}/>
+            unlockedCharacters={unlockedCharacters} dbCharacters={dbCharacters}/>
         )}
       </AnimatePresence>
 

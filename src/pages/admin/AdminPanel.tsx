@@ -69,12 +69,13 @@ interface CharacterForm {
   defaultPrimary: string
   defaultSecondary: string
   glbFile: File | null
+  existingGlbUrl: string
 }
 
 const EMPTY_CHARACTER_FORM: CharacterForm = {
   id: '', name: '', description: '',
   defaultPrimary: '#888888', defaultSecondary: '#444444',
-  glbFile: null,
+  glbFile: null, existingGlbUrl: '',
 }
 
 export default function AdminPanel() {
@@ -109,6 +110,8 @@ export default function AdminPanel() {
   const [charForm, setCharForm] = useState<CharacterForm>(EMPTY_CHARACTER_FORM)
   const [charSaving, setCharSaving] = useState(false)
   const [charError, setCharError] = useState('')
+  const [editingCharId, setEditingCharId] = useState<string | null>(null)
+  const [editingAchId, setEditingAchId] = useState<string | null>(null)
 
   const bg = theme.bg
   const fg = theme.fg
@@ -242,20 +245,21 @@ export default function AdminPanel() {
     if (!charForm.id || !charForm.name || !charForm.description) {
       setCharError('ID, name and description are required.'); return
     }
-    if (!charForm.glbFile) {
+    if (!charForm.glbFile && !charForm.existingGlbUrl) {
       setCharError('A GLB file is required.'); return
     }
     setCharSaving(true)
 
-    const filePath = `${charForm.id}.glb`
-    const { error: uploadError } = await supabase.storage
-      .from('character-models')
-      .upload(filePath, charForm.glbFile, { upsert: true, contentType: 'model/gltf-binary' })
-
-    if (uploadError) { setCharError(uploadError.message); setCharSaving(false); return }
-
-    const { data: urlData } = supabase.storage.from('character-models').getPublicUrl(filePath)
-    const glbUrl = urlData.publicUrl
+    let glbUrl = charForm.existingGlbUrl
+    if (charForm.glbFile) {
+      const filePath = `${charForm.id}.glb`
+      const { error: uploadError } = await supabase.storage
+        .from('character-models')
+        .upload(filePath, charForm.glbFile, { upsert: true, contentType: 'model/gltf-binary' })
+      if (uploadError) { setCharError(uploadError.message); setCharSaving(false); return }
+      const { data: urlData } = supabase.storage.from('character-models').getPublicUrl(filePath)
+      glbUrl = urlData.publicUrl
+    }
 
     const { error } = await supabase.from('characters_config').upsert({
       id: charForm.id,
@@ -271,7 +275,33 @@ export default function AdminPanel() {
     if (error) { setCharError(error.message); return }
     setShowCharForm(false)
     setCharForm(EMPTY_CHARACTER_FORM)
+    setEditingCharId(null)
     loadCharacters()
+  }
+
+  const startEditCharacter = (c: DBCharacter) => {
+    setCharForm({ id: c.id, name: c.name, description: c.description, defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, glbFile: null, existingGlbUrl: c.glb_url })
+    setEditingCharId(c.id)
+    setCharError('')
+    setShowCharForm(true)
+  }
+
+  const startEditAchievement = (a: DBAchievement) => {
+    const f: AchievementForm = {
+      id: a.id, name: a.name, description: a.description, tier: a.tier,
+      rewardType: a.reward_type, rewardValue: a.reward_value ?? '',
+      conditionType: a.condition.type as AchievementForm['conditionType'],
+      statField: 'booksFinished', statValue: '1',
+      genreList: '', genreValue: '5', diversityValue: '3', depthMinBooks: '5', depthGenreCount: '5',
+    }
+    if (a.condition.type === 'stat') { f.statField = a.condition.field; f.statValue = String(a.condition.value) }
+    else if (a.condition.type === 'genre') { f.genreList = a.condition.genres.join(', '); f.genreValue = String(a.condition.value) }
+    else if (a.condition.type === 'genreDiversity') { f.diversityValue = String(a.condition.value) }
+    else if (a.condition.type === 'genreDepth') { f.depthMinBooks = String(a.condition.minBooks); f.depthGenreCount = String(a.condition.genreCount) }
+    setAchForm(f)
+    setEditingAchId(a.id)
+    setAchError('')
+    setShowAchForm(true)
   }
 
   const deleteCharacter = async (id: string) => {
@@ -450,7 +480,11 @@ export default function AdminPanel() {
                     {' · '}Condition: <span style={{ color: fg }}>{a.condition.type}</span>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+                <div style={{ display: 'flex', gap: 6, marginLeft: 8, flexShrink: 0 }}>
+                  <button onClick={() => { setShowAchForm(false); setTimeout(() => startEditAchievement(a), 0) }}
+                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer' }}>
+                    Edit
+                  </button>
                   <button onClick={() => toggleAchievement(a.id, !a.enabled)}
                     style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>
                     {a.enabled ? 'Disable' : 'Enable'}
@@ -471,12 +505,12 @@ export default function AdminPanel() {
           {/* Create achievement form */}
           {showAchForm && (
             <div style={{ background: secondary, borderRadius: 16, padding: 20, marginTop: 16 }}>
-              <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: fg, marginBottom: 20 }}>New Achievement</div>
+              <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: fg, marginBottom: 20 }}>{editingAchId ? 'Edit Achievement' : 'New Achievement'}</div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                 <div>
                   <span style={label}>ID (unique, no spaces)</span>
-                  <input value={achForm.id} onChange={e => setAchForm(f => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. speed_reader" style={input} />
+                  <input value={achForm.id} readOnly={!!editingAchId} onChange={e => setAchForm(f => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. speed_reader" style={{ ...input, opacity: editingAchId ? 0.5 : 1 }} />
                 </div>
                 <div>
                   <span style={label}>Tier</span>
@@ -612,11 +646,11 @@ export default function AdminPanel() {
               {achError && <div style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{achError}</div>}
 
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setShowAchForm(false)} style={{ flex: 1, padding: 12, background: 'none', border: `1px solid ${border}`, borderRadius: 12, fontSize: 14, color: muted, cursor: 'pointer' }}>
+                <button onClick={() => { setShowAchForm(false); setEditingAchId(null) }} style={{ flex: 1, padding: 12, background: 'none', border: `1px solid ${border}`, borderRadius: 12, fontSize: 14, color: muted, cursor: 'pointer' }}>
                   Cancel
                 </button>
                 <button onClick={saveAchievement} disabled={achSaving} style={{ flex: 2, padding: 12, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-                  {achSaving ? 'Saving…' : 'Save Achievement'}
+                  {achSaving ? 'Saving…' : editingAchId ? 'Update Achievement' : 'Save Achievement'}
                 </button>
               </div>
             </div>
@@ -635,39 +669,66 @@ export default function AdminPanel() {
             </button>
           </div>
 
-          {/* Character list */}
+          {/* Built-in characters — read only */}
+          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: muted, marginBottom: 8 }}>
+            Built-in ({BUILTIN_CHARACTERS.length})
+          </div>
+          {BUILTIN_CHARACTERS.map(c => (
+            <div key={c.id} style={{ ...card, opacity: 0.55 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.primary, flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: fg }}>{c.name}</div>
+                  <div style={{ fontSize: 11, color: muted }}>ID: {c.id} · built-in</div>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Custom characters */}
+          {dbCharacters.length > 0 && (
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: muted, margin: '16px 0 8px' }}>
+              Custom ({dbCharacters.length})
+            </div>
+          )}
           {dbCharacters.map(c => (
             <div key={c.id} style={{ ...card, opacity: c.enabled ? 1 : 0.5 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.default_primary }} />
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.default_primary, flexShrink: 0 }} />
                   <div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: fg }}>{c.name}</div>
                     <div style={{ fontSize: 12, color: muted }}>{c.description}</div>
                     <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>ID: {c.id}</div>
                   </div>
                 </div>
-                <button onClick={() => deleteCharacter(c.id)}
-                  style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px solid #ef4444', background: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                  Delete
-                </button>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button onClick={() => { setShowCharForm(false); setTimeout(() => startEditCharacter(c), 0) }}
+                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer' }}>
+                    Edit
+                  </button>
+                  <button onClick={() => deleteCharacter(c.id)}
+                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px solid #ef4444', background: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           ))}
 
           {dbCharacters.length === 0 && !showCharForm && (
-            <div style={{ textAlign: 'center', padding: '32px 0', color: muted }}>No custom characters yet.</div>
+            <div style={{ textAlign: 'center', padding: '16px 0', color: muted, fontSize: 13 }}>No custom characters yet.</div>
           )}
 
           {/* Create character form */}
           {showCharForm && (
             <div style={{ background: secondary, borderRadius: 16, padding: 20, marginTop: 16 }}>
-              <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: fg, marginBottom: 20 }}>New Character</div>
+              <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: fg, marginBottom: 20 }}>{editingCharId ? 'Edit Character' : 'New Character'}</div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                 <div>
                   <span style={label}>ID (unique, no spaces)</span>
-                  <input value={charForm.id} onChange={e => setCharForm(f => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. dragon" style={input} />
+                  <input value={charForm.id} readOnly={!!editingCharId} onChange={e => setCharForm(f => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. dragon" style={{ ...input, opacity: editingCharId ? 0.5 : 1 }} />
                 </div>
                 <div>
                   <span style={label}>Name</span>
@@ -700,7 +761,7 @@ export default function AdminPanel() {
               </div>
 
               <div style={{ marginBottom: 20 }}>
-                <span style={label}>GLB Model File</span>
+                <span style={label}>GLB Model File{editingCharId ? ' (leave empty to keep current)' : ''}</span>
                 <div style={{ border: `2px dashed ${border}`, borderRadius: 10, padding: '20px', textAlign: 'center', background: bg }}>
                   {charForm.glbFile ? (
                     <div>
@@ -709,6 +770,15 @@ export default function AdminPanel() {
                       <button onClick={() => setCharForm(f => ({ ...f, glbFile: null }))} style={{ marginTop: 8, fontSize: 12, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>
                         Remove
                       </button>
+                    </div>
+                  ) : editingCharId && charForm.existingGlbUrl ? (
+                    <div>
+                      <div style={{ fontSize: 12, color: muted, marginBottom: 6 }}>Current GLB uploaded</div>
+                      <label style={{ cursor: 'pointer', fontSize: 13, color: fg, textDecoration: 'underline' }}>
+                        Replace with new file
+                        <input type="file" accept=".glb" style={{ display: 'none' }}
+                          onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(prev => ({ ...prev, glbFile: f })) }} />
+                      </label>
                     </div>
                   ) : (
                     <label style={{ cursor: 'pointer' }}>
@@ -723,11 +793,11 @@ export default function AdminPanel() {
               {charError && <div style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{charError}</div>}
 
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => setShowCharForm(false)} style={{ flex: 1, padding: 12, background: 'none', border: `1px solid ${border}`, borderRadius: 12, fontSize: 14, color: muted, cursor: 'pointer' }}>
+                <button onClick={() => { setShowCharForm(false); setEditingCharId(null) }} style={{ flex: 1, padding: 12, background: 'none', border: `1px solid ${border}`, borderRadius: 12, fontSize: 14, color: muted, cursor: 'pointer' }}>
                   Cancel
                 </button>
                 <button onClick={saveCharacter} disabled={charSaving} style={{ flex: 2, padding: 12, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-                  {charSaving ? 'Uploading & saving…' : 'Save Character'}
+                  {charSaving ? 'Saving…' : editingCharId ? 'Update Character' : 'Save Character'}
                 </button>
               </div>
             </div>
