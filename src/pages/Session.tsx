@@ -10,8 +10,8 @@ import type { UserBook } from '../types'
 function genreToMusicTag(genres: string[] | undefined): string {
   if (!genres?.length) return 'ambient'
   const lower = genres.join(' ').toLowerCase()
-  if (/fantasy|magic|dragon|wizard|adventure/.test(lower)) return 'orchestral'
-  if (/thriller|crime|mystery|horror|suspense/.test(lower)) return 'darkambient'
+  if (/fantasy|magic|dragon|wizard|adventure|epic/.test(lower)) return 'instrumental'
+  if (/thriller|crime|mystery|horror|suspense/.test(lower)) return 'ambient'
   if (/romance|love|contemporary/.test(lower)) return 'acoustic'
   if (/sci.?fi|space|technology|futuristic/.test(lower)) return 'electronic'
   if (/histor|biograph|classic/.test(lower)) return 'classical'
@@ -23,11 +23,11 @@ async function fetchJamendoTrack(tag: string): Promise<{ url: string; name: stri
     const res = await fetch(`/api/music?tag=${encodeURIComponent(tag)}`)
     if (!res.ok) return null
     const json = await res.json()
-    const tracks: { audio: string; name: string }[] = json.results ?? []
-    const valid = tracks.filter(t => t.audio)
+    const tracks: { audio: string; audiodownload?: string; name: string }[] = json.results ?? []
+    const valid = tracks.filter(t => t.audio || t.audiodownload)
     if (!valid.length) return null
     const pick = valid[Math.floor(Math.random() * valid.length)]
-    return { url: pick.audio, name: pick.name }
+    return { url: pick.audio || pick.audiodownload!, name: pick.name }
   } catch {
     return null
   }
@@ -103,28 +103,24 @@ export default function SessionScreen() {
     return () => { wakeLock.current?.release(); wakeLock.current = null }
   }, [playing])
 
-  // Pause / resume accounting
+  // Single unified timer effect — sets refs and starts interval atomically
   useEffect(() => {
-    if (playing) {
-      if (sessionStartTs.current === null) sessionStartTs.current = Date.now()
-      if (pauseStartTs.current !== null) {
-        pausedMs.current += Date.now() - pauseStartTs.current
-        pauseStartTs.current = null
-      }
-    } else {
+    if (!playing) {
       pauseStartTs.current = Date.now()
+      return
     }
-  }, [playing])
-
-  // Interval — uses Date.now() so it stays accurate after tab is in background
-  useEffect(() => {
-    if (!playing) return
+    // Start or resume: update refs before tick() runs
+    if (sessionStartTs.current === null) sessionStartTs.current = Date.now()
+    if (pauseStartTs.current !== null) {
+      pausedMs.current += Date.now() - pauseStartTs.current
+      pauseStartTs.current = null
+    }
     const tick = () => {
       if (sessionStartTs.current === null) return
       const activeMs = Date.now() - sessionStartTs.current - pausedMs.current
       setSecs(Math.max(0, Math.floor(activeMs / 1000)))
     }
-    tick() // fire immediately so there's no visible delay
+    tick()
     const id = setInterval(tick, 500)
     const onVisible = () => { if (!document.hidden) tick() }
     document.addEventListener('visibilitychange', onVisible)
