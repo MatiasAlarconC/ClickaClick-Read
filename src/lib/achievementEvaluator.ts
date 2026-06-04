@@ -75,5 +75,7 @@ export interface DBCharacter {
   glb_url: string
   rarity?: string
   zoom_scale?: number
+  offset_x?: number
+  offset_y?: number
   enabled: boolean
 }

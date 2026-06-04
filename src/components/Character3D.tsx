@@ -52,15 +52,16 @@ const CHARACTER_SECONDARY: Record<string, string> = {
 
 // ─── Fit loaded GLB into a normalised ±1 bounding box ─────────────────────────
 // Uses useFrame so it retries every frame until geometry is ready (fixes timing issues)
-function FitToBox({ children, modelScale = 1 }: { children: ReactNode; modelScale?: number }) {
+function FitToBox({ children, modelScale = 1, offsetX = 0, offsetY = 0 }: { children: ReactNode; modelScale?: number; offsetX?: number; offsetY?: number }) {
   const ref = useRef<THREE.Group>(null!)
   const fitted = useRef(false)
-  const prevScale = useRef(modelScale)
+  const prev = useRef({ modelScale, offsetX, offsetY })
 
   useFrame(() => {
-    // Reset when modelScale changes so zoom updates are applied immediately
-    if (prevScale.current !== modelScale) {
-      prevScale.current = modelScale
+    // Reset whenever any display param changes so live preview updates immediately
+    const p = prev.current
+    if (p.modelScale !== modelScale || p.offsetX !== offsetX || p.offsetY !== offsetY) {
+      prev.current = { modelScale, offsetX, offsetY }
       fitted.current = false
       if (ref.current) { ref.current.scale.setScalar(1); ref.current.position.set(0, 0, 0) }
     }
@@ -94,6 +95,9 @@ function FitToBox({ children, modelScale = 1 }: { children: ReactNode; modelScal
       })
       const center = new THREE.Vector3(); box2.getCenter(center)
       ref.current.position.sub(center)
+      // Apply user-defined offset on top of the auto-centered position
+      ref.current.position.x += offsetX
+      ref.current.position.y += offsetY
       fitted.current = true
     }
   })
@@ -102,7 +106,7 @@ function FitToBox({ children, modelScale = 1 }: { children: ReactNode; modelScal
 }
 
 // ─── GLB model — colorised ─────────────────────────────────────────────────────
-function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount, modelScale }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string; tapCount?: number; modelScale?: number }) {
+function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount, modelScale, offsetX, offsetY }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string; tapCount?: number; modelScale?: number; offsetX?: number; offsetY?: number }) {
   const modelPath = glbUrl ?? MODEL_PATH[id]
   if (!modelPath) throw new Error(`No GLB for character: ${id}`)
   const { scene, animations } = useGLTF(modelPath)
@@ -194,7 +198,7 @@ function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount, modelScale
     })
   }, [id, primaryColor, locked, cloned])
 
-  return <FitToBox modelScale={modelScale}><group ref={groupRef}><primitive object={cloned} /></group></FitToBox>
+  return <FitToBox modelScale={modelScale} offsetX={offsetX} offsetY={offsetY}><group ref={groupRef}><primitive object={cloned} /></group></FitToBox>
 }
 
 // Pre-warm GLTF cache
@@ -298,9 +302,9 @@ function AutoRotateGroup({ locked, children }: { locked?: boolean; children: Rea
 
 // ─── Full scene ───────────────────────────────────────────────────────────────
 function CharacterScene({
-  id, locked, interactive, tapCount, primaryColor, glbUrl, modelScale,
+  id, locked, interactive, tapCount, primaryColor, glbUrl, modelScale, offsetX, offsetY,
 }: {
-  id: string; locked?: boolean; interactive?: boolean; tapCount: number; primaryColor?: string; glbUrl?: string; modelScale?: number
+  id: string; locked?: boolean; interactive?: boolean; tapCount: number; primaryColor?: string; glbUrl?: string; modelScale?: number; offsetX?: number; offsetY?: number
 }) {
   const { gl } = useThree()
 
@@ -313,7 +317,7 @@ function CharacterScene({
     <AnimGroup id={id} locked={locked} tapCount={tapCount}>
       <ModelErrorBoundary id={id} locked={locked}>
         <Suspense fallback={<Placeholder id={id} locked={locked} />}>
-          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} tapCount={tapCount} modelScale={modelScale} />
+          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} tapCount={tapCount} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} />
         </Suspense>
       </ModelErrorBoundary>
     </AnimGroup>
@@ -367,10 +371,14 @@ interface Character3DProps {
   glbUrl?: string
   /** Multiplier on top of FitToBox normalisation (1.0 = default fill) */
   modelScale?: number
+  /** Horizontal offset in 3D units after auto-centering */
+  offsetX?: number
+  /** Vertical offset in 3D units after auto-centering */
+  offsetY?: number
 }
 
 export default function Character3D({
-  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl, modelScale,
+  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl, modelScale, offsetX, offsetY,
 }: Character3DProps) {
   const id: string = characterId ?? character ?? 'lion'
   const isInteractive = interactive ?? size >= 120
@@ -401,7 +409,7 @@ export default function Character3D({
         camera={{ position: [0, 0.1, 3.2], fov: 42 }}
         style={{ width: '100%', height: '100%' }}
       >
-        <CharacterScene id={id} locked={locked} interactive={isInteractive} tapCount={tapCount} primaryColor={primaryColor} glbUrl={glbUrl} modelScale={modelScale} />
+        <CharacterScene id={id} locked={locked} interactive={isInteractive} tapCount={tapCount} primaryColor={primaryColor} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} />
       </Canvas>
     </div>
   )

@@ -71,6 +71,8 @@ interface CharacterForm {
   defaultPrimary: string
   defaultSecondary: string
   zoomScale: number
+  offsetX: number
+  offsetY: number
   glbFile: File | null
   existingGlbUrl: string
 }
@@ -80,7 +82,7 @@ const CHAR_RARITIES = ['common', 'uncommon', 'rare', 'legendary', 'mythic'] as c
 const EMPTY_CHARACTER_FORM: CharacterForm = {
   id: '', name: '', description: '', rarity: 'rare',
   defaultPrimary: '#888888', defaultSecondary: '#444444',
-  zoomScale: 1.0,
+  zoomScale: 1.0, offsetX: 0, offsetY: 0,
   glbFile: null, existingGlbUrl: '',
 }
 
@@ -275,6 +277,8 @@ export default function AdminPanel() {
       default_primary: charForm.defaultPrimary,
       default_secondary: charForm.defaultSecondary,
       zoom_scale: charForm.zoomScale,
+      offset_x: charForm.offsetX,
+      offset_y: charForm.offsetY,
       glb_url: glbUrl,
       enabled: true,
     }, { onConflict: 'id' })
@@ -288,7 +292,7 @@ export default function AdminPanel() {
   }
 
   const startEditCharacter = (c: DBCharacter) => {
-    setCharForm({ id: c.id, name: c.name, description: c.description, rarity: c.rarity ?? 'rare', defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, zoomScale: c.zoom_scale ?? 1.0, glbFile: null, existingGlbUrl: c.glb_url })
+    setCharForm({ id: c.id, name: c.name, description: c.description, rarity: c.rarity ?? 'rare', defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, zoomScale: c.zoom_scale ?? 1.0, offsetX: c.offset_x ?? 0, offsetY: c.offset_y ?? 0, glbFile: null, existingGlbUrl: c.glb_url })
     setEditingCharId(c.id)
     setCharError('')
     setShowCharForm(true)
@@ -774,28 +778,59 @@ export default function AdminPanel() {
                 </div>
               </div>
 
-              {/* Live preview + zoom — only visible when a GLB is already saved */}
+              {/* Live preview + transform controls — only visible when a GLB is already saved */}
               {charForm.existingGlbUrl && (
                 <div style={{ marginBottom: 16 }}>
-                  <span style={label}>Preview & scale</span>
-                  <div style={{ background: bg, borderRadius: 12, padding: '12px 0 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                    <Character3D character={charForm.id} glbUrl={charForm.existingGlbUrl} primaryColor={charForm.defaultPrimary} size={160} modelScale={charForm.zoomScale} />
-                    <div style={{ width: '100%', padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: 12, color: muted }}>Scale</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <span style={{ fontSize: 14, fontWeight: 600, color: fg }}>{Math.round(charForm.zoomScale * 100)}%</span>
-                          <button onClick={() => setCharForm(f => ({ ...f, zoomScale: 1.0 }))}
-                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
+                  <span style={label}>Preview & position</span>
+                  <div style={{ background: bg, borderRadius: 12, padding: '12px 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                    <Character3D character={charForm.id} glbUrl={charForm.existingGlbUrl} primaryColor={charForm.defaultPrimary} size={160} modelScale={charForm.zoomScale} offsetX={charForm.offsetX} offsetY={charForm.offsetY} />
+                    <div style={{ width: '100%', padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+                      {/* Scale */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, color: muted }}>Scale</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{Math.round(charForm.zoomScale * 100)}%</span>
+                            <button onClick={() => setCharForm(f => ({ ...f, zoomScale: 1.0 }))} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
+                          </div>
                         </div>
+                        <input type="range" min="0.01" max="5" step="0.01" value={charForm.zoomScale}
+                          onChange={e => setCharForm(f => ({ ...f, zoomScale: parseFloat(e.target.value) }))}
+                          style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}><span>1%</span><span>100%</span><span>500%</span></div>
                       </div>
-                      <input type="range" min="0.05" max="5" step="0.05"
-                        value={charForm.zoomScale}
-                        onChange={e => setCharForm(f => ({ ...f, zoomScale: parseFloat(e.target.value) }))}
-                        style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}>
-                        <span>5%</span><span>100%</span><span>500%</span>
+
+                      {/* X offset */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, color: muted }}>Horizontal (X)</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{charForm.offsetX.toFixed(2)}</span>
+                            <button onClick={() => setCharForm(f => ({ ...f, offsetX: 0 }))} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
+                          </div>
+                        </div>
+                        <input type="range" min="-3" max="3" step="0.05" value={charForm.offsetX}
+                          onChange={e => setCharForm(f => ({ ...f, offsetX: parseFloat(e.target.value) }))}
+                          style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}><span>Left</span><span>Center</span><span>Right</span></div>
                       </div>
+
+                      {/* Y offset */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: 12, color: muted }}>Vertical (Y)</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{charForm.offsetY.toFixed(2)}</span>
+                            <button onClick={() => setCharForm(f => ({ ...f, offsetY: 0 }))} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
+                          </div>
+                        </div>
+                        <input type="range" min="-3" max="3" step="0.05" value={charForm.offsetY}
+                          onChange={e => setCharForm(f => ({ ...f, offsetY: parseFloat(e.target.value) }))}
+                          style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}><span>Down</span><span>Center</span><span>Up</span></div>
+                      </div>
+
                     </div>
                   </div>
                 </div>

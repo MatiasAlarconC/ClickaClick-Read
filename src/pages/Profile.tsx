@@ -252,7 +252,7 @@ export default function ProfileScreen() {
         {/* Character — click to animate only (Customize is its own button) */}
         <div style={{ zIndex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}>
-            <Character3D key={customChar?.glb_url ?? char} character={char} glbUrl={customChar?.glb_url} primaryColor={primaryColor} secondaryColor={secondaryColor} size={180} modelScale={customChar?.zoom_scale}/>
+            <Character3D key={customChar?.glb_url ?? char} character={char} glbUrl={customChar?.glb_url} primaryColor={primaryColor} secondaryColor={secondaryColor} size={180} modelScale={customChar?.zoom_scale} offsetX={customChar?.offset_x} offsetY={customChar?.offset_y}/>
           </motion.div>
           <button onClick={() => setShowCreator(true)} style={{ background: primaryColor, color: '#FFF', border: 'none', borderRadius: 999, padding: '6px 18px', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: 'pointer', boxShadow: `0 2px 12px ${primaryColor}55`, textTransform: 'uppercase' }}>
             Customize

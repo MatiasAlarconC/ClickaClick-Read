@@ -131,7 +131,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0 8px', gap: 6 }}>
             <div style={{ position: 'relative' }}>
               <motion.div key={selected} initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: selectedLocked ? 0.55 : 1 }} transition={{ type: 'spring', damping: 20 }}>
-                <Character3D character={selected} glbUrl={customDef?.glb_url} primaryColor={primary} secondaryColor={secondary} size={140} locked={selectedLocked} modelScale={customDef?.zoom_scale}/>
+                <Character3D character={selected} glbUrl={customDef?.glb_url} primaryColor={primary} secondaryColor={secondary} size={140} locked={selectedLocked} modelScale={customDef?.zoom_scale} offsetX={customDef?.offset_x} offsetY={customDef?.offset_y}/>
               </motion.div>
               {selectedLocked && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -190,7 +190,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
                   <button key={c.id} onClick={() => handleSelectCharacter(c.id)}
                     style={{ padding: 8, borderRadius: 14, border: `2px solid ${selected === c.id ? (locked ? theme.muted : primary) : theme.border}`, background: selected === c.id ? (locked ? `${theme.muted}18` : `${primary}18`) : theme.bgSecondary, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, transition: 'all 0.2s', position: 'relative' }}>
                     <div style={{ opacity: locked ? 0.5 : 1, filter: locked ? 'grayscale(0.7)' : 'none' }}>
-                      <Character3D character={c.id} glbUrl={c.glb_url} primaryColor={c.default_primary} secondaryColor={c.default_secondary} size={52} locked={locked} modelScale={c.zoom_scale}/>
+                      <Character3D character={c.id} glbUrl={c.glb_url} primaryColor={c.default_primary} secondaryColor={c.default_secondary} size={52} locked={locked} modelScale={c.zoom_scale} offsetX={c.offset_x} offsetY={c.offset_y}/>
                     </div>
                     <span style={{ fontSize: 11, color: selected === c.id ? theme.fg : theme.muted, fontWeight: selected === c.id ? 600 : 400 }}>{c.name}</span>
                     {(() => {
