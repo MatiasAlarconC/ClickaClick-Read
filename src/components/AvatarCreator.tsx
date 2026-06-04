@@ -184,7 +184,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
                   </button>
                 )
               })}
-              {(dbCharacters ?? []).map(c => {
+              {(dbCharacters ?? []).filter(c => !CHARACTERS.find(b => b.id === c.id)).map(c => {
                 const locked = !isUnlocked(c.id)
                 return (
                   <button key={c.id} onClick={() => handleSelectCharacter(c.id)}

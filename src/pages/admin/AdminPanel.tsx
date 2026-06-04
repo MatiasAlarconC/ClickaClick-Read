@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth, useTheme } from '../../context/AppContext'
 import { supabase } from '../../lib/supabase'
 import type { AchievementCondition, DBAchievement, DBCharacter } from '../../lib/achievementEvaluator'
-import { ACHIEVEMENTS } from '../../data/achievements'
+import { ACHIEVEMENTS, type Achievement } from '../../data/achievements'
 import Character3D from '../../components/Character3D'
 
 interface Config { key: string; value: string }
@@ -16,15 +16,69 @@ const TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond', 'obsidian'] as
 const STAT_FIELDS = ['booksFinished', 'totalBooks', 'totalPages', 'totalHours', 'streak', 'sessionCount', 'notesCount', 'seriesBooks'] as const
 
 const BUILTIN_CHARACTERS = [
-  { id: 'lion',    name: 'Lion',    primary: '#C17F24' },
-  { id: 'mage',    name: 'Mage',    primary: '#7C3AED' },
-  { id: 'fox',     name: 'Fox',     primary: '#D97706' },
-  { id: 'owl',     name: 'Owl',     primary: '#0F766E' },
-  { id: 'knight',  name: 'Knight',  primary: '#475569' },
-  { id: 'cosmic',  name: 'Cosmic',  primary: '#DB2777' },
-  { id: 'phoenix', name: 'Phoenix', primary: '#F97316' },
-  { id: 'shadow',  name: 'Shadow',  primary: '#4C1D95' },
+  { id: 'lion',    name: 'Leo',    description: 'The Bold Reader',       primary: '#C17F24', secondary: '#7B4F00', glbPath: '/models/lion.glb'    },
+  { id: 'mage',    name: 'Sage',   description: 'The Wise Scholar',      primary: '#7C3AED', secondary: '#2D1B69', glbPath: '/models/mage.glb'    },
+  { id: 'fox',     name: 'Vex',    description: 'The Cunning Explorer',  primary: '#D97706', secondary: '#7C2D12', glbPath: '/models/fox.glb'     },
+  { id: 'owl',     name: 'Orion',  description: 'The Night Thinker',     primary: '#0F766E', secondary: '#042F2E', glbPath: '/models/owl.glb'     },
+  { id: 'knight',  name: 'Vale',   description: 'The Story Guardian',    primary: '#475569', secondary: '#0F172A', glbPath: '/models/knight.glb'  },
+  { id: 'cosmic',  name: 'Zara',   description: 'The Dream Weaver',      primary: '#DB2777', secondary: '#4C0519', glbPath: '/models/cosmic.glb'  },
+  { id: 'phoenix', name: 'Ember',  description: 'The Eternal Flame',     primary: '#F97316', secondary: '#7C2D12', glbPath: '/models/phoenix.glb' },
+  { id: 'shadow',  name: 'Void',   description: 'The Last Reader',       primary: '#4C1D95', secondary: '#0A0014', glbPath: '/models/void.glb'    },
 ]
+
+// DSL conditions matching the built-in achievement check functions
+const BUILTIN_CONDITIONS: Record<string, AchievementCondition> = {
+  first_book:           { type: 'stat', field: 'totalBooks',    value: 1 },
+  first_session:        { type: 'stat', field: 'sessionCount',  value: 1 },
+  three_books:          { type: 'stat', field: 'booksFinished', value: 3 },
+  ten_sessions:         { type: 'stat', field: 'sessionCount',  value: 10 },
+  first_note:           { type: 'stat', field: 'notesCount',    value: 1 },
+  library_five:         { type: 'stat', field: 'totalBooks',    value: 5 },
+  two_hours:            { type: 'stat', field: 'totalHours',    value: 2 },
+  genre_curious:        { type: 'genreDiversity', value: 3 },
+  streak_3:             { type: 'stat', field: 'streak',        value: 3 },
+  ten_books:            { type: 'stat', field: 'booksFinished', value: 10 },
+  streak_7:             { type: 'stat', field: 'streak',        value: 7 },
+  notes_10:             { type: 'stat', field: 'notesCount',    value: 10 },
+  notes_25:             { type: 'stat', field: 'notesCount',    value: 25 },
+  fifteen_sessions:     { type: 'stat', field: 'sessionCount',  value: 15 },
+  twenty_sessions:      { type: 'stat', field: 'sessionCount',  value: 20 },
+  five_hundred_pages:   { type: 'stat', field: 'totalPages',    value: 500 },
+  one_thousand_pages:   { type: 'stat', field: 'totalPages',    value: 1000 },
+  romance_reader:       { type: 'genre', genres: ['romance'], value: 5 },
+  twenty_books:         { type: 'stat', field: 'booksFinished', value: 20 },
+  thirty_books:         { type: 'stat', field: 'booksFinished', value: 30 },
+  streak_30:            { type: 'stat', field: 'streak',        value: 30 },
+  fifty_sessions:       { type: 'stat', field: 'sessionCount',  value: 50 },
+  notes_50:             { type: 'stat', field: 'notesCount',    value: 50 },
+  fantasy_master:       { type: 'genre', genres: ['fantasy'], value: 20 },
+  detective:            { type: 'genre', genres: ['mystery', 'thriller', 'crime'], value: 10 },
+  magic_realm:          { type: 'genre', genres: ['fantasy', 'science fiction', 'sci-fi', 'scifi'], value: 15 },
+  cosmic_explorer:      { type: 'genre', genres: ['science fiction', 'sci-fi', 'scifi'], value: 5 },
+  horror_fan:           { type: 'genre', genres: ['horror'], value: 10 },
+  history_lover:        { type: 'genre', genres: ['historical fiction', 'history', 'historical'], value: 10 },
+  nonfiction_scholar:   { type: 'genre', genres: ['nonfiction', 'non-fiction', 'self-help', 'self help', 'biography', 'memoir'], value: 8 },
+  ten_thousand_pages:   { type: 'stat', field: 'totalPages',   value: 10000 },
+  series_starter:       { type: 'stat', field: 'seriesBooks',  value: 2 },
+  series_fan:           { type: 'stat', field: 'seriesBooks',  value: 6 },
+  series_completionist: { type: 'stat', field: 'seriesBooks',  value: 9 },
+  fifty_books:          { type: 'stat', field: 'booksFinished', value: 50 },
+  hundred_books:        { type: 'stat', field: 'booksFinished', value: 100 },
+  hundred_sessions:     { type: 'stat', field: 'sessionCount', value: 100 },
+  streak_100:           { type: 'stat', field: 'streak',       value: 100 },
+  notes_100:            { type: 'stat', field: 'notesCount',   value: 100 },
+  two_hundred_sessions: { type: 'stat', field: 'sessionCount', value: 200 },
+  romance_master:       { type: 'genre', genres: ['romance'], value: 15 },
+  fifty_thousand_pages: { type: 'stat', field: 'totalPages',  value: 50000 },
+  diamond_reader:       { type: 'stat', field: 'booksFinished', value: 200 },
+  eternal_flame:        { type: 'stat', field: 'streak',      value: 365 },
+  five_hundred_sessions:  { type: 'stat', field: 'sessionCount', value: 500 },
+  hundred_thousand_pages: { type: 'stat', field: 'totalPages', value: 100000 },
+  polymath:             { type: 'genreDepth', minBooks: 5, genreCount: 8 },
+  obsidian_scholar:     { type: 'stat', field: 'booksFinished', value: 500 },
+  thousand_sessions:    { type: 'stat', field: 'sessionCount', value: 1000 },
+  dark_library:         { type: 'stat', field: 'totalHours',  value: 1000 },
+}
 
 const DEFAULT_CONFIGS: Config[] = [
   { key: 'gemini_enabled', value: 'true' },
@@ -295,25 +349,76 @@ export default function AdminPanel() {
     setCharForm({ id: c.id, name: c.name, description: c.description, rarity: c.rarity ?? 'rare', defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, zoomScale: c.zoom_scale ?? 1.0, offsetX: c.offset_x ?? 0, offsetY: c.offset_y ?? 0, glbFile: null, existingGlbUrl: c.glb_url })
     setEditingCharId(c.id)
     setCharError('')
-    setShowCharForm(true)
+    setShowCharForm(false)
+    setTimeout(() => setShowCharForm(true), 0)
+  }
+
+  const startEditBuiltinCharacter = (c: typeof BUILTIN_CHARACTERS[0]) => {
+    const override = dbCharacters.find(d => d.id === c.id)
+    setCharForm({
+      id: c.id,
+      name: override?.name ?? c.name,
+      description: override?.description ?? c.description,
+      rarity: override?.rarity ?? 'common',
+      defaultPrimary: override?.default_primary ?? c.primary,
+      defaultSecondary: override?.default_secondary ?? c.secondary,
+      zoomScale: override?.zoom_scale ?? 1.0,
+      offsetX: override?.offset_x ?? 0,
+      offsetY: override?.offset_y ?? 0,
+      glbFile: null,
+      existingGlbUrl: override?.glb_url ?? c.glbPath,
+    })
+    setEditingCharId(c.id)
+    setCharError('')
+    setShowCharForm(false)
+    setTimeout(() => setShowCharForm(true), 0)
+  }
+
+  const conditionToForm = (cond: AchievementCondition, f: AchievementForm) => {
+    f.conditionType = cond.type as AchievementForm['conditionType']
+    if (cond.type === 'stat') { f.statField = cond.field; f.statValue = String(cond.value) }
+    else if (cond.type === 'genre') { f.genreList = cond.genres.join(', '); f.genreValue = String(cond.value) }
+    else if (cond.type === 'genreDiversity') { f.diversityValue = String(cond.value) }
+    else if (cond.type === 'genreDepth') { f.depthMinBooks = String(cond.minBooks); f.depthGenreCount = String(cond.genreCount) }
   }
 
   const startEditAchievement = (a: DBAchievement) => {
     const f: AchievementForm = {
       id: a.id, name: a.name, description: a.description, tier: a.tier,
       rewardType: a.reward_type, rewardValue: a.reward_value ?? '',
-      conditionType: a.condition.type as AchievementForm['conditionType'],
-      statField: 'booksFinished', statValue: '1',
+      conditionType: 'stat', statField: 'booksFinished', statValue: '1',
       genreList: '', genreValue: '5', diversityValue: '3', depthMinBooks: '5', depthGenreCount: '5',
     }
-    if (a.condition.type === 'stat') { f.statField = a.condition.field; f.statValue = String(a.condition.value) }
-    else if (a.condition.type === 'genre') { f.genreList = a.condition.genres.join(', '); f.genreValue = String(a.condition.value) }
-    else if (a.condition.type === 'genreDiversity') { f.diversityValue = String(a.condition.value) }
-    else if (a.condition.type === 'genreDepth') { f.depthMinBooks = String(a.condition.minBooks); f.depthGenreCount = String(a.condition.genreCount) }
+    conditionToForm(a.condition, f)
     setAchForm(f)
     setEditingAchId(a.id)
     setAchError('')
-    setShowAchForm(true)
+    setShowAchForm(false)
+    setTimeout(() => setShowAchForm(true), 0)
+  }
+
+  const startEditBuiltinAchievement = (a: Achievement) => {
+    const override = dbAchievements.find(d => d.id === a.id)
+    const cond: AchievementCondition = override?.condition ?? BUILTIN_CONDITIONS[a.id] ?? { type: 'stat', field: 'booksFinished', value: 1 }
+    const rewardType = (override?.reward_type ?? a.reward.type) as AchievementForm['rewardType']
+    const rewardValue = override
+      ? (override.reward_value ?? '')
+      : a.reward.type === 'title' ? (a.reward as { type: 'title'; value: string }).value
+      : a.reward.type === 'character' ? (a.reward as { type: 'character'; characterId: string }).characterId
+      : ''
+    const f: AchievementForm = {
+      id: a.id, name: override?.name ?? a.name, description: override?.description ?? a.description,
+      tier: override?.tier ?? a.tier,
+      rewardType, rewardValue,
+      conditionType: 'stat', statField: 'booksFinished', statValue: '1',
+      genreList: '', genreValue: '5', diversityValue: '3', depthMinBooks: '5', depthGenreCount: '5',
+    }
+    conditionToForm(cond, f)
+    setAchForm(f)
+    setEditingAchId(a.id)
+    setAchError('')
+    setShowAchForm(false)
+    setTimeout(() => setShowAchForm(true), 0)
   }
 
   const deleteCharacter = async (id: string) => {
@@ -450,23 +555,33 @@ export default function AdminPanel() {
             </button>
           </div>
 
-          {/* Built-in achievements — read only */}
+          {/* Built-in achievements */}
           <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: muted, marginBottom: 8 }}>
             Built-in ({ACHIEVEMENTS.length})
           </div>
           {ACHIEVEMENTS.map(a => {
+            const hasOverride = dbAchievements.some(d => d.id === a.id)
             const rewardLabel = a.reward.type === 'badge' ? 'badge'
-              : a.reward.type === 'title' ? `title — ${a.reward.value}`
+              : a.reward.type === 'title' ? `title — ${(a.reward as { type: 'title'; value: string }).value}`
               : `character — ${(a.reward as { type: 'character'; characterId: string }).characterId}`
             return (
-              <div key={a.id} style={{ ...card, opacity: 0.6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: TIER_COLORS[a.tier] ?? '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{a.tier}</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{a.name}</span>
-                </div>
-                <div style={{ fontSize: 11, color: muted }}>{a.description}</div>
-                <div style={{ fontSize: 11, color: muted, marginTop: 3 }}>
-                  Reward: <span style={{ color: fg }}>{rewardLabel}</span>
+              <div key={a.id} style={{ ...card, opacity: hasOverride ? 0.45 : 0.75 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: TIER_COLORS[a.tier] ?? '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{a.tier}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{a.name}</span>
+                      {hasOverride && <span style={{ fontSize: 9, fontWeight: 700, color: theme.accent, background: `${theme.accent}22`, padding: '2px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.5 }}>overridden</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: muted }}>{a.description}</div>
+                    <div style={{ fontSize: 11, color: muted, marginTop: 3 }}>
+                      Reward: <span style={{ color: fg }}>{rewardLabel}</span>
+                    </div>
+                  </div>
+                  <button onClick={() => startEditBuiltinAchievement(a)}
+                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer', flexShrink: 0, marginLeft: 8 }}>
+                    Edit
+                  </button>
                 </div>
               </div>
             )
@@ -681,21 +796,33 @@ export default function AdminPanel() {
             </button>
           </div>
 
-          {/* Built-in characters — read only */}
+          {/* Built-in characters */}
           <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: muted, marginBottom: 8 }}>
             Built-in ({BUILTIN_CHARACTERS.length})
           </div>
-          {BUILTIN_CHARACTERS.map(c => (
-            <div key={c.id} style={{ ...card, opacity: 0.55 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.primary, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: fg }}>{c.name}</div>
-                  <div style={{ fontSize: 11, color: muted }}>ID: {c.id} · built-in</div>
+          {BUILTIN_CHARACTERS.map(c => {
+            const hasOverride = dbCharacters.some(d => d.id === c.id)
+            return (
+              <div key={c.id} style={{ ...card, opacity: hasOverride ? 0.45 : 0.75 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.primary, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: fg }}>{c.name}</span>
+                        {hasOverride && <span style={{ fontSize: 9, fontWeight: 700, color: theme.accent, background: `${theme.accent}22`, padding: '2px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.5 }}>overridden</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: muted }}>ID: {c.id} · built-in</div>
+                    </div>
+                  </div>
+                  <button onClick={() => startEditBuiltinCharacter(c)}
+                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer', flexShrink: 0 }}>
+                    Edit
+                  </button>
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           {/* Custom characters */}
           {dbCharacters.length > 0 && (
