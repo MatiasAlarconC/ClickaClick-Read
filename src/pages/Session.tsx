@@ -18,32 +18,33 @@ function genreToMusicTag(genres: string[] | undefined): string {
   return 'ambient'
 }
 
-// Royalty-free fallback tracks (SoundHelix — no API, always available)
+// Calm royalty-free fallback tracks for focused reading (no API, always available)
+// All tracks are slow/ambient regardless of genre — reading music should never be upbeat
 const FALLBACK_TRACKS: Record<string, { url: string; name: string }[]> = {
   ambient:      [
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',  name: 'Ambient Study I' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',  name: 'Ambient Study II' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3', name: 'Ambient Study III' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',  name: 'Deep Focus I' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',  name: 'Deep Focus II' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',  name: 'Deep Focus III' },
   ],
   instrumental: [
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',  name: 'Epic Journey I' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3', name: 'Epic Journey II' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3', name: 'Epic Journey III' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',  name: 'Story Flow I' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',  name: 'Story Flow II' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',  name: 'Story Flow III' },
   ],
   classical:    [
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',  name: 'Classical Focus I' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',  name: 'Classical Focus II' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3', name: 'Classical Focus III' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',  name: 'Scholar\'s Study I' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',  name: 'Scholar\'s Study II' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',  name: 'Scholar\'s Study III' },
   ],
   acoustic:     [
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',  name: 'Acoustic Calm I' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',  name: 'Acoustic Calm II' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-17.mp3', name: 'Acoustic Calm III' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',  name: 'Quiet Afternoon I' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',  name: 'Quiet Afternoon II' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',  name: 'Quiet Afternoon III' },
   ],
   electronic:   [
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',  name: 'Electronic Focus I' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-13.mp3', name: 'Electronic Focus II' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',  name: 'Electronic Focus III' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',  name: 'Mind Space I' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',  name: 'Mind Space II' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',  name: 'Mind Space III' },
   ],
 }
 

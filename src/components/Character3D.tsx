@@ -106,7 +106,7 @@ function FitToBox({ children, modelScale = 1, offsetX = 0, offsetY = 0 }: { chil
 }
 
 // ─── GLB model — colorised ─────────────────────────────────────────────────────
-function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount, modelScale, offsetX, offsetY }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string; tapCount?: number; modelScale?: number; offsetX?: number; offsetY?: number }) {
+function CharacterModel({ id, primaryColor, locked, glbUrl, modelScale, offsetX, offsetY }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string; modelScale?: number; offsetX?: number; offsetY?: number }) {
   const modelPath = glbUrl ?? MODEL_PATH[id]
   if (!modelPath) throw new Error(`No GLB for character: ${id}`)
   const { scene, animations } = useGLTF(modelPath)
@@ -121,26 +121,6 @@ function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount, modelScale
     const idle = actions['Idle'] ?? actions['idle'] ?? actions['mixamo.com'] ?? Object.values(actions)[0]
     if (idle) idle.reset().fadeIn(0.4).play()
   }, [actions])
-
-  const prevTapRef = useRef(0)
-  useEffect(() => {
-    if (!tapCount || tapCount === prevTapRef.current || !actions) return
-    prevTapRef.current = tapCount
-    const keys = Object.keys(actions)
-    if (keys.length === 0) return
-    const actionKey = keys.find(k => !k.toLowerCase().includes('idle')) ?? keys[0]
-    const action = actions[actionKey]
-    if (!action) return
-    action.reset().setLoop(THREE.LoopOnce, 1).play()
-    action.clampWhenFinished = true
-    setTimeout(() => {
-      const idleKey = keys.find(k => k.toLowerCase().includes('idle')) ?? keys[0]
-      if (idleKey !== actionKey && actions[idleKey]) {
-        action.fadeOut(0.3)
-        actions[idleKey]!.reset().fadeIn(0.3).play()
-      }
-    }, 1500)
-  }, [tapCount, actions])
 
   useEffect(() => {
     if (locked) {
@@ -238,53 +218,6 @@ class ModelErrorBoundary extends Component<
   }
 }
 
-const DEFAULT_ANIM = { height: 0.35, spins: 1, squash: 0.10 }
-
-// ─── Animated scene group (bounce on tap) ─────────────────────────────────────
-const ANIM_PROFILE: Record<string, { height: number; spins: number; squash: number }> = {
-  lion:    { height: 0.45, spins: 1,   squash: 0.15 },
-  mage:    { height: 0.30, spins: 2,   squash: 0.05 },
-  fox:     { height: 0.55, spins: 1.5, squash: 0.20 },
-  owl:     { height: 0.20, spins: 0.5, squash: 0.25 },
-  knight:  { height: 0.25, spins: 0.5, squash: 0.10 },
-  cosmic:  { height: 0.35, spins: 3,   squash: 0.05 },
-  phoenix: { height: 0.60, spins: 2,   squash: 0.08 },
-  shadow:  { height: 0.15, spins: 4,   squash: 0.02 },
-}
-
-function AnimGroup({
-  id, locked, tapCount, children,
-}: {
-  id: string; locked?: boolean; tapCount: number; children: ReactNode
-}) {
-  const ref = useRef<THREE.Group>(null!)
-  const anim = useRef({ active: false, t: 0 })
-  const { height, spins, squash } = ANIM_PROFILE[id] ?? DEFAULT_ANIM
-
-  useEffect(() => {
-    if (tapCount > 0 && !locked) anim.current = { active: true, t: 0 }
-  }, [tapCount, locked])
-
-  useFrame((_, dt) => {
-    if (!ref.current || !anim.current.active) return
-    anim.current.t = Math.min(anim.current.t + dt * 1.6, 1)
-    const t = anim.current.t
-    const arc = Math.sin(t * Math.PI)
-    ref.current.position.y = arc * height
-    ref.current.rotation.y = t * Math.PI * 2 * spins
-    const s = 1 - arc * squash
-    ref.current.scale.set(s > 0 ? 1 / s : 1, s, s > 0 ? 1 / s : 1)
-    if (t >= 1) {
-      anim.current.active = false
-      ref.current.position.y = 0
-      ref.current.rotation.y = 0
-      ref.current.scale.set(1, 1, 1)
-    }
-  })
-
-  return <group ref={ref}>{children}</group>
-}
-
 // ─── Auto-rotate group for thumbnail mode ────────────────────────────────────
 function AutoRotateGroup({ locked, children }: { locked?: boolean; children: ReactNode }) {
   const ref = useRef<THREE.Group>(null!)
@@ -302,9 +235,9 @@ function AutoRotateGroup({ locked, children }: { locked?: boolean; children: Rea
 
 // ─── Full scene ───────────────────────────────────────────────────────────────
 function CharacterScene({
-  id, locked, interactive, tapCount, primaryColor, glbUrl, modelScale, offsetX, offsetY,
+  id, locked, interactive, primaryColor, glbUrl, modelScale, offsetX, offsetY,
 }: {
-  id: string; locked?: boolean; interactive?: boolean; tapCount: number; primaryColor?: string; glbUrl?: string; modelScale?: number; offsetX?: number; offsetY?: number
+  id: string; locked?: boolean; interactive?: boolean; primaryColor?: string; glbUrl?: string; modelScale?: number; offsetX?: number; offsetY?: number
 }) {
   const { gl } = useThree()
 
@@ -314,13 +247,11 @@ function CharacterScene({
   }, [gl])
 
   const modelContent = (
-    <AnimGroup id={id} locked={locked} tapCount={tapCount}>
-      <ModelErrorBoundary id={id} locked={locked}>
-        <Suspense fallback={<Placeholder id={id} locked={locked} />}>
-          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} tapCount={tapCount} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} />
-        </Suspense>
-      </ModelErrorBoundary>
-    </AnimGroup>
+    <ModelErrorBoundary id={id} locked={locked}>
+      <Suspense fallback={<Placeholder id={id} locked={locked} />}>
+        <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} />
+      </Suspense>
+    </ModelErrorBoundary>
   )
 
   return (
@@ -383,33 +314,15 @@ export default function Character3D({
   const id: string = characterId ?? character ?? 'lion'
   const isInteractive = interactive ?? size >= 120
 
-  // Tap detection on the outer div — avoids OrbitControls pointer event conflict
-  const tapStart = useRef<number | null>(null)
-  const [tapCount, setTapCount] = useState(0)
-
-  const handlePointerDown = () => { tapStart.current = Date.now() }
-  const handlePointerUp = () => {
-    if (tapStart.current && Date.now() - tapStart.current < 220 && !locked) {
-      setTapCount(c => c + 1)
-    }
-    tapStart.current = null
-  }
-
   return (
-    <div
-      style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden',
-        cursor: isInteractive && !locked ? 'grab' : 'default' }}
-      onMouseDown={handlePointerDown}
-      onMouseUp={handlePointerUp}
-      onTouchStart={handlePointerDown}
-      onTouchEnd={handlePointerUp}
-    >
+    <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden',
+      cursor: isInteractive && !locked ? 'grab' : 'default' }}>
       <Canvas
         gl={{ antialias: true, alpha: true, outputColorSpace: THREE.SRGBColorSpace }}
         camera={{ position: [0, 0.1, 3.2], fov: 42 }}
         style={{ width: '100%', height: '100%' }}
       >
-        <CharacterScene id={id} locked={locked} interactive={isInteractive} tapCount={tapCount} primaryColor={primaryColor} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} />
+        <CharacterScene id={id} locked={locked} interactive={isInteractive} primaryColor={primaryColor} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} />
       </Canvas>
     </div>
   )
