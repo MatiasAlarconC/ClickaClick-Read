@@ -12,6 +12,8 @@ import { Suspense, useRef, useEffect, useMemo, useState, Component, type ReactNo
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, Environment, ContactShadows, OrbitControls, useAnimations } from '@react-three/drei'
 import * as THREE from 'three'
+// @ts-ignore — three/examples/jsm exports 'clone' as named function (not 'SkeletonUtils' object)
+import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import type { CharacterId } from './AvatarCharacter'
 
 // ─── Model registry ───────────────────────────────────────────────────────────
@@ -56,13 +58,33 @@ function FitToBox({ children }: { children: ReactNode }) {
 
   useFrame(() => {
     if (fitted.current || !ref.current) return
-    const box = new THREE.Box3().setFromObject(ref.current)
+    ref.current.updateMatrixWorld(true)
+    // Use geometry bounding boxes (local space × matrixWorld) so skinned-mesh
+    // bone deformations don't inflate the bounding box to wrong positions.
+    const box = new THREE.Box3()
+    let hasMesh = false
+    ref.current.traverse((obj: THREE.Object3D) => {
+      const mesh = obj as THREE.Mesh
+      if (!mesh.isMesh || !mesh.geometry) return
+      mesh.geometry.computeBoundingBox()
+      if (!mesh.geometry.boundingBox) return
+      box.union(mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld))
+      hasMesh = true
+    })
+    if (!hasMesh || box.isEmpty()) return
     const size = new THREE.Vector3(); box.getSize(size)
     const maxDim = Math.max(size.x, size.y, size.z)
     if (maxDim > 0) {
       const s = 1.8 / maxDim
       ref.current.scale.setScalar(s)
-      const box2 = new THREE.Box3().setFromObject(ref.current)
+      ref.current.updateMatrixWorld(true)
+      const box2 = new THREE.Box3()
+      ref.current.traverse((obj: THREE.Object3D) => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.isMesh && mesh.geometry?.boundingBox) {
+          box2.union(mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld))
+        }
+      })
       const center = new THREE.Vector3(); box2.getCenter(center)
       ref.current.position.sub(center)
       fitted.current = true
@@ -77,7 +99,9 @@ function CharacterModel({ id, primaryColor, locked, glbUrl, tapCount }: { id: st
   const modelPath = glbUrl ?? MODEL_PATH[id]
   if (!modelPath) throw new Error(`No GLB for character: ${id}`)
   const { scene, animations } = useGLTF(modelPath)
-  const cloned = useMemo(() => scene.clone(true), [scene])
+  const cloned = useMemo(() => {
+    try { return skeletonClone(scene) } catch { return scene.clone(true) }
+  }, [scene])
   const groupRef = useRef<THREE.Group>(null!)
   const { actions } = useAnimations(animations, groupRef)
 
