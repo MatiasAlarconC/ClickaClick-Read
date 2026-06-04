@@ -193,7 +193,12 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
                       <Character3D character={c.id} glbUrl={c.glb_url} primaryColor={c.default_primary} secondaryColor={c.default_secondary} size={52} locked={locked} modelScale={c.zoom_scale}/>
                     </div>
                     <span style={{ fontSize: 11, color: selected === c.id ? theme.fg : theme.muted, fontWeight: selected === c.id ? 600 : 400 }}>{c.name}</span>
-                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: locked ? theme.muted : '#C8A96E' }}>Custom</span>
+                    {(() => {
+                      const r = c.rarity
+                        ? { label: c.rarity.charAt(0).toUpperCase() + c.rarity.slice(1), color: RARITY_COLORS[c.rarity] ?? '#C8A96E' }
+                        : { label: 'Custom', color: '#C8A96E' }
+                      return <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: locked ? theme.muted : r.color }}>{r.label}</span>
+                    })()}
                     {locked && (
                       <div style={{ position: 'absolute', top: 6, right: 6 }}>
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke={theme.muted} strokeWidth="2.5"/><path d="M7 11V7a5 5 0 0110 0v4" stroke={theme.muted} strokeWidth="2.5" strokeLinecap="round"/></svg>

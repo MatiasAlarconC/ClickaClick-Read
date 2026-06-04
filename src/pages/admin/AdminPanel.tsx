@@ -780,14 +780,22 @@ export default function AdminPanel() {
                   <span style={label}>Preview & scale</span>
                   <div style={{ background: bg, borderRadius: 12, padding: '12px 0 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
                     <Character3D character={charForm.id} glbUrl={charForm.existingGlbUrl} primaryColor={charForm.defaultPrimary} size={160} modelScale={charForm.zoomScale} />
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <button onClick={() => setCharForm(f => ({ ...f, zoomScale: Math.max(0.2, parseFloat((f.zoomScale - 0.1).toFixed(2))) }))}
-                        style={{ width: 36, height: 36, borderRadius: '50%', border: `1px solid ${border}`, background: 'none', color: fg, fontSize: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                      <div style={{ minWidth: 52, textAlign: 'center', fontSize: 14, color: fg, fontWeight: 600 }}>{Math.round(charForm.zoomScale * 100)}%</div>
-                      <button onClick={() => setCharForm(f => ({ ...f, zoomScale: Math.min(3.0, parseFloat((f.zoomScale + 0.1).toFixed(2))) }))}
-                        style={{ width: 36, height: 36, borderRadius: '50%', border: `1px solid ${border}`, background: 'none', color: fg, fontSize: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
-                      <button onClick={() => setCharForm(f => ({ ...f, zoomScale: 1.0 }))}
-                        style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
+                    <div style={{ width: '100%', padding: '0 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, color: muted }}>Scale</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: fg }}>{Math.round(charForm.zoomScale * 100)}%</span>
+                          <button onClick={() => setCharForm(f => ({ ...f, zoomScale: 1.0 }))}
+                            style={{ fontSize: 11, padding: '3px 8px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
+                        </div>
+                      </div>
+                      <input type="range" min="0.05" max="5" step="0.05"
+                        value={charForm.zoomScale}
+                        onChange={e => setCharForm(f => ({ ...f, zoomScale: parseFloat(e.target.value) }))}
+                        style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}>
+                        <span>5%</span><span>100%</span><span>500%</span>
+                      </div>
                     </div>
                   </div>
                 </div>
