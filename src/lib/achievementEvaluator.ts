@@ -73,5 +73,6 @@ export interface DBCharacter {
   default_primary: string
   default_secondary: string
   glb_url: string
+  rarity?: string
   enabled: boolean
 }

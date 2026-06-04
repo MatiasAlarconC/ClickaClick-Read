@@ -27,6 +27,14 @@ const RARITY: Record<CharacterId, { label: string; color: string }> = {
   shadow:       { label: 'Mythic',    color: '#A855F7' },
 }
 
+const RARITY_COLORS: Record<string, string> = {
+  common:    '#9CA3AF',
+  uncommon:  '#34D399',
+  rare:      '#60A5FA',
+  legendary: '#F59E0B',
+  mythic:    '#A855F7',
+}
+
 // ─── Achievement required to unlock each character ────────────────────────────
 const UNLOCK_HINT: Partial<Record<CharacterId, { name: string; hint: string }>> = {
   owl:     { name: 'Night Reader',    hint: 'Complete 15 reading sessions' },
@@ -78,7 +86,14 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
   }
 
   const selectedLocked = !isUnlocked(selected)
-  const rarity    = (RARITY as Record<string, { label: string; color: string }>)[selected] ?? { label: 'Custom', color: '#C8A96E' }
+  const rarity = (() => {
+    if (builtinDef) return (RARITY as Record<string, { label: string; color: string }>)[selected] ?? { label: 'Common', color: '#9CA3AF' }
+    if (customDef?.rarity) {
+      const label = customDef.rarity.charAt(0).toUpperCase() + customDef.rarity.slice(1)
+      return { label, color: RARITY_COLORS[customDef.rarity] ?? '#C8A96E' }
+    }
+    return { label: 'Custom', color: '#C8A96E' }
+  })()
   const unlockHint = (UNLOCK_HINT as Record<string, { name: string; hint: string } | undefined>)[selected]
   const isCustom  = !builtinDef && !!customDef
   const hasColorPalette = !!PALETTES[selected]
@@ -190,16 +205,16 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
             </div>
           </div>
 
-          {/* Color palettes — only for built-in unlocked chars that have a palette */}
-          {!selectedLocked && hasColorPalette && (
+          {/* Color section — shown for all unlocked characters */}
+          {!selectedLocked && (
             <div style={{ padding: '0 16px 12px' }}>
               <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10 }}>Color scheme</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {(PALETTES[selected] ?? []).map((pal, i) => (
+                {hasColorPalette && (PALETTES[selected] ?? []).map((pal, i) => (
                   <button key={i} onClick={() => handlePalette(pal)}
                     style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${pal[0]} 50%, ${pal[1]} 50%)`, border: `3px solid ${primary === pal[0] ? theme.fg : 'transparent'}`, cursor: 'pointer', transition: 'border 0.15s' }}/>
                 ))}
-                {/* custom color */}
+                {/* custom color picker — always shown */}
                 <div style={{ position: 'relative' }}>
                   <input type="color" value={primary} onChange={e => setPrimary(e.target.value)}
                     style={{ width: 40, height: 40, borderRadius: 12, border: `2px dashed ${theme.border}`, cursor: 'pointer', padding: 2, background: 'none', overflow: 'hidden' }} title="Custom color"/>
@@ -228,7 +243,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
             </div>
           )}
           {/* Spacer so content isn't hidden behind sticky button */}
-          {!selectedLocked && <div style={{ height: hasColorPalette ? 88 : 20 }} />}
+          {!selectedLocked && <div style={{ height: 88 }} />}
         </div>
 
         {/* Sticky select button — always visible when character is unlocked */}

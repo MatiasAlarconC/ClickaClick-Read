@@ -66,14 +66,17 @@ interface CharacterForm {
   id: string
   name: string
   description: string
+  rarity: string
   defaultPrimary: string
   defaultSecondary: string
   glbFile: File | null
   existingGlbUrl: string
 }
 
+const CHAR_RARITIES = ['common', 'uncommon', 'rare', 'legendary', 'mythic'] as const
+
 const EMPTY_CHARACTER_FORM: CharacterForm = {
-  id: '', name: '', description: '',
+  id: '', name: '', description: '', rarity: 'rare',
   defaultPrimary: '#888888', defaultSecondary: '#444444',
   glbFile: null, existingGlbUrl: '',
 }
@@ -265,6 +268,7 @@ export default function AdminPanel() {
       id: charForm.id,
       name: charForm.name,
       description: charForm.description,
+      rarity: charForm.rarity,
       default_primary: charForm.defaultPrimary,
       default_secondary: charForm.defaultSecondary,
       glb_url: glbUrl,
@@ -280,7 +284,7 @@ export default function AdminPanel() {
   }
 
   const startEditCharacter = (c: DBCharacter) => {
-    setCharForm({ id: c.id, name: c.name, description: c.description, defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, glbFile: null, existingGlbUrl: c.glb_url })
+    setCharForm({ id: c.id, name: c.name, description: c.description, rarity: c.rarity ?? 'rare', defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, glbFile: null, existingGlbUrl: c.glb_url })
     setEditingCharId(c.id)
     setCharError('')
     setShowCharForm(true)
@@ -725,7 +729,7 @@ export default function AdminPanel() {
             <div style={{ background: secondary, borderRadius: 16, padding: 20, marginTop: 16 }}>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: fg, marginBottom: 20 }}>{editingCharId ? 'Edit Character' : 'New Character'}</div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
                 <div>
                   <span style={label}>ID (unique, no spaces)</span>
                   <input value={charForm.id} readOnly={!!editingCharId} onChange={e => setCharForm(f => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. dragon" style={{ ...input, opacity: editingCharId ? 0.5 : 1 }} />
@@ -733,6 +737,12 @@ export default function AdminPanel() {
                 <div>
                   <span style={label}>Name</span>
                   <input value={charForm.name} onChange={e => setCharForm(f => ({ ...f, name: e.target.value }))} placeholder="Display name" style={input} />
+                </div>
+                <div>
+                  <span style={label}>Rarity</span>
+                  <select value={charForm.rarity} onChange={e => setCharForm(f => ({ ...f, rarity: e.target.value }))} style={{ ...input, WebkitAppearance: 'none' }}>
+                    {CHAR_RARITIES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                  </select>
                 </div>
               </div>
 
