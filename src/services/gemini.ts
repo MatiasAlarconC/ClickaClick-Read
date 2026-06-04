@@ -52,7 +52,7 @@ async function getConfig(): Promise<GeminiConfig> {
   return configCache
 }
 
-async function callGemini(prompt: string, model: string): Promise<{ text: string; tokens: number }> {
+async function callGemini(prompt: string, model: string, jsonMode = false): Promise<{ text: string; tokens: number }> {
   if (!GEMINI_API_KEY) {
     console.error('[ClickaClick AI] VITE_GEMINI_API_KEY is not set — check Vercel environment variables')
     throw new Error('No Gemini API key')
@@ -69,7 +69,11 @@ async function callGemini(prompt: string, model: string): Promise<{ text: string
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { maxOutputTokens: 2048, temperature: 0.7 },
+        generationConfig: {
+          maxOutputTokens: jsonMode ? 4096 : 2048,
+          temperature: 0.7,
+          ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+        },
       }),
     })
     if (res.ok) {
@@ -129,16 +133,17 @@ export async function getRecommendations(params: {
   if (!cfg.enabled || !cfg.recommendations_enabled) return []
 
   const count = params.count ?? 10
-  const booksStr = params.finishedBooks.map(b => `"${b.title}" by ${b.author} (rating: ${b.rating ?? 'unrated'})`).join(', ')
-  const excludeStr = params.exclude?.length ? ` Do not include these already shown: ${params.exclude.map(t => `"${t}"`).join(', ')}.` : ''
-  const prompt = `Based on this reader's history: ${booksStr}, recommend ${count} books they haven't read.${excludeStr} For each, provide: title, author, and a one-sentence reason why it matches their taste. Respond in JSON only, as an array: [{"title":"...","author":"...","reason":"..."}]`
+  const booksStr = params.finishedBooks.map(b => `"${b.title}" by ${b.author}${b.rating ? ` (rated ${b.rating}/5)` : ''}${b.genres?.length ? ` [${b.genres.join(', ')}]` : ''}`).join('\n')
+  const excludeStr = params.exclude?.length ? `\nDo NOT include: ${params.exclude.map(t => `"${t}"`).join(', ')}.` : ''
+  const prompt = `You are a book recommendation engine. Output ONLY a valid JSON array, no markdown, no explanation.\n\nReader's books:\n${booksStr}${excludeStr}\n\nRecommend exactly ${count} books. Keep "reason" under 15 words. Return:\n[{"title":"...","author":"...","reason":"..."}]`
 
   try {
-    const { text, tokens } = await callGemini(prompt, cfg.model)
+    const { text, tokens } = await callGemini(prompt, cfg.model, true)
     await logUsage('recommendations', tokens, cfg.model, params.userId)
-    const json = text.match(/\[[\s\S]*\]/)?.[0]
+    const stripped = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+    const json = stripped.match(/\[[\s\S]*\]/)?.[0] ?? (stripped.startsWith('[') ? stripped : null)
     if (!json) throw new Error('Gemini returned a response with no JSON array')
-    return json ? JSON.parse(json) : []
+    return JSON.parse(json)
   } catch (err) {
     console.error('[ClickaClick AI] recommendations failed:', err)
     throw err   // propagate so callers can show the real error
@@ -160,6 +165,56 @@ export async function getReadingPersonality(params: {
     return text.trim()
   } catch (err) {
     console.error('[ClickaClick AI] wrapped_personality failed:', err)
+    return null
+  }
+}
+
+export async function summarizeNotes(params: {
+  notes: Array<{ page_number: number | null; content: string }>
+  bookTitle: string
+  userId: string | null
+}): Promise<string> {
+  const cfg = await getConfig()
+  if (!cfg.enabled || !cfg.summary_enabled) throw new Error('AI summaries are disabled')
+
+  const notesText = params.notes
+    .map(n => `[p.${n.page_number ?? '?'}] ${n.content}`)
+    .join('\n')
+
+  const prompt = `I'm reading "${params.bookTitle}". Here are my reading notes:\n\n${notesText}\n\nWrite a concise 3-5 sentence summary of my reading progress and key insights based on these notes. Focus on themes, questions, and ideas I seem to be tracking. Write in second person ("You've been following...").`
+
+  const { text, tokens } = await callGemini(prompt, cfg.model)
+  await logUsage('notes_summary', tokens, cfg.model, params.userId)
+  return text.trim()
+}
+
+export interface SeriesInfo {
+  seriesName: string
+  position: number
+  totalBooks: number
+  nextTitle: string
+  nextAuthor: string
+}
+
+export async function detectBookSeries(params: {
+  title: string; author: string; userId: string | null
+}): Promise<SeriesInfo | null> {
+  const cfg = await getConfig()
+  if (!cfg.enabled) return null
+
+  const prompt = `Is "${params.title}" by ${params.author} part of a numbered book series with sequels?
+Reply ONLY with valid JSON, no markdown, no explanation.
+If yes: {"inSeries":true,"seriesName":"...","position":1,"totalBooks":3,"nextTitle":"...","nextAuthor":"..."}
+If no or unsure: {"inSeries":false}`
+
+  try {
+    const { text, tokens } = await callGemini(prompt, cfg.model, true)
+    await logUsage('series_detection', tokens, cfg.model, params.userId)
+    const stripped = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+    const json = JSON.parse(stripped)
+    if (!json.inSeries) return null
+    return { seriesName: json.seriesName, position: json.position, totalBooks: json.totalBooks, nextTitle: json.nextTitle, nextAuthor: json.nextAuthor }
+  } catch {
     return null
   }
 }

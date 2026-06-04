@@ -10,11 +10,6 @@ export function HomeScreen() {
   const { theme } = useTheme()
   const { user, profile, notifications, markNotificationsRead } = useAuth()
   const [showNotifications, setShowNotifications] = useState(false)
-
-  // Show notification panel automatically on first render if there are unread ones
-  useEffect(() => {
-    if (notifications.length > 0) setShowNotifications(true)
-  }, [notifications.length])
   const navigate = useNavigate()
 
   const [currentBooks, setCurrentBooks] = useState<UserBook[]>([])
@@ -45,13 +40,13 @@ export function HomeScreen() {
     // reading goal
     if (profile?.reading_goal_books_per_year) setYearlyGoal(profile.reading_goal_books_per_year)
 
-    // streak & heatmap from sessions
-    supabase.from('reading_sessions').select('started_at').eq('user_id', user.id).gte('started_at', new Date(Date.now() - 7 * 86400000).toISOString()).order('started_at', { ascending: false })
+    // streak & heatmap — fetch all sessions (no date limit) so streak isn't capped at 7
+    supabase.from('reading_sessions').select('started_at').eq('user_id', user.id).eq('is_manual', false).order('started_at', { ascending: false })
       .then(({ data }) => {
         if (!data) return
         const sessionDates = new Set(data.map((s: { started_at: string }) => new Date(s.started_at).toDateString()))
 
-        // Week heat (Mon-Sun)
+        // Week heat (Mon-Sun for current week)
         const week: boolean[] = Array(7).fill(false)
         const today = new Date()
         for (let i = 0; i < 7; i++) {
@@ -60,7 +55,7 @@ export function HomeScreen() {
         }
         setWeekDays(week)
 
-        // Streak
+        // Streak (counts consecutive days ending today or yesterday)
         let s = 0; const now = new Date()
         for (let i = 0; i < 366; i++) {
           const d = new Date(now); d.setDate(now.getDate() - i)
@@ -82,14 +77,14 @@ export function HomeScreen() {
 
       {/* ── Notification overlay ───────────────────────────────────────────── */}
       <AnimatePresence>
-        {showNotifications && notifications.length > 0 && (
+        {showNotifications && (
           <motion.div
             key="notif-overlay"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-            onClick={() => { setShowNotifications(false); markNotificationsRead() }}>
+            onClick={() => { setShowNotifications(false); if (notifications.length > 0) markNotificationsRead() }}>
             <motion.div
               key="notif-sheet"
               initial={{ y: '100%' }}
@@ -100,15 +95,26 @@ export function HomeScreen() {
               style={{ width: '100%', maxWidth: 480, background: theme.bg, borderRadius: '22px 22px 0 0', padding: '20px 22px', paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))', maxHeight: '70vh', overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg }}>Notifications</div>
-                <button onClick={() => { setShowNotifications(false); markNotificationsRead() }}
-                  style={{ background: 'none', border: 'none', fontSize: 13, color: theme.accent, fontWeight: 600, cursor: 'pointer', padding: '4px 8px' }}>Mark all read</button>
+                {notifications.length > 0 && (
+                  <button onClick={() => { setShowNotifications(false); markNotificationsRead() }}
+                    style={{ background: 'none', border: 'none', fontSize: 13, color: theme.accent, fontWeight: 600, cursor: 'pointer', padding: '4px 8px' }}>Mark all read</button>
+                )}
               </div>
+              {notifications.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                  <svg width="40" height="40" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.25, marginBottom: 10 }}>
+                    <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={theme.fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M13.73 21a2 2 0 01-3.46 0" stroke={theme.fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <div style={{ fontSize: 14, color: theme.muted }}>No notifications</div>
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {notifications.map(n => (
                   <div key={n.id} style={{ padding: '13px 14px', background: theme.bgSecondary, borderRadius: 14, border: `1px solid ${theme.border}`, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
                     <div style={{ width: 36, height: 36, borderRadius: '50%', background: n.type === 'achievement' ? '#F59E0B20' : `${theme.accent}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {n.type === 'achievement'
-                        ? <span style={{ fontSize: 18 }}>&#127942;</span>
+                        ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M3 4h18v3H3V4zm0 3v7a7 7 0 0014 0V7H3z" stroke="#F59E0B" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/><rect x="9" y="18" width="6" height="1.5" rx="0.75" fill="#F59E0B"/><rect x="7" y="19.5" width="10" height="1.5" rx="0.75" fill="#F59E0B"/><rect x="1" y="4" width="2" height="5" rx="1" fill="#F59E0B"/><rect x="21" y="4" width="2" height="5" rx="1" fill="#F59E0B"/></svg>
                         : <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke={theme.accent} strokeWidth="2" strokeLinecap="round"/><circle cx="9" cy="7" r="4" stroke={theme.accent} strokeWidth="2"/><path d="M23 21v-2a4 4 0 0 0-3-3.87" stroke={theme.accent} strokeWidth="2" strokeLinecap="round"/><path d="M16 3.13a4 4 0 0 1 0 7.75" stroke={theme.accent} strokeWidth="2" strokeLinecap="round"/></svg>
                       }
                     </div>
@@ -124,6 +130,23 @@ export function HomeScreen() {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* ── Fixed header with bell ────────────────────────────────────────────── */}
+      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100, display: 'flex', justifyContent: 'flex-end', padding: 'env(safe-area-inset-top, 0px) 18px 0', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', pointerEvents: 'none' }}>
+        <button
+          onClick={() => setShowNotifications(true) }
+          style={{ pointerEvents: 'all', position: 'relative', width: 38, height: 38, borderRadius: '50%', background: theme.bgSecondary, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={theme.fg} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M13.73 21a2 2 0 01-3.46 0" stroke={theme.fg} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          {notifications.length > 0 && (
+            <div style={{ position: 'absolute', top: -3, right: -3, width: 16, height: 16, borderRadius: '50%', background: theme.accent, border: `2px solid ${theme.bg}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontSize: 9, color: theme.accentFg, fontWeight: 700, lineHeight: 1 }}>{notifications.length > 9 ? '9+' : notifications.length}</span>
+            </div>
+          )}
+        </button>
+      </div>
+
       <div style={{ flex: 1, padding: '64px 22px 0' }}>
 
         {/* Greeting */}

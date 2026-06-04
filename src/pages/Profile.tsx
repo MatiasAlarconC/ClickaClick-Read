@@ -8,6 +8,8 @@ import { CHARACTERS, type CharacterId } from '../components/AvatarCharacter'
 import Character3D from '../components/Character3D'
 import { getUnlockedCharacters, getUnlockedTitles } from '../data/achievements'
 import type { AchievementStats } from '../data/achievements'
+import { evaluateCondition } from '../lib/achievementEvaluator'
+import type { DBAchievement, DBCharacter } from '../lib/achievementEvaluator'
 import AvatarCreator from '../components/AvatarCreator'
 import { FlameIcon, BookOpenIcon, ClockIcon, LightningIcon, MoonIcon, SunIcon } from '../components/Icons'
 import type { AvatarConfig } from '../types'
@@ -43,7 +45,6 @@ export default function ProfileScreen() {
   const [showCreator,     setShowCreator]     = useState(false)
   const [showGoals,       setShowGoals]       = useState(false)
   const [showAccount,     setShowAccount]     = useState(false)
-  const [showTitlePicker, setShowTitlePicker] = useState(false)
   const [showEmailForm,   setShowEmailForm]   = useState(false)
   const [showPwForm,      setShowPwForm]      = useState(false)
 
@@ -60,15 +61,18 @@ export default function ProfileScreen() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
 
-  const avatarCfg: AvatarConfig | null = (profile?.avatar_config as AvatarConfig) ?? null
-  const char: CharacterId  = avatarCfg?.character    ?? 'lion'
-  const primaryColor       = avatarCfg?.primaryColor ?? CHARACTERS.find(c => c.id === char)!.defaultPrimary
-  const secondaryColor     = avatarCfg?.secondaryColor ?? CHARACTERS.find(c => c.id === char)!.defaultSecondary
-  const charDef            = CHARACTERS.find(c => c.id === char)!
-
   // ── Profile stats ──────────────────────────────────────────────────────────
   const [profileStats, setProfileStats] = useState({ booksFinished: 0, pagesRead: 0, hours: 0, streak: 0 })
   const [achievementStats, setAchievementStats] = useState<AchievementStats | null>(null)
+  const [dbCharacters, setDbCharacters] = useState<DBCharacter[]>([])
+  const [dbAchievements, setDbAchievements] = useState<DBAchievement[]>([])
+
+  const avatarCfg: AvatarConfig | null = (profile?.avatar_config as AvatarConfig) ?? null
+  const char: string = avatarCfg?.character ?? 'lion'
+  const builtinChar  = CHARACTERS.find(c => c.id === char)
+  const customChar   = dbCharacters.find(c => c.id === char)
+  const primaryColor   = avatarCfg?.primaryColor   ?? builtinChar?.defaultPrimary   ?? customChar?.default_primary   ?? '#888888'
+  const secondaryColor = avatarCfg?.secondaryColor ?? builtinChar?.defaultSecondary ?? customChar?.default_secondary ?? '#444444'
 
   useEffect(() => {
     if (!user) return
@@ -123,19 +127,28 @@ export default function ProfileScreen() {
         streak, genreCounts,
         sessionCount:  allSessions.length,
         notesCount:    (notesRes.data ?? []).length,
+        seriesBooks:   0,
       })
     })
+    supabase.from('characters_config').select('*').eq('enabled', true)
+      .then(({ data }) => { if (data) setDbCharacters(data as DBCharacter[]) })
+    supabase.from('achievements_config').select('*').eq('enabled', true)
+      .then(({ data }) => { if (data) setDbAchievements(data as DBAchievement[]) })
   }, [user])
 
   // ── Derived ────────────────────────────────────────────────────────────────
-  const unlockedCharacters = achievementStats ? getUnlockedCharacters(achievementStats) : undefined
+  const unlockedCharacters = (() => {
+    if (!achievementStats) return undefined
+    const set = getUnlockedCharacters(achievementStats)
+    for (const a of dbAchievements) {
+      if (a.reward_type === 'character' && a.reward_value && evaluateCondition(a.condition, achievementStats)) {
+        set.add(a.reward_value)
+      }
+    }
+    return set
+  })()
   const unlockedTitles     = achievementStats ? getUnlockedTitles(achievementStats) : []
   const profileTitle: string | null = (profile as any)?.title ?? null
-  const availableTitles    = (() => {
-    const base = ['Reader', ...unlockedTitles.filter(t => t !== 'Reader')]
-    if (profileTitle && !base.includes(profileTitle)) base.push(profileTitle)
-    return base
-  })()
   const memberYear = user?.created_at ? new Date(user.created_at).getFullYear() : null
   const heroStats = [
     { icon: <BookOpenIcon size={14} color={primaryColor}/>, label: 'Books',  value: String(profileStats.booksFinished) },
@@ -145,7 +158,7 @@ export default function ProfileScreen() {
   ]
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleSaveAvatar = async (character: CharacterId, primary: string, secondary: string) => {
+  const handleSaveAvatar = async (character: string, primary: string, secondary: string) => {
     setShowCreator(false)
     await updateProfile({ avatar_config: { character, primaryColor: primary, secondaryColor: secondary } as any })
   }
@@ -204,11 +217,6 @@ export default function ProfileScreen() {
     if (!error) { setNewPassword(''); setConfirmPassword('') }
   }
 
-  const handleSelectTitle = async (title: string) => {
-    await updateProfile({ title } as any)
-    setShowTitlePicker(false)
-  }
-
   const handleSignOut = async () => { await signOut(); navigate('/') }
 
   const inputStyle: React.CSSProperties = {
@@ -235,18 +243,16 @@ export default function ProfileScreen() {
 
         <div style={{ textAlign: 'center', marginBottom: 8, zIndex: 1 }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 24, color: theme.fg, letterSpacing: -0.5 }}>{profile?.username ?? 'Reader'}</div>
-          {/* Title with edit pencil */}
-          <button onClick={() => setShowTitlePicker(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 2, padding: '2px 6px', borderRadius: 6 }}>
-            <span style={{ fontSize: 12, color: primaryColor, fontWeight: 600 }}>{profileTitle ?? 'Reader'}</span>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M17 3a2.828 2.828 0 014 4L7.5 20.5 2 22l1.5-5.5L17 3z" stroke={primaryColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-          </button>
-          <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{memberYear ? `member since ${memberYear}` : charDef.description}</div>
+          {profileTitle && (
+            <div style={{ fontSize: 12, color: primaryColor, fontWeight: 600, marginTop: 2 }}>{profileTitle}</div>
+          )}
+          <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>{memberYear ? `member since ${memberYear}` : (builtinChar?.description ?? customChar?.description ?? '')}</div>
         </div>
 
         {/* Character — click to animate only (Customize is its own button) */}
         <div style={{ zIndex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}>
-            <Character3D character={char} primaryColor={primaryColor} secondaryColor={secondaryColor} size={180}/>
+            <Character3D key={customChar?.glb_url ?? char} character={char} glbUrl={customChar?.glb_url} primaryColor={primaryColor} secondaryColor={secondaryColor} size={180} modelScale={customChar?.zoom_scale} offsetX={customChar?.offset_x} offsetY={customChar?.offset_y}/>
           </motion.div>
           <button onClick={() => setShowCreator(true)} style={{ background: primaryColor, color: '#FFF', border: 'none', borderRadius: 999, padding: '6px 18px', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: 'pointer', boxShadow: `0 2px 12px ${primaryColor}55`, textTransform: 'uppercase' }}>
             Customize
@@ -476,45 +482,12 @@ export default function ProfileScreen() {
 
       </div>
 
-      {/* ── Title picker sheet ────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {showTitlePicker && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'flex-end' }}
-            onClick={() => setShowTitlePicker(false)}>
-            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }} transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-              style={{ background: theme.bgElevated, borderRadius: '20px 20px 0 0', padding: 24, width: '100%', paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))' }}
-              onClick={e => e.stopPropagation()}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-                <div style={{ fontSize: 17, fontWeight: 700, color: theme.fg }}>Your Titles</div>
-                <div style={{ fontSize: 11, color: theme.muted }}>{unlockedTitles.length} unlocked</div>
-              </div>
-              {availableTitles.length === 0 ? (
-                <div style={{ fontSize: 13, color: theme.muted, textAlign: 'center', padding: '24px 0' }}>Earn achievements to unlock titles.</div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '50vh', overflowY: 'auto' }}>
-                  {availableTitles.map(title => {
-                    const isActive = (profileTitle ?? 'Reader') === title
-                    return (
-                      <button key={title} onClick={() => handleSelectTitle(title)} style={{ padding: '13px 16px', background: isActive ? `${primaryColor}15` : theme.bgSecondary, border: `1px solid ${isActive ? primaryColor + '50' : 'transparent'}`, borderRadius: 12, textAlign: 'left', fontSize: 14, color: isActive ? primaryColor : theme.fg, fontWeight: isActive ? 700 : 400, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        {title}
-                        {isActive && <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke={primaryColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* ── Avatar creator ────────────────────────────────────────────────────── */}
       <AnimatePresence>
         {showCreator && (
           <AvatarCreator onClose={() => setShowCreator(false)} onSave={handleSaveAvatar}
             initialCharacter={char} initialPrimary={primaryColor} initialSecondary={secondaryColor} theme={theme}
-            unlockedCharacters={unlockedCharacters}/>
+            unlockedCharacters={unlockedCharacters} dbCharacters={dbCharacters}/>
         )}
       </AnimatePresence>
 

@@ -86,11 +86,14 @@ export default function AchievementsScreen() {
         else if (i > 0) break
       }
 
+      // TODO: seriesBooks needs a series_name column on user_books/books to be computed properly
+      const seriesBooks = 0
+
       setStats({
         booksFinished, totalBooks, totalPages,
         totalHours, streak,
         genreCounts: countGenres(userBooks),
-        sessionCount, notesCount,
+        sessionCount, notesCount, seriesBooks,
       })
 
       // Detect newly unlocked achievements and create notifications
@@ -99,7 +102,7 @@ export default function AchievementsScreen() {
           booksFinished, totalBooks, totalPages,
           totalHours, streak,
           genreCounts: countGenres(userBooks),
-          sessionCount, notesCount,
+          sessionCount, notesCount, seriesBooks,
         }
         const dbConverted: UnifiedAchievement[] = dbAchievements.map(a => ({
           id: a.id, name: a.name, description: a.description,
@@ -117,21 +120,24 @@ export default function AchievementsScreen() {
 
         const seenKey = `seen_achievements_${user.id}`
         const seen: string[] = JSON.parse(localStorage.getItem(seenKey) ?? '[]')
-        const newlyUnlocked = currentUnlocked.filter(id => !seen.includes(id))
 
-        if (newlyUnlocked.length > 0) {
+        if (seen.length === 0) {
+          // First visit: seed without notifying
           localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
-          const achToNotify = allAchievements.filter(a => newlyUnlocked.includes(a.id))
-          const notifRows = achToNotify.map(a => ({
-            user_id: user.id,
-            type: 'achievement',
-            title: 'Achievement unlocked',
-            body: `You unlocked "${a.name}".`,
-            data: { achievement_id: a.id },
-          }))
-          supabase.from('notifications').insert(notifRows).then(r => r)
-        } else if (seen.length === 0 && currentUnlocked.length > 0) {
-          localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
+        } else {
+          const newlyUnlocked = currentUnlocked.filter(id => !seen.includes(id))
+          if (newlyUnlocked.length > 0) {
+            localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
+            const achToNotify = allAchievements.filter(a => newlyUnlocked.includes(a.id))
+            const notifRows = achToNotify.map(a => ({
+              user_id: user.id,
+              type: 'achievement',
+              title: 'Achievement unlocked',
+              body: `You unlocked "${a.name}".`,
+              data: { achievement_id: a.id },
+            }))
+            supabase.from('notifications').insert(notifRows).then(r => r)
+          }
         }
       }
     })

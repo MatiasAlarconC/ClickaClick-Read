@@ -21,7 +21,7 @@ interface UserBookEntry {
   id: string
   status: string
   current_page: number | null
-  rating: number | null
+  user_rating: number | null
   book: {
     title: string
     author: string
@@ -42,7 +42,7 @@ export default function PublicProfileScreen() {
   const [stats, setStats]           = useState<AchievementStats | null>(null)
   const [loading, setLoading]       = useState(true)
   const [notFound, setNotFound]     = useState(false)
-  const [challenged, setChallenged] = useState(false)
+  const [cheered, setCheered] = useState(false)
 
   useEffect(() => {
     if (!userId) return
@@ -63,7 +63,7 @@ export default function PublicProfileScreen() {
       // 2 – Fetch books (reading + finished)
       const { data: ubs } = await supabase
         .from('user_books')
-        .select('id, status, current_page, rating, book:books(title, author, cover_url, pages_default, genres)')
+        .select('id, status, current_page, user_rating, book:books(title, author, cover_url, pages_default, genres)')
         .eq('user_id', userId)
         .in('status', ['reading', 'finished'])
 
@@ -104,6 +104,7 @@ export default function PublicProfileScreen() {
         genreCounts,
         sessionCount,
         notesCount: 0,
+        seriesBooks: 0,
       })
 
       setLoading(false)
@@ -241,22 +242,25 @@ export default function PublicProfileScreen() {
 
         {/* Interaction buttons */}
         {user && user.id !== userId && (
-          <section style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 8 }}>
+          <section style={{ paddingTop: 8 }}>
             <button
               onClick={async () => {
-                if (challenged) return
+                if (cheered) return
                 await supabase.from('notifications').insert({
                   user_id: userId,
-                  type: 'challenge',
-                  title: 'Reading challenge!',
-                  body: `@${(user as any).user_metadata?.username ?? 'A friend'} challenged you to read more this week 📚`,
+                  type: 'cheer',
+                  title: 'Someone cheered you on!',
+                  body: `@${(user as any).user_metadata?.username ?? 'A friend'} sent you a cheer — keep reading!`,
                   data: { from_user_id: user.id },
                 })
-                setChallenged(true)
+                setCheered(true)
               }}
-              style={{ padding: '11px 16px', background: challenged ? theme.bgSecondary : primaryColor, color: challenged ? theme.muted : '#000', borderRadius: 14, border: 'none', fontSize: 13, fontWeight: 600, cursor: challenged ? 'default' : 'pointer', transition: 'all .2s' }}
+              style={{ width: '100%', padding: '13px 16px', background: cheered ? theme.bgSecondary : primaryColor, color: cheered ? theme.muted : '#FFF', borderRadius: 14, border: 'none', fontSize: 13, fontWeight: 600, cursor: cheered ? 'default' : 'pointer', transition: 'all .2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
             >
-              {challenged ? '✓ Challenge sent!' : '🏆 Challenge to read more'}
+              {cheered
+                ? <><svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L20 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> Cheer sent!</>
+                : <><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> Send a cheer</>
+              }
             </button>
           </section>
         )}

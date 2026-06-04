@@ -31,6 +31,7 @@ export default function FriendsScreen() {
   const [outgoing,     setOutgoing]     = useState<(Friendship & { profile: FriendProfile })[]>([])
   const [actionId,     setActionId]     = useState<string | null>(null)
   const [loading,      setLoading]      = useState(true)
+  const [friendReading, setFriendReading] = useState<Record<string, { title: string; author: string; current_page: number | null; pages_default: number | null }>>({})
 
   // ── Load friends & requests ──────────────────────────────────────────────
   const reload = useCallback(async () => {
@@ -65,6 +66,25 @@ export default function FriendsScreen() {
     setIncoming(inc)
     setOutgoing(out)
     setLoading(false)
+
+    // Fetch currently-reading book for each accepted friend
+    if (accepted.length > 0) {
+      const ids = accepted.map(f => f.id)
+      const { data: readingBooks } = await supabase
+        .from('user_books')
+        .select('user_id, current_page, book:books(title, author, pages_default)')
+        .in('user_id', ids)
+        .eq('status', 'reading')
+        .limit(1, { foreignTable: '' } as any)
+
+      if (readingBooks) {
+        const map: Record<string, any> = {}
+        for (const b of readingBooks as any[]) {
+          if (!map[b.user_id]) map[b.user_id] = { title: b.book?.title, author: b.book?.author, current_page: b.current_page, pages_default: b.book?.pages_default }
+        }
+        setFriendReading(map)
+      }
+    }
   }, [user])
 
   useEffect(() => { reload() }, [reload])
@@ -252,23 +272,49 @@ export default function FriendsScreen() {
               <>
                 <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: muted, marginBottom: 10 }}>Your Friends</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {friends.map(p => (
-                    <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', background: bgSecondary, borderRadius: 12, border: `1px solid ${border}` }}>
-                      <button onClick={() => navigate(`/profile/${p.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
-                        <Avatar p={p} />
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 500, color: fg }}>@{p.username ?? 'unnamed'}</div>
-                          <div style={{ fontSize: 11, color: muted }}>View profile →</div>
+                  {friends.map(p => {
+                    const reading = friendReading[p.id]
+                    const pct = reading?.pages_default && reading?.current_page
+                      ? Math.min(100, Math.round((reading.current_page / reading.pages_default) * 100))
+                      : null
+                    return (
+                      <div key={p.id} style={{ background: bgSecondary, borderRadius: 14, border: `1px solid ${border}`, overflow: 'hidden' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px' }}>
+                          <button onClick={() => navigate(`/profile/${p.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                            <Avatar p={p} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontSize: 14, fontWeight: 500, color: fg }}>@{p.username ?? 'unnamed'}</div>
+                              {reading
+                                ? <div style={{ fontSize: 11, color: muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>Reading: {reading.title}</div>
+                                : <div style={{ fontSize: 11, color: muted }}>View profile →</div>}
+                            </div>
+                          </button>
+                          <button disabled={actionId === p.id} onClick={() => removeFriend(p.id)} style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${border}`, background: 'none', color: muted, fontSize: 11, cursor: 'pointer', flexShrink: 0 }}>{actionId === p.id ? '…' : 'Remove'}</button>
                         </div>
-                      </button>
-                      <button disabled={actionId === p.id} onClick={() => removeFriend(p.id)} style={{ padding: '6px 12px', borderRadius: 8, border: `1px solid ${border}`, background: 'none', color: muted, fontSize: 12, cursor: 'pointer' }}>{actionId === p.id ? '…' : 'Remove'}</button>
-                    </div>
-                  ))}
+                        {pct !== null && (
+                          <div style={{ padding: '0 14px 12px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <span style={{ fontSize: 10, color: muted }}>{reading.author}</span>
+                              <span style={{ fontSize: 10, color: muted }}>{pct}% done</span>
+                            </div>
+                            <div style={{ height: 3, background: border, borderRadius: 2, overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${pct}%`, background: accent, borderRadius: 2 }} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               </>
             ) : !loading && incoming.length === 0 && outgoing.length === 0 && (
               <div style={{ textAlign: 'center', padding: '40px 20px', color: muted }}>
-                <div style={{ fontSize: 32, marginBottom: 10 }}>👥</div>
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.3, marginBottom: 10 }}>
+                  <circle cx="9" cy="7" r="4" stroke={fg} strokeWidth="1.5"/>
+                  <path d="M2 20c0-4 3.13-7 7-7" stroke={fg} strokeWidth="1.5" strokeLinecap="round"/>
+                  <circle cx="17" cy="9" r="3" stroke={fg} strokeWidth="1.5"/>
+                  <path d="M14 20c0-3 1.34-5 3-5s3 2 3 5" stroke={fg} strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
                 <div style={{ fontSize: 15, color: fg, marginBottom: 6 }}>No friends yet</div>
                 <div style={{ fontSize: 13 }}>Search for readers above to add them as friends.</div>
               </div>

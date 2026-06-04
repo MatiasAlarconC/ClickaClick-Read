@@ -10,8 +10,10 @@
 
 import { Suspense, useRef, useEffect, useMemo, useState, Component, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useGLTF, Environment, ContactShadows, OrbitControls } from '@react-three/drei'
+import { useGLTF, Environment, ContactShadows, OrbitControls, useAnimations } from '@react-three/drei'
 import * as THREE from 'three'
+// @ts-ignore — three/examples/jsm exports 'clone' as named function (not 'SkeletonUtils' object)
+import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
 import type { CharacterId } from './AvatarCharacter'
 
 // ─── Model registry ───────────────────────────────────────────────────────────
@@ -50,21 +52,52 @@ const CHARACTER_SECONDARY: Record<string, string> = {
 
 // ─── Fit loaded GLB into a normalised ±1 bounding box ─────────────────────────
 // Uses useFrame so it retries every frame until geometry is ready (fixes timing issues)
-function FitToBox({ children }: { children: ReactNode }) {
+function FitToBox({ children, modelScale = 1, offsetX = 0, offsetY = 0 }: { children: ReactNode; modelScale?: number; offsetX?: number; offsetY?: number }) {
   const ref = useRef<THREE.Group>(null!)
   const fitted = useRef(false)
+  const prev = useRef({ modelScale, offsetX, offsetY })
 
   useFrame(() => {
+    // Reset whenever any display param changes so live preview updates immediately
+    const p = prev.current
+    if (p.modelScale !== modelScale || p.offsetX !== offsetX || p.offsetY !== offsetY) {
+      prev.current = { modelScale, offsetX, offsetY }
+      fitted.current = false
+      if (ref.current) { ref.current.scale.setScalar(1); ref.current.position.set(0, 0, 0) }
+    }
     if (fitted.current || !ref.current) return
-    const box = new THREE.Box3().setFromObject(ref.current)
+    ref.current.updateMatrixWorld(true)
+    // Use geometry bounding boxes (local space × matrixWorld) so skinned-mesh
+    // bone deformations don't inflate the bounding box to wrong positions.
+    const box = new THREE.Box3()
+    let hasMesh = false
+    ref.current.traverse((obj: THREE.Object3D) => {
+      const mesh = obj as THREE.Mesh
+      if (!mesh.isMesh || !mesh.geometry) return
+      mesh.geometry.computeBoundingBox()
+      if (!mesh.geometry.boundingBox) return
+      box.union(mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld))
+      hasMesh = true
+    })
+    if (!hasMesh || box.isEmpty()) return
     const size = new THREE.Vector3(); box.getSize(size)
     const maxDim = Math.max(size.x, size.y, size.z)
     if (maxDim > 0) {
-      const s = 1.8 / maxDim
+      const s = (1.8 / maxDim) * modelScale
       ref.current.scale.setScalar(s)
-      const box2 = new THREE.Box3().setFromObject(ref.current)
+      ref.current.updateMatrixWorld(true)
+      const box2 = new THREE.Box3()
+      ref.current.traverse((obj: THREE.Object3D) => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.isMesh && mesh.geometry?.boundingBox) {
+          box2.union(mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld))
+        }
+      })
       const center = new THREE.Vector3(); box2.getCenter(center)
       ref.current.position.sub(center)
+      // Apply user-defined offset on top of the auto-centered position
+      ref.current.position.x += offsetX
+      ref.current.position.y += offsetY
       fitted.current = true
     }
   })
@@ -73,16 +106,26 @@ function FitToBox({ children }: { children: ReactNode }) {
 }
 
 // ─── GLB model — colorised ─────────────────────────────────────────────────────
-function CharacterModel({ id, primaryColor, locked, glbUrl }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string }) {
+function CharacterModel({ id, primaryColor, locked, glbUrl, modelScale, offsetX, offsetY }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string; modelScale?: number; offsetX?: number; offsetY?: number }) {
   const modelPath = glbUrl ?? MODEL_PATH[id]
   if (!modelPath) throw new Error(`No GLB for character: ${id}`)
-  const { scene } = useGLTF(modelPath)
-  const cloned = useMemo(() => scene.clone(true), [scene])
+  const { scene, animations } = useGLTF(modelPath)
+  const cloned = useMemo(() => {
+    try { return skeletonClone(scene) } catch { return scene.clone(true) }
+  }, [scene])
+  const groupRef = useRef<THREE.Group>(null!)
+  const { actions } = useAnimations(animations, groupRef)
+
+  useEffect(() => {
+    if (!actions || Object.keys(actions).length === 0) return
+    const idle = actions['Idle'] ?? actions['idle'] ?? actions['mixamo.com'] ?? Object.values(actions)[0]
+    if (idle) idle.reset().fadeIn(0.4).play()
+  }, [actions])
 
   useEffect(() => {
     if (locked) {
       // Show greyed-out model for locked characters (not a sphere)
-      cloned.traverse(node => {
+      cloned.traverse((node: THREE.Object3D) => {
         if ((node as THREE.Mesh).isMesh) {
           const mesh = node as THREE.Mesh
           mesh.castShadow = false
@@ -98,7 +141,7 @@ function CharacterModel({ id, primaryColor, locked, glbUrl }: { id: string; prim
     const secondary = new THREE.Color(CHARACTER_SECONDARY[id] ?? '#444444')
 
     const meshes: { mesh: THREE.Mesh; centerY: number }[] = []
-    cloned.traverse(node => {
+    cloned.traverse((node: THREE.Object3D) => {
       if ((node as THREE.Mesh).isMesh) {
         const mesh = node as THREE.Mesh
         mesh.castShadow = true; mesh.receiveShadow = true
@@ -135,7 +178,7 @@ function CharacterModel({ id, primaryColor, locked, glbUrl }: { id: string; prim
     })
   }, [id, primaryColor, locked, cloned])
 
-  return <FitToBox><primitive object={cloned} /></FitToBox>
+  return <FitToBox modelScale={modelScale} offsetX={offsetX} offsetY={offsetY}><group ref={groupRef}><primitive object={cloned} /></group></FitToBox>
 }
 
 // Pre-warm GLTF cache
@@ -175,53 +218,6 @@ class ModelErrorBoundary extends Component<
   }
 }
 
-const DEFAULT_ANIM = { height: 0.35, spins: 1, squash: 0.10 }
-
-// ─── Animated scene group (bounce on tap) ─────────────────────────────────────
-const ANIM_PROFILE: Record<string, { height: number; spins: number; squash: number }> = {
-  lion:    { height: 0.45, spins: 1,   squash: 0.15 },
-  mage:    { height: 0.30, spins: 2,   squash: 0.05 },
-  fox:     { height: 0.55, spins: 1.5, squash: 0.20 },
-  owl:     { height: 0.20, spins: 0.5, squash: 0.25 },
-  knight:  { height: 0.25, spins: 0.5, squash: 0.10 },
-  cosmic:  { height: 0.35, spins: 3,   squash: 0.05 },
-  phoenix: { height: 0.60, spins: 2,   squash: 0.08 },
-  shadow:  { height: 0.15, spins: 4,   squash: 0.02 },
-}
-
-function AnimGroup({
-  id, locked, tapCount, children,
-}: {
-  id: string; locked?: boolean; tapCount: number; children: ReactNode
-}) {
-  const ref = useRef<THREE.Group>(null!)
-  const anim = useRef({ active: false, t: 0 })
-  const { height, spins, squash } = ANIM_PROFILE[id] ?? DEFAULT_ANIM
-
-  useEffect(() => {
-    if (tapCount > 0 && !locked) anim.current = { active: true, t: 0 }
-  }, [tapCount, locked])
-
-  useFrame((_, dt) => {
-    if (!ref.current || !anim.current.active) return
-    anim.current.t = Math.min(anim.current.t + dt * 1.6, 1)
-    const t = anim.current.t
-    const arc = Math.sin(t * Math.PI)
-    ref.current.position.y = arc * height
-    ref.current.rotation.y = t * Math.PI * 2 * spins
-    const s = 1 - arc * squash
-    ref.current.scale.set(s > 0 ? 1 / s : 1, s, s > 0 ? 1 / s : 1)
-    if (t >= 1) {
-      anim.current.active = false
-      ref.current.position.y = 0
-      ref.current.rotation.y = 0
-      ref.current.scale.set(1, 1, 1)
-    }
-  })
-
-  return <group ref={ref}>{children}</group>
-}
-
 // ─── Auto-rotate group for thumbnail mode ────────────────────────────────────
 function AutoRotateGroup({ locked, children }: { locked?: boolean; children: ReactNode }) {
   const ref = useRef<THREE.Group>(null!)
@@ -239,9 +235,9 @@ function AutoRotateGroup({ locked, children }: { locked?: boolean; children: Rea
 
 // ─── Full scene ───────────────────────────────────────────────────────────────
 function CharacterScene({
-  id, locked, interactive, tapCount, primaryColor, glbUrl,
+  id, locked, interactive, primaryColor, glbUrl, modelScale, offsetX, offsetY,
 }: {
-  id: string; locked?: boolean; interactive?: boolean; tapCount: number; primaryColor?: string; glbUrl?: string
+  id: string; locked?: boolean; interactive?: boolean; primaryColor?: string; glbUrl?: string; modelScale?: number; offsetX?: number; offsetY?: number
 }) {
   const { gl } = useThree()
 
@@ -251,13 +247,11 @@ function CharacterScene({
   }, [gl])
 
   const modelContent = (
-    <AnimGroup id={id} locked={locked} tapCount={tapCount}>
-      <ModelErrorBoundary id={id} locked={locked}>
-        <Suspense fallback={<Placeholder id={id} locked={locked} />}>
-          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} />
-        </Suspense>
-      </ModelErrorBoundary>
-    </AnimGroup>
+    <ModelErrorBoundary id={id} locked={locked}>
+      <Suspense fallback={<Placeholder id={id} locked={locked} />}>
+        <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} />
+      </Suspense>
+    </ModelErrorBoundary>
   )
 
   return (
@@ -306,41 +300,29 @@ interface Character3DProps {
   secondaryColor?: string
   /** For dynamic characters not in the static MODEL_PATH registry */
   glbUrl?: string
+  /** Multiplier on top of FitToBox normalisation (1.0 = default fill) */
+  modelScale?: number
+  /** Horizontal offset in 3D units after auto-centering */
+  offsetX?: number
+  /** Vertical offset in 3D units after auto-centering */
+  offsetY?: number
 }
 
 export default function Character3D({
-  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl,
+  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl, modelScale, offsetX, offsetY,
 }: Character3DProps) {
   const id: string = characterId ?? character ?? 'lion'
   const isInteractive = interactive ?? size >= 120
 
-  // Tap detection on the outer div — avoids OrbitControls pointer event conflict
-  const tapStart = useRef<number | null>(null)
-  const [tapCount, setTapCount] = useState(0)
-
-  const handlePointerDown = () => { tapStart.current = Date.now() }
-  const handlePointerUp = () => {
-    if (tapStart.current && Date.now() - tapStart.current < 220 && !locked) {
-      setTapCount(c => c + 1)
-    }
-    tapStart.current = null
-  }
-
   return (
-    <div
-      style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden',
-        cursor: isInteractive && !locked ? 'grab' : 'default' }}
-      onMouseDown={handlePointerDown}
-      onMouseUp={handlePointerUp}
-      onTouchStart={handlePointerDown}
-      onTouchEnd={handlePointerUp}
-    >
+    <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden',
+      cursor: isInteractive && !locked ? 'grab' : 'default' }}>
       <Canvas
         gl={{ antialias: true, alpha: true, outputColorSpace: THREE.SRGBColorSpace }}
         camera={{ position: [0, 0.1, 3.2], fov: 42 }}
         style={{ width: '100%', height: '100%' }}
       >
-        <CharacterScene id={id} locked={locked} interactive={isInteractive} tapCount={tapCount} primaryColor={primaryColor} glbUrl={glbUrl} />
+        <CharacterScene id={id} locked={locked} interactive={isInteractive} primaryColor={primaryColor} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} />
       </Canvas>
     </div>
   )

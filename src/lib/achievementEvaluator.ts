@@ -2,7 +2,7 @@ import type { AchievementStats } from '../data/achievements'
 
 // ─── Condition DSL stored as JSONB in achievements_config ─────────────────────
 export type AchievementCondition =
-  | { type: 'stat'; field: 'booksFinished' | 'totalBooks' | 'totalPages' | 'totalHours' | 'streak' | 'sessionCount' | 'notesCount'; value: number }
+  | { type: 'stat'; field: 'booksFinished' | 'totalBooks' | 'totalPages' | 'totalHours' | 'streak' | 'sessionCount' | 'notesCount' | 'seriesBooks'; value: number }
   | { type: 'genre'; genres: string[]; value: number }
   | { type: 'genreDiversity'; value: number }
   | { type: 'genreDepth'; minBooks: number; genreCount: number }
@@ -73,5 +73,9 @@ export interface DBCharacter {
   default_primary: string
   default_secondary: string
   glb_url: string
+  rarity?: string
+  zoom_scale?: number
+  offset_x?: number
+  offset_y?: number
   enabled: boolean
 }

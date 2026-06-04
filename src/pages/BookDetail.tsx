@@ -4,6 +4,9 @@ import { motion } from 'framer-motion'
 import { Stars, ProgressBar, BackButton, Spinner, ErrorBoundary } from '../components/UI'
 import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
+import { summarizeNotes, detectBookSeries } from '../services/gemini'
+import type { SeriesInfo } from '../services/gemini'
+import { searchBooks } from '../services/books'
 import type { SearchResult, UserBook, BookNote, ReadingSession } from '../types'
 
 /** Strip HTML tags from Google Books / Open Library descriptions */
@@ -35,11 +38,21 @@ export default function BookDetailScreen() {
   const [newNote, setNewNote] = useState('')
   const [newNotePage, setNewNotePage] = useState('')
   const [addingToLib, setAddingToLib] = useState(false)
+  const [notesSummary, setNotesSummary] = useState<string | null>(null)
+  const [summarizing, setSummarizing] = useState(false)
+  const [summaryError, setSummaryError] = useState(false)
   const [customPages, setCustomPages] = useState<string>('')
   const [pagesSaved, setPagesSaved] = useState(false)
   const [bookDbId, setBookDbId] = useState<string | null>(null)
   // synopsis may come from nav state OR the DB books record — prefer DB
   const [synopsis, setSynopsis] = useState<string | null>(book?.synopsis ?? null)
+  const [seriesInfo, setSeriesInfo] = useState<SeriesInfo | null | undefined>(undefined)
+
+  const SECKRY_SERIES: Record<string, import('../services/gemini').SeriesInfo> = {
+    'seckry-1': { seriesName: 'Seckry Sevenstars', position: 1, totalBooks: 3, nextTitle: 'Seckry Sevenstars and the Trinity Awakening', nextAuthor: 'Joseph Evans' },
+    'seckry-2': { seriesName: 'Seckry Sevenstars', position: 2, totalBooks: 3, nextTitle: 'Seckry Sevenstars and the Fate of the Fractured Part One', nextAuthor: 'Joseph Evans' },
+    'seckry-3': { seriesName: 'Seckry Sevenstars', position: 3, totalBooks: 3, nextTitle: '', nextAuthor: 'Joseph Evans' },
+  }
 
   useEffect(() => {
     if (!user || !book) return
@@ -87,6 +100,16 @@ export default function BookDetailScreen() {
           .order('started_at', { ascending: false })
           .then(({ data }) => { if (data) setSessions(data as ReadingSession[]) })
       })
+
+    // Detect series in background (non-blocking)
+    const bookId = book.id ?? book.google_books_id ?? ''
+    if (SECKRY_SERIES[bookId]) {
+      setSeriesInfo(SECKRY_SERIES[bookId])
+    } else if (book && user) {
+      detectBookSeries({ title: book.title, author: book.author, userId: user.id })
+        .then(info => setSeriesInfo(info))
+        .catch(() => setSeriesInfo(null))
+    }
 
     // Fetch synopsis from Google Books or Open Library if not already available
     const googleId = book.google_books_id ?? book.id
@@ -314,6 +337,33 @@ export default function BookDetailScreen() {
               </>
             )}
 
+            {seriesInfo && (
+              <div style={{ marginBottom: 28 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 12 }}>Part of a Series</div>
+                <div style={{ padding: 16, background: theme.bgSecondary, borderRadius: 14, border: `1px solid ${theme.border}` }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: theme.fg, marginBottom: 3 }}>{seriesInfo.seriesName}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, marginBottom: seriesInfo.nextTitle && seriesInfo.position < seriesInfo.totalBooks ? 14 : 0 }}>
+                    Book {seriesInfo.position} of {seriesInfo.totalBooks}
+                  </div>
+                  {seriesInfo.nextTitle && seriesInfo.position < seriesInfo.totalBooks && (
+                    <button
+                      onClick={async () => {
+                        const { results } = await searchBooks(`${seriesInfo.nextTitle} ${seriesInfo.nextAuthor}`, {})
+                        if (results[0]) navigate('/detail', { state: { book: results[0] } })
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 10, cursor: 'pointer', textAlign: 'left' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 10.5, color: theme.muted, marginBottom: 2, fontWeight: 600, letterSpacing: 0.5 }}>NEXT BOOK</div>
+                        <div style={{ fontSize: 13, color: theme.fg, fontWeight: 500 }}>{seriesInfo.nextTitle}</div>
+                        <div style={{ fontSize: 12, color: theme.muted }}>{seriesInfo.nextAuthor}</div>
+                      </div>
+                      <svg width="6" height="11" viewBox="0 0 6 11" fill="none"><path d="M1 1L5 5.5L1 10" stroke={theme.muted} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
@@ -354,8 +404,41 @@ export default function BookDetailScreen() {
               <button onClick={addNote} disabled={!newNote.trim()} style={{ marginTop: 10, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500, opacity: newNote.trim() ? 1 : 0.5 }}>Add Note</button>
             </div>
 
+            {notes.length >= 1 && (
+              <div style={{ marginBottom: 20, background: theme.bgSecondary, borderRadius: 14, padding: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: notesSummary ? 12 : 0 }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: theme.fg }}>AI Reading Recap</div>
+                    <div style={{ fontSize: 11, color: theme.muted, marginTop: 1 }}>Summary based on your {notes.length} note{notes.length !== 1 ? 's' : ''}</div>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      setSummarizing(true); setSummaryError(false); setNotesSummary(null)
+                      try {
+                        const s = await summarizeNotes({ notes, bookTitle: book?.title ?? 'this book', userId: user?.id ?? null })
+                        setNotesSummary(s)
+                      } catch { setSummaryError(true) }
+                      setSummarizing(false)
+                    }}
+                    disabled={summarizing}
+                    style={{ padding: '7px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: summarizing ? 'default' : 'pointer', opacity: summarizing ? 0.7 : 1, flexShrink: 0 }}>
+                    {summarizing ? 'Analyzing…' : notesSummary ? 'Refresh' : 'Summarize'}
+                  </button>
+                </div>
+                {notesSummary && (
+                  <div style={{ fontSize: 13, color: theme.fg, lineHeight: 1.7, borderTop: `1px solid ${theme.border}`, paddingTop: 12 }}>{notesSummary}</div>
+                )}
+                {summaryError && (
+                  <div style={{ fontSize: 12, color: theme.muted, marginTop: 8 }}>Could not generate summary. Try again.</div>
+                )}
+              </div>
+            )}
+
             {notes.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 0', color: theme.muted, fontSize: 14 }}>No notes yet</div>
+              <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                <div style={{ fontSize: 14, color: theme.muted, marginBottom: 6 }}>No notes yet</div>
+                <div style={{ fontSize: 12, color: theme.muted, opacity: 0.6 }}>Add a note above — once you have one, AI can summarize your reading progress</div>
+              </div>
             ) : (
               notes.map(note => (
                 <div key={note.id} style={{ padding: '14px 0', borderBottom: `1px solid ${theme.border}` }}>

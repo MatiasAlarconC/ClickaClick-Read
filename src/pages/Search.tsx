@@ -3,16 +3,31 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { BookCover, TabBar, Stars, Spinner } from '../components/UI'
 import { useTheme } from '../context/AppContext'
-import { searchBooks } from '../services/books'
+import { searchBooks, searchByISBN } from '../services/books'
+import ISBNScanner from '../components/ISBNScanner'
 import type { SearchResult } from '../types'
 
 const GENRES = ['All', 'Fiction', 'Non-Fiction', 'Science', 'History', 'Philosophy', 'Biography', 'Fantasy', 'Mystery', 'Thriller', 'Romance', 'Horror']
+
+const LANGUAGES: { code: string; label: string }[] = [
+  { code: '',   label: 'Any' },
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Spanish' },
+  { code: 'fr', label: 'French' },
+  { code: 'de', label: 'German' },
+  { code: 'it', label: 'Italian' },
+  { code: 'pt', label: 'Portuguese' },
+  { code: 'ja', label: 'Japanese' },
+  { code: 'zh', label: 'Chinese' },
+  { code: 'ru', label: 'Russian' },
+  { code: 'ar', label: 'Arabic' },
+]
 
 const SS_KEY = 'clickaclick_search_state'
 
 interface SavedSearch {
   query: string; genre: string; results: SearchResult[]
-  authorFilter: string; yearFrom: string; yearTo: string
+  authorFilter: string; yearFrom: string; yearTo: string; language: string
 }
 
 export default function SearchScreen() {
@@ -39,6 +54,9 @@ export default function SearchScreen() {
   const [authorFilter, setAuthorFilter] = useState(saved?.authorFilter ?? '')
   const [yearFrom, setYearFrom] = useState(saved?.yearFrom ?? '')
   const [yearTo, setYearTo] = useState(saved?.yearTo ?? '')
+  const [language, setLanguage] = useState(saved?.language ?? '')
+
+  const [showScanner, setShowScanner] = useState(false)
 
   // Manual book entry state
   const [showManual, setShowManual] = useState(false)
@@ -48,32 +66,35 @@ export default function SearchScreen() {
   const [manualCover, setManualCover] = useState('')
   const [manualYear, setManualYear] = useState('')
 
-  const persistState = useCallback((q: string, g: string, r: SearchResult[], af: string, yf: string, yt: string) => {
-    sessionStorage.setItem(SS_KEY, JSON.stringify({ query: q, genre: g, results: r, authorFilter: af, yearFrom: yf, yearTo: yt }))
+  const persistState = useCallback((q: string, g: string, r: SearchResult[], af: string, yf: string, yt: string, lang: string) => {
+    sessionStorage.setItem(SS_KEY, JSON.stringify({ query: q, genre: g, results: r, authorFilter: af, yearFrom: yf, yearTo: yt, language: lang }))
   }, [])
 
-  const handleSearch = useCallback(async (q: string, af?: string, g?: string, page = 0) => {
+  const handleSearch = useCallback(async (q: string, af?: string, g?: string, page = 0, lang?: string) => {
     const effectiveGenre = g ?? genre
+    const effectiveLang = lang !== undefined ? lang : language
     const effectiveQuery = q.trim() || (effectiveGenre !== 'All' ? effectiveGenre : '')
     if (!effectiveQuery) { setResults([]); setSearched(false); return }
     setLoading(true); setSearched(true)
+    if (page > 0) window.scrollTo({ top: 0, behavior: 'smooth' })
     try {
       const authorTerm = (af ?? authorFilter).trim()
       const { results: data, totalItems: total } = await searchBooks(effectiveQuery, {
         genre: effectiveGenre !== 'All' ? effectiveGenre : undefined,
         author: authorTerm || undefined,
+        language: effectiveLang || undefined,
         startIndex: page * PAGE_SIZE,
       })
       setResults(data)
       setTotalItems(total)
       setCurrentPage(page)
-      persistState(q, effectiveGenre, data, af ?? authorFilter, yearFrom, yearTo)
+      persistState(q, effectiveGenre, data, af ?? authorFilter, yearFrom, yearTo, effectiveLang)
     } catch {
       setResults([])
       setTotalItems(0)
     }
     setLoading(false)
-  }, [genre, authorFilter, yearFrom, yearTo, persistState, PAGE_SIZE])
+  }, [genre, authorFilter, language, yearFrom, yearTo, persistState, PAGE_SIZE])
 
   const handleQueryChange = (val: string) => {
     setQuery(val)
@@ -100,7 +121,24 @@ export default function SearchScreen() {
     navigate('/detail', { state: { book } })
   }
 
-  const activeFilterCount = [authorFilter, yearFrom, yearTo].filter(Boolean).length + (genre !== 'All' ? 1 : 0)
+  const handleISBNDetected = async (isbn: string) => {
+    setShowScanner(false)
+    setLoading(true)
+    try {
+      const book = await searchByISBN(isbn)
+      if (book) {
+        setLoading(false)
+        navigate('/detail', { state: { book } })
+      } else {
+        setQuery(isbn)
+        await handleSearch(isbn)
+      }
+    } catch {
+      setLoading(false)
+    }
+  }
+
+  const activeFilterCount = [authorFilter, yearFrom, yearTo, language].filter(Boolean).length + (genre !== 'All' ? 1 : 0)
 
   // Client-side: only year filter (genre and author now handled server-side via API qualifiers)
   const filtered = results.filter(b => {
@@ -131,6 +169,13 @@ export default function SearchScreen() {
           {!loading && query && (
             <button onClick={() => { setQuery(''); setResults([]); setSearched(false); sessionStorage.removeItem(SS_KEY) }} style={{ background: 'none', border: 'none', color: theme.muted, fontSize: 18, padding: 0, lineHeight: 1 }}>×</button>
           )}
+          {/* Camera / ISBN scanner button */}
+          <button onClick={() => setShowScanner(true)} style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', display: 'flex', alignItems: 'center', color: theme.muted }}>
+            <svg width="17" height="15" viewBox="0 0 24 20" fill="none">
+              <path d="M9 2L7.17 4H4C2.9 4 2 4.9 2 6V18C2 19.1 2.9 20 4 20H20C21.1 20 22 19.1 22 18V6C22 4.9 21.1 4 20 4H16.83L15 2H9Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <circle cx="12" cy="12" r="3.5" stroke="currentColor" strokeWidth="1.5"/>
+            </svg>
+          </button>
           {/* Filter toggle */}
           <button onClick={() => setShowFilters(f => !f)} style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, position: 'relative' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -178,9 +223,21 @@ export default function SearchScreen() {
                         style={{ flex: 1, padding: '8px 11px', background: theme.bg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 14, color: theme.fg }}/>
                     </div>
                   </div>
+                  {/* Language */}
+                  <div>
+                    <div style={{ fontSize: 11, color: theme.muted, marginBottom: 7 }}>Language</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {LANGUAGES.map(l => (
+                        <button key={l.code} onClick={() => setLanguage(l.code)}
+                          style={{ padding: '6px 12px', borderRadius: 999, background: l.code === language ? theme.accent : theme.bg, color: l.code === language ? theme.accentFg : theme.muted, border: `1px solid ${l.code === language ? theme.accent : theme.border}`, whiteSpace: 'nowrap', fontSize: 12, fontWeight: 500 }}>
+                          {l.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => { setShowFilters(false); handleSearch(query) }} style={{ flex: 1, padding: '9px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500 }}>Apply</button>
-                    <button onClick={() => { setAuthorFilter(''); setYearFrom(''); setYearTo(''); setGenre('All') }} style={{ padding: '9px 14px', background: theme.bg, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 13 }}>Clear</button>
+                    <button onClick={() => { setAuthorFilter(''); setYearFrom(''); setYearTo(''); setGenre('All'); setLanguage('') }} style={{ padding: '9px 14px', background: theme.bg, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 13 }}>Clear</button>
                   </div>
                 </div>
               </div>
@@ -197,10 +254,17 @@ export default function SearchScreen() {
 
         {/* Genre pills — removed from here, now inside filter panel */}
 
-        {/* Result count */}
+        {/* Result count + page indicator */}
         {searched && !loading && (
-          <div style={{ fontSize: 12, color: theme.muted, marginBottom: 4 }}>
-            {totalItems > 0 ? `${totalItems.toLocaleString()} books found` : `${filtered.length} ${filtered.length === 1 ? 'book' : 'books'}`}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+            <div style={{ fontSize: 12, color: theme.muted }}>
+              {totalItems > 0 ? `${totalItems.toLocaleString()} books found` : `${filtered.length} ${filtered.length === 1 ? 'book' : 'books'}`}
+            </div>
+            {totalPages > 1 && (
+              <div style={{ fontSize: 12, color: theme.muted }}>
+                Page {currentPage + 1} of {Math.min(totalPages, 40)}
+              </div>
+            )}
           </div>
         )}
 
@@ -229,7 +293,7 @@ export default function SearchScreen() {
 
           {!loading && searched && filtered.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px 0', color: theme.muted }}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div>
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.3, marginBottom: 8 }}><circle cx="10" cy="10" r="7" stroke={theme.fg} strokeWidth="1.5"/><path d="M15 15l4.5 4.5" stroke={theme.fg} strokeWidth="1.5" strokeLinecap="round"/></svg>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 18 }}>No results found</div>
               <div style={{ fontSize: 13, marginTop: 6, marginBottom: 20 }}>Try a different search term</div>
               <button onClick={() => setShowManual(true)} style={{ padding: '11px 22px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 500 }}>
@@ -239,36 +303,35 @@ export default function SearchScreen() {
           )}
 
           {/* Pagination */}
-          {!loading && searched && filtered.length > 0 && totalPages > 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6, padding: '20px 0 12px' }}>
-              {/* Prev */}
-              <button disabled={currentPage === 0} onClick={() => handleSearch(query, authorFilter, genre, currentPage - 1)}
-                style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${theme.border}`, background: 'none', color: currentPage === 0 ? theme.muted : theme.fg, fontSize: 14, cursor: currentPage === 0 ? 'default' : 'pointer', opacity: currentPage === 0 ? 0.35 : 1 }}>
-                ‹
-              </button>
-              {/* Page numbers — sliding window of up to 7 */}
-              {(() => {
-                const cap = Math.min(totalPages, 40)
-                const window = 7
-                let start = Math.max(0, currentPage - Math.floor(window / 2))
-                let end = Math.min(cap, start + window)
-                if (end - start < window) start = Math.max(0, end - window)
-                const pages: number[] = []
-                for (let p = start; p < end; p++) pages.push(p)
-                return pages.map(p => (
-                  <button key={p} onClick={() => handleSearch(query, authorFilter, genre, p)}
-                    style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${p === currentPage ? theme.accent : theme.border}`, background: p === currentPage ? theme.accent : 'none', color: p === currentPage ? theme.accentFg : theme.fg, fontSize: 13, fontWeight: p === currentPage ? 600 : 400, cursor: p === currentPage ? 'default' : 'pointer' }}>
+          {!loading && searched && filtered.length > 0 && totalPages > 1 && (() => {
+            const cap = Math.min(totalPages, 40)
+            const WIN = 5
+            let start = Math.max(0, currentPage - Math.floor(WIN / 2))
+            let end = Math.min(cap, start + WIN)
+            if (end - start < WIN) start = Math.max(0, end - WIN)
+            const pages: number[] = []
+            for (let p = start; p < end; p++) pages.push(p)
+            const atFirst = currentPage === 0
+            const atLast = currentPage + 1 >= cap
+            return (
+              <div style={{ borderTop: `1px solid ${theme.border}`, marginTop: 8, padding: '16px 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <button disabled={atFirst} onClick={() => handleSearch(query, authorFilter, genre, currentPage - 1, language)}
+                  style={{ height: 38, padding: '0 14px', borderRadius: 10, border: `1px solid ${theme.border}`, background: 'none', color: atFirst ? theme.muted : theme.fg, fontSize: 13, fontWeight: 500, cursor: atFirst ? 'default' : 'pointer', opacity: atFirst ? 0.35 : 1 }}>
+                  ← Prev
+                </button>
+                {pages.map(p => (
+                  <button key={p} onClick={() => handleSearch(query, authorFilter, genre, p, language)}
+                    style={{ width: 38, height: 38, borderRadius: 10, border: `1px solid ${p === currentPage ? theme.accent : theme.border}`, background: p === currentPage ? theme.accent : 'none', color: p === currentPage ? theme.accentFg : theme.fg, fontSize: 13, fontWeight: p === currentPage ? 700 : 400, cursor: p === currentPage ? 'default' : 'pointer', transition: 'all 0.15s' }}>
                     {p + 1}
                   </button>
-                ))
-              })()}
-              {/* Next */}
-              <button disabled={currentPage + 1 >= Math.min(totalPages, 40)} onClick={() => handleSearch(query, authorFilter, genre, currentPage + 1)}
-                style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${theme.border}`, background: 'none', color: currentPage + 1 >= Math.min(totalPages, 40) ? theme.muted : theme.fg, fontSize: 14, cursor: currentPage + 1 >= Math.min(totalPages, 40) ? 'default' : 'pointer', opacity: currentPage + 1 >= Math.min(totalPages, 40) ? 0.35 : 1 }}>
-                ›
-              </button>
-            </div>
-          )}
+                ))}
+                <button disabled={atLast} onClick={() => handleSearch(query, authorFilter, genre, currentPage + 1, language)}
+                  style={{ height: 38, padding: '0 14px', borderRadius: 10, border: `1px solid ${theme.border}`, background: 'none', color: atLast ? theme.muted : theme.fg, fontSize: 13, fontWeight: 500, cursor: atLast ? 'default' : 'pointer', opacity: atLast ? 0.35 : 1 }}>
+                  Next →
+                </button>
+              </div>
+            )
+          })()}
 
           {!searched && (
             <div style={{ textAlign: 'center', padding: '60px 0 24px', color: theme.muted }}>
@@ -284,6 +347,9 @@ export default function SearchScreen() {
       </div>
 
       <TabBar activeTab="search" onTabChange={t => navigate(`/${t === 'home' ? 'home' : t}`)} theme={theme} />
+
+      {/* ISBN Scanner overlay */}
+      {showScanner && <ISBNScanner onDetected={handleISBNDetected} onClose={() => setShowScanner(false)} />}
 
       {/* Manual book entry modal */}
       {showManual && (

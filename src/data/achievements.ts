@@ -10,6 +10,7 @@ export interface AchievementStats {
   genreCounts: Record<string, number>
   sessionCount: number       // timed (non-manual) sessions
   notesCount: number
+  seriesBooks: number
 }
 
 // ─── Achievement definition ───────────────────────────────────────────────────
@@ -300,10 +301,34 @@ export const ACHIEVEMENTS: Achievement[] = [
     reward: { type: 'title', value: 'Marathon Reader' },
     check: s => s.totalPages >= 10000,
   },
+  {
+    id: 'series_starter',
+    name: 'Series Starter',
+    description: 'Read at least 2 books in the same series.',
+    tier: 'gold',
+    reward: { type: 'badge' },
+    check: s => s.seriesBooks >= 2,
+  },
+  {
+    id: 'series_fan',
+    name: 'Series Fan',
+    description: 'Read books across 3 or more different series.',
+    tier: 'gold',
+    reward: { type: 'title', value: 'Series Fan' },
+    check: s => s.seriesBooks >= 6,
+  },
 
   // ══════════════════════════════════════════════════════════════════════════
   // PLATINUM — Hardcore Reader
   // ══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'series_completionist',
+    name: 'The Completionist',
+    description: 'Read 9+ books across multiple series.',
+    tier: 'platinum',
+    reward: { type: 'title', value: 'The Completionist' },
+    check: s => s.seriesBooks >= 9,
+  },
   {
     id: 'fifty_books',
     name: 'The Sage',
@@ -554,6 +579,10 @@ export function getAchievementProgress(
     case 'horror_fan':        return { current: Math.min(genre(s, 'horror'), 10), target: 10 }
     case 'history_lover':     return { current: Math.min(genre(s, 'historical fiction', 'history', 'historical'), 10), target: 10 }
     case 'nonfiction_scholar':return { current: Math.min(genre(s, 'nonfiction', 'non-fiction', 'self-help', 'self help', 'biography', 'memoir'), 8), target: 8 }
+    // — series
+    case 'series_starter':       return { current: Math.min(s.seriesBooks, 2), target: 2 }
+    case 'series_fan':           return { current: Math.min(s.seriesBooks, 6), target: 6 }
+    case 'series_completionist': return { current: Math.min(s.seriesBooks, 9), target: 9 }
     default: return null
   }
 }
