@@ -18,19 +18,55 @@ function genreToMusicTag(genres: string[] | undefined): string {
   return 'ambient'
 }
 
+// Royalty-free fallback tracks (SoundHelix — no API, always available)
+const FALLBACK_TRACKS: Record<string, { url: string; name: string }[]> = {
+  ambient:      [
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',  name: 'Ambient Study I' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',  name: 'Ambient Study II' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-16.mp3', name: 'Ambient Study III' },
+  ],
+  instrumental: [
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3',  name: 'Epic Journey I' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3', name: 'Epic Journey II' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3', name: 'Epic Journey III' },
+  ],
+  classical:    [
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',  name: 'Classical Focus I' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3',  name: 'Classical Focus II' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3', name: 'Classical Focus III' },
+  ],
+  acoustic:     [
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3',  name: 'Acoustic Calm I' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3',  name: 'Acoustic Calm II' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-17.mp3', name: 'Acoustic Calm III' },
+  ],
+  electronic:   [
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3',  name: 'Electronic Focus I' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-13.mp3', name: 'Electronic Focus II' },
+    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',  name: 'Electronic Focus III' },
+  ],
+}
+
+function pickFallback(tag: string): { url: string; name: string } {
+  const list = FALLBACK_TRACKS[tag] ?? FALLBACK_TRACKS.ambient
+  return list[Math.floor(Math.random() * list.length)]
+}
+
 async function fetchJamendoTrack(tag: string): Promise<{ url: string; name: string } | null> {
   try {
     const res = await fetch(`/api/music?tag=${encodeURIComponent(tag)}`)
-    if (!res.ok) return null
-    const json = await res.json()
-    const tracks: { audio: string; audiodownload?: string; name: string }[] = json.results ?? []
-    const valid = tracks.filter(t => t.audio || t.audiodownload)
-    if (!valid.length) return null
-    const pick = valid[Math.floor(Math.random() * valid.length)]
-    return { url: pick.audio || pick.audiodownload!, name: pick.name }
-  } catch {
-    return null
-  }
+    if (res.ok) {
+      const json = await res.json()
+      const tracks: { audio: string; audiodownload?: string; name: string }[] = json.results ?? []
+      const valid = tracks.filter(t => t.audio || t.audiodownload)
+      if (valid.length) {
+        const pick = valid[Math.floor(Math.random() * valid.length)]
+        return { url: pick.audio || pick.audiodownload!, name: pick.name }
+      }
+    }
+  } catch { /* fall through to fallback */ }
+  // Jamendo unavailable or quota exceeded — use curated fallback
+  return pickFallback(tag)
 }
 
 // ─── Retry helper ─────────────────────────────────────────────────────────────
