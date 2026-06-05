@@ -1,7 +1,8 @@
 export interface AvatarConfig {
-  character: 'lion' | 'mage' | 'fox' | 'owl' | 'knight' | 'cosmic'
+  character: string
   primaryColor: string
   secondaryColor: string
+  useTexture?: boolean
 }
 
 export interface Profile {

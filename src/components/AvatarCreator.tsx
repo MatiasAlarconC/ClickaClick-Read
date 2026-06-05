@@ -48,16 +48,17 @@ const UNLOCK_HINT: Partial<Record<CharacterId, { name: string; hint: string }>> 
 
 interface AvatarCreatorProps {
   onClose: () => void
-  onSave: (character: string, primary: string, secondary: string) => void
+  onSave: (character: string, primary: string, secondary: string, useTexture?: boolean) => void
   initialCharacter?: string
   initialPrimary?: string
   initialSecondary?: string
+  initialUseTexture?: boolean
   theme: Theme
   unlockedCharacters?: Set<string>
   dbCharacters?: DBCharacter[]
 }
 
-export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lion', initialPrimary, initialSecondary, theme, unlockedCharacters, dbCharacters }: AvatarCreatorProps) {
+export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lion', initialPrimary, initialSecondary, initialUseTexture, theme, unlockedCharacters, dbCharacters }: AvatarCreatorProps) {
   const [selected, setSelected] = useState<string>(initialCharacter)
 
   const builtinDef = CHARACTERS.find(c => c.id === selected)
@@ -69,6 +70,9 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
 
   const [primary, setPrimary]     = useState(initialPrimary   ?? charDefaultPrimary)
   const [secondary, setSecondary] = useState(initialSecondary ?? charDefaultSecondary)
+  const [skinMode, setSkinMode]   = useState<'texture' | 'color'>(() =>
+    initialUseTexture && dbCharacters?.find(c => c.id === initialCharacter)?.texture_url ? 'texture' : 'color'
+  )
 
   const isUnlocked = (id: string) => !unlockedCharacters || unlockedCharacters.has(id)
 
@@ -78,6 +82,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
     setSelected(id)
     setPrimary(d?.defaultPrimary ?? cust?.default_primary ?? '#888888')
     setSecondary(d?.defaultSecondary ?? cust?.default_secondary ?? '#444444')
+    setSkinMode(cust?.texture_url ? 'texture' : 'color')
   }
 
   const handlePalette = (pal: [string, string]) => {
@@ -130,8 +135,14 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
           {/* Live preview */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '16px 0 8px', gap: 6 }}>
             <div style={{ position: 'relative' }}>
-              <motion.div key={selected} initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: selectedLocked ? 0.55 : 1 }} transition={{ type: 'spring', damping: 20 }}>
-                <Character3D character={selected} glbUrl={customDef?.glb_url} primaryColor={primary} secondaryColor={secondary} size={140} locked={selectedLocked} modelScale={customDef?.zoom_scale} offsetX={customDef?.offset_x} offsetY={customDef?.offset_y}/>
+              <motion.div key={`${selected}-${skinMode}`} initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: selectedLocked ? 0.55 : 1 }} transition={{ type: 'spring', damping: 20 }}>
+                <Character3D
+                  character={selected} glbUrl={customDef?.glb_url} primaryColor={primary} secondaryColor={secondary}
+                  size={140} locked={selectedLocked}
+                  modelScale={customDef?.zoom_scale} offsetX={customDef?.offset_x} offsetY={customDef?.offset_y}
+                  textureUrl={skinMode === 'texture' ? customDef?.texture_url : undefined}
+                  textureRoughnessUrl={skinMode === 'texture' ? customDef?.texture_roughness_url : undefined}
+                />
               </motion.div>
               {selectedLocked && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -210,8 +221,26 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
             </div>
           </div>
 
-          {/* Color section — shown for all unlocked characters */}
-          {!selectedLocked && (
+          {/* Skin / Color toggle — only when character has a texture */}
+          {!selectedLocked && customDef?.texture_url && (
+            <div style={{ padding: '0 16px 8px' }}>
+              <div style={{ display: 'flex', background: theme.bgSecondary, borderRadius: 10, padding: 3, gap: 3 }}>
+                {(['texture', 'color'] as const).map(mode => (
+                  <button key={mode} onClick={() => setSkinMode(mode)} style={{
+                    flex: 1, padding: '8px 0', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+                    background: skinMode === mode ? theme.accent : 'none',
+                    color: skinMode === mode ? theme.accentFg : theme.muted,
+                    transition: 'all 0.2s',
+                  }}>
+                    {mode === 'texture' ? 'Original Skin' : 'Custom Color'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Color section — shown for all unlocked characters in color mode */}
+          {!selectedLocked && skinMode === 'color' && (
             <div style={{ padding: '0 16px 12px' }}>
               <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10 }}>Color scheme</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -254,7 +283,7 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
         {/* Sticky select button — always visible when character is unlocked */}
         {!selectedLocked && (
           <div style={{ padding: '12px 16px', paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))', borderTop: `1px solid ${theme.border}`, background: theme.bg }}>
-            <button onClick={() => onSave(selected, primary, secondary)}
+            <button onClick={() => onSave(selected, primary, secondary, skinMode === 'texture' && !!customDef?.texture_url)}
               style={{ width: '100%', padding: 15, background: primary, color: '#FFF', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: `0 4px 20px ${primary}60`, transition: 'opacity 0.2s' }}>
               Select Character
             </button>

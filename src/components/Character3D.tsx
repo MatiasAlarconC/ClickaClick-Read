@@ -8,9 +8,9 @@
  * • Graceful SVG-ball fallback when the GLB is missing
  */
 
-import { Suspense, useRef, useEffect, useMemo, useState, Component, type ReactNode } from 'react'
+import { Suspense, useRef, useEffect, useMemo, Component, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { useGLTF, Environment, ContactShadows, OrbitControls, useAnimations } from '@react-three/drei'
+import { useGLTF, useTexture, Environment, ContactShadows, OrbitControls, useAnimations } from '@react-three/drei'
 import * as THREE from 'three'
 // @ts-ignore — three/examples/jsm exports 'clone' as named function (not 'SkeletonUtils' object)
 import { clone as skeletonClone } from 'three/examples/jsm/utils/SkeletonUtils.js'
@@ -105,8 +105,39 @@ function FitToBox({ children, modelScale = 1, offsetX = 0, offsetY = 0 }: { chil
   return <group ref={ref}>{children}</group>
 }
 
+// ─── Texture applier — only mounted when textureUrl is provided ───────────────
+function TextureApplier({ textureUrl, roughnessUrl, target }: {
+  textureUrl: string
+  roughnessUrl: string  // same as textureUrl when no roughness map (hook rule compliance)
+  target: THREE.Object3D
+}) {
+  const albedo   = useTexture(textureUrl)
+  const roughTex = useTexture(roughnessUrl)
+  const hasRoughness = roughnessUrl !== textureUrl
+
+  useEffect(() => {
+    albedo.flipY   = false
+    roughTex.flipY = false
+    albedo.needsUpdate   = true
+    roughTex.needsUpdate = true
+    target.traverse((node: THREE.Object3D) => {
+      if (!(node as THREE.Mesh).isMesh) return
+      const mesh = node as THREE.Mesh
+      mesh.castShadow = true; mesh.receiveShadow = true
+      mesh.material = new THREE.MeshStandardMaterial({
+        map: albedo,
+        ...(hasRoughness ? { roughnessMap: roughTex, metalnessMap: roughTex } : {}),
+        roughness: hasRoughness ? 1.0 : 0.7,
+        metalness: hasRoughness ? 1.0 : 0.05,
+      })
+    })
+  }, [target, albedo, roughTex, hasRoughness])
+
+  return null
+}
+
 // ─── GLB model — colorised ─────────────────────────────────────────────────────
-function CharacterModel({ id, primaryColor, locked, glbUrl, modelScale, offsetX, offsetY }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string; modelScale?: number; offsetX?: number; offsetY?: number }) {
+function CharacterModel({ id, primaryColor, locked, glbUrl, modelScale, offsetX, offsetY, textureUrl, textureRoughnessUrl }: { id: string; primaryColor?: string; locked?: boolean; glbUrl?: string; modelScale?: number; offsetX?: number; offsetY?: number; textureUrl?: string; textureRoughnessUrl?: string }) {
   const modelPath = glbUrl ?? MODEL_PATH[id]
   if (!modelPath) throw new Error(`No GLB for character: ${id}`)
   const { scene, animations } = useGLTF(modelPath)
@@ -124,18 +155,16 @@ function CharacterModel({ id, primaryColor, locked, glbUrl, modelScale, offsetX,
 
   useEffect(() => {
     if (locked) {
-      // Show greyed-out model for locked characters (not a sphere)
       cloned.traverse((node: THREE.Object3D) => {
         if ((node as THREE.Mesh).isMesh) {
           const mesh = node as THREE.Mesh
           mesh.castShadow = false
-          mesh.material = new THREE.MeshStandardMaterial({
-            color: '#555555', roughness: 0.9, metalness: 0.0,
-          })
+          mesh.material = new THREE.MeshStandardMaterial({ color: '#555555', roughness: 0.9, metalness: 0.0 })
         }
       })
       return
     }
+    if (textureUrl) return  // TextureApplier handles materials
 
     const primary   = new THREE.Color(primaryColor ?? CHARACTER_COLOR[id] ?? '#888888')
     const secondary = new THREE.Color(CHARACTER_SECONDARY[id] ?? '#444444')
@@ -176,9 +205,22 @@ function CharacterModel({ id, primaryColor, locked, glbUrl, modelScale, offsetX,
                   : id in CHARACTER_COLOR ? 0.04 : 0.10,
       })
     })
-  }, [id, primaryColor, locked, cloned])
+  }, [id, primaryColor, locked, cloned, textureUrl])
 
-  return <FitToBox modelScale={modelScale} offsetX={offsetX} offsetY={offsetY}><group ref={groupRef}><primitive object={cloned} /></group></FitToBox>
+  return (
+    <FitToBox modelScale={modelScale} offsetX={offsetX} offsetY={offsetY}>
+      <group ref={groupRef}>
+        <primitive object={cloned} />
+        {textureUrl && !locked && (
+          <TextureApplier
+            textureUrl={textureUrl}
+            roughnessUrl={textureRoughnessUrl ?? textureUrl}
+            target={cloned}
+          />
+        )}
+      </group>
+    </FitToBox>
+  )
 }
 
 // Pre-warm GLTF cache
@@ -235,9 +277,9 @@ function AutoRotateGroup({ locked, children }: { locked?: boolean; children: Rea
 
 // ─── Full scene ───────────────────────────────────────────────────────────────
 function CharacterScene({
-  id, locked, interactive, primaryColor, glbUrl, modelScale, offsetX, offsetY,
+  id, locked, interactive, primaryColor, glbUrl, modelScale, offsetX, offsetY, textureUrl, textureRoughnessUrl,
 }: {
-  id: string; locked?: boolean; interactive?: boolean; primaryColor?: string; glbUrl?: string; modelScale?: number; offsetX?: number; offsetY?: number
+  id: string; locked?: boolean; interactive?: boolean; primaryColor?: string; glbUrl?: string; modelScale?: number; offsetX?: number; offsetY?: number; textureUrl?: string; textureRoughnessUrl?: string
 }) {
   const { gl } = useThree()
 
@@ -249,7 +291,7 @@ function CharacterScene({
   const modelContent = (
     <ModelErrorBoundary id={id} locked={locked}>
       <Suspense fallback={<Placeholder id={id} locked={locked} />}>
-        <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} />
+        <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} textureUrl={textureUrl} textureRoughnessUrl={textureRoughnessUrl} />
       </Suspense>
     </ModelErrorBoundary>
   )
@@ -277,8 +319,8 @@ function CharacterScene({
 
       {interactive
         ? <group>{modelContent}</group>
-        : <AutoRotateGroup locked={locked}>{modelContent}</AutoRotateGroup>
-      }
+        : <AutoRotateGroup locked={locked}>{modelContent}</AutoRotateGroup>}
+
 
       {!locked && (
         <ContactShadows position={[0, -1.2, 0]} opacity={0.3} scale={3} blur={2.5} far={2} />
@@ -306,10 +348,14 @@ interface Character3DProps {
   offsetX?: number
   /** Vertical offset in 3D units after auto-centering */
   offsetY?: number
+  /** Albedo texture URL — when provided, replaces procedural coloring */
+  textureUrl?: string
+  /** Combined roughness+metalness texture URL (optional, paired with textureUrl) */
+  textureRoughnessUrl?: string
 }
 
 export default function Character3D({
-  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl, modelScale, offsetX, offsetY,
+  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl, modelScale, offsetX, offsetY, textureUrl, textureRoughnessUrl,
 }: Character3DProps) {
   const id: string = characterId ?? character ?? 'lion'
   const isInteractive = interactive ?? size >= 120
@@ -322,7 +368,7 @@ export default function Character3D({
         camera={{ position: [0, 0.1, 3.2], fov: 42 }}
         style={{ width: '100%', height: '100%' }}
       >
-        <CharacterScene id={id} locked={locked} interactive={isInteractive} primaryColor={primaryColor} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} />
+        <CharacterScene id={id} locked={locked} interactive={isInteractive} primaryColor={primaryColor} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} textureUrl={textureUrl} textureRoughnessUrl={textureRoughnessUrl} />
       </Canvas>
     </div>
   )
