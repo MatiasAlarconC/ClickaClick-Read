@@ -229,7 +229,7 @@ Object.values(MODEL_PATH).forEach(p => useGLTF.preload(p))
 // ─── Animated placeholder sphere ─────────────────────────────────────────────
 function Placeholder({ id, locked }: { id: string; locked?: boolean }) {
   const ref = useRef<THREE.Mesh>(null!)
-  const color = locked ? '#555' : CHARACTER_COLOR[id]
+  const color = locked ? '#555' : (CHARACTER_COLOR[id] ?? '#888888')
   useFrame(({ clock }) => {
     if (!ref.current) return
     ref.current.rotation.y = clock.getElapsedTime() * 0.6
