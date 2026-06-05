@@ -522,15 +522,12 @@ export default function BookDetailScreen() {
                                 <button onClick={() => setEditingSessionId(null)} style={{ padding: '3px 6px', fontSize: 11, borderRadius: 6, background: 'none', color: theme.muted, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>×</button>
                               </div>
                             ) : (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, justifyContent: 'flex-end' }}>
-                                <span style={{ fontSize: 11, color: theme.muted }}>p.{s.start_page}–{s.end_page}</span>
-                                <button
-                                  onClick={() => { setEditingSessionId(s.id); setEditEndPage(String(s.end_page)) }}
-                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: theme.muted, display: 'flex', alignItems: 'center' }}
-                                  title="Edit end page">
-                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                                </button>
-                              </div>
+                              <button
+                                onClick={() => { setEditingSessionId(s.id); setEditEndPage(String(s.end_page)) }}
+                                style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 5, background: `${theme.accent}18`, border: `1px solid ${theme.accent}40`, borderRadius: 8, padding: '4px 8px', cursor: 'pointer' }}>
+                                <span style={{ fontSize: 12, color: theme.fg }}>p.{s.start_page}–{s.end_page}</span>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ color: theme.accent, flexShrink: 0 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </button>
                             )
                           )}
                         </div>
