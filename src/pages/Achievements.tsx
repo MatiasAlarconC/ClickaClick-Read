@@ -7,7 +7,7 @@ import {
   ACHIEVEMENTS, TIER_COLORS, getUnlockedCharacters, getUnlockedTitles, getAchievementProgress,
   type Achievement, type AchievementTier, type AchievementStats
 } from '../data/achievements'
-import { CHARACTERS, type CharacterId } from '../components/AvatarCharacter'
+import { CHARACTERS, AvatarCharacter, type CharacterId } from '../components/AvatarCharacter'
 import Medal3D from '../components/Medal3D'
 import MedalIcon from '../components/MedalIcon'
 import Character3D from '../components/Character3D'
@@ -249,26 +249,27 @@ export default function AchievementsScreen() {
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 14 }}>Unlocked Characters</div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {/* Static characters */}
+              {/* Static characters — SVG avatar, no WebGL */}
               {CHARACTERS.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
-                    <div style={{ background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.defaultPrimary + '80' : theme.border}`, overflow: 'hidden' }}>
-                      <Character3D character={c.id} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} size={72} locked={!unlocked} />
+                    <div style={{ width: 72, height: 72, background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.defaultPrimary + '80' : theme.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: unlocked ? 'none' : 'grayscale(0.7)' }}>
+                      <AvatarCharacter character={c.id} primaryColor={unlocked ? c.defaultPrimary : '#666'} secondaryColor={unlocked ? c.defaultSecondary : '#333'} size={56} />
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{c.name}</div>
                     {!unlocked && <div style={{ fontSize: 10, color: theme.muted }}>locked</div>}
                   </div>
                 )
               })}
-              {/* Dynamic characters from DB */}
+              {/* Dynamic characters from DB — colored circle, no WebGL context per thumbnail */}
               {dbCharacters.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
+                const initial = c.name.charAt(0).toUpperCase()
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
-                    <div style={{ background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.default_primary + '80' : theme.border}`, overflow: 'hidden' }}>
-                      <Character3D character={c.id} primaryColor={c.default_primary} secondaryColor={c.default_secondary} size={72} locked={!unlocked} glbUrl={c.glb_url} />
+                    <div style={{ width: 72, height: 72, background: unlocked ? c.default_primary : theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.default_primary + '80' : theme.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: unlocked ? 'none' : 'grayscale(0.7)' }}>
+                      <span style={{ fontSize: 26, fontWeight: 700, color: 'rgba(255,255,255,0.9)', fontFamily: 'Georgia, serif', textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>{initial}</span>
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{c.name}</div>
                     {!unlocked && <div style={{ fontSize: 10, color: theme.muted }}>locked</div>}

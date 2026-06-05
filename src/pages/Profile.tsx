@@ -73,6 +73,7 @@ export default function ProfileScreen() {
   const customChar   = dbCharacters.find(c => c.id === char)
   const primaryColor   = avatarCfg?.primaryColor   ?? builtinChar?.defaultPrimary   ?? customChar?.default_primary   ?? '#888888'
   const secondaryColor = avatarCfg?.secondaryColor ?? builtinChar?.defaultSecondary ?? customChar?.default_secondary ?? '#444444'
+  const useTexture     = (avatarCfg?.useTexture ?? false) && !!customChar?.texture_url
 
   useEffect(() => {
     if (!user) return
@@ -158,9 +159,9 @@ export default function ProfileScreen() {
   ]
 
   // ── Handlers ───────────────────────────────────────────────────────────────
-  const handleSaveAvatar = async (character: string, primary: string, secondary: string) => {
+  const handleSaveAvatar = async (character: string, primary: string, secondary: string, ut?: boolean) => {
     setShowCreator(false)
-    await updateProfile({ avatar_config: { character, primaryColor: primary, secondaryColor: secondary } as any })
+    await updateProfile({ avatar_config: { character, primaryColor: primary, secondaryColor: secondary, useTexture: ut ?? false } as any })
   }
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -252,7 +253,7 @@ export default function ProfileScreen() {
         {/* Character — click to animate only (Customize is its own button) */}
         <div style={{ zIndex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
           <motion.div animate={{ y: [0, -8, 0] }} transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}>
-            <Character3D key={customChar?.glb_url ?? char} character={char} glbUrl={customChar?.glb_url} primaryColor={primaryColor} secondaryColor={secondaryColor} size={180} modelScale={customChar?.zoom_scale} offsetX={customChar?.offset_x} offsetY={customChar?.offset_y}/>
+            <Character3D key={customChar?.glb_url ?? char} character={char} glbUrl={customChar?.glb_url} primaryColor={primaryColor} secondaryColor={secondaryColor} size={180} modelScale={customChar?.zoom_scale} offsetX={customChar?.offset_x} offsetY={customChar?.offset_y} textureUrl={useTexture ? customChar?.texture_url : undefined} textureRoughnessUrl={useTexture ? customChar?.texture_roughness_url : undefined}/>
           </motion.div>
           <button onClick={() => setShowCreator(true)} style={{ background: primaryColor, color: '#FFF', border: 'none', borderRadius: 999, padding: '6px 18px', fontSize: 11, fontWeight: 700, letterSpacing: 0.5, cursor: 'pointer', boxShadow: `0 2px 12px ${primaryColor}55`, textTransform: 'uppercase' }}>
             Customize
@@ -486,7 +487,8 @@ export default function ProfileScreen() {
       <AnimatePresence>
         {showCreator && (
           <AvatarCreator onClose={() => setShowCreator(false)} onSave={handleSaveAvatar}
-            initialCharacter={char} initialPrimary={primaryColor} initialSecondary={secondaryColor} theme={theme}
+            initialCharacter={char} initialPrimary={primaryColor} initialSecondary={secondaryColor}
+            initialUseTexture={useTexture} theme={theme}
             unlockedCharacters={unlockedCharacters} dbCharacters={dbCharacters}/>
         )}
       </AnimatePresence>

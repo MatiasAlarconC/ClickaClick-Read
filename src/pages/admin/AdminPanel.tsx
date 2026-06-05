@@ -129,6 +129,10 @@ interface CharacterForm {
   offsetY: number
   glbFile: File | null
   existingGlbUrl: string
+  textureFile: File | null
+  textureRoughnessFile: File | null
+  existingTextureUrl: string
+  existingTextureRoughnessUrl: string
 }
 
 const CHAR_RARITIES = ['common', 'uncommon', 'rare', 'legendary', 'mythic'] as const
@@ -138,6 +142,8 @@ const EMPTY_CHARACTER_FORM: CharacterForm = {
   defaultPrimary: '#888888', defaultSecondary: '#444444',
   zoomScale: 1.0, offsetX: 0, offsetY: 0,
   glbFile: null, existingGlbUrl: '',
+  textureFile: null, textureRoughnessFile: null,
+  existingTextureUrl: '', existingTextureRoughnessUrl: '',
 }
 
 export default function AdminPanel() {
@@ -323,6 +329,28 @@ export default function AdminPanel() {
       glbUrl = urlData.publicUrl
     }
 
+    let textureUrl = charForm.existingTextureUrl || null
+    if (charForm.textureFile) {
+      const texPath = `textures/${charForm.id}_albedo.jpg`
+      const { error: texErr } = await supabase.storage
+        .from('character-models')
+        .upload(texPath, charForm.textureFile, { upsert: true, contentType: charForm.textureFile.type || 'image/jpeg' })
+      if (texErr) { setCharError(texErr.message); setCharSaving(false); return }
+      const { data: texUrl } = supabase.storage.from('character-models').getPublicUrl(texPath)
+      textureUrl = texUrl.publicUrl
+    }
+
+    let textureRoughnessUrl = charForm.existingTextureRoughnessUrl || null
+    if (charForm.textureRoughnessFile) {
+      const roughPath = `textures/${charForm.id}_roughness.png`
+      const { error: roughErr } = await supabase.storage
+        .from('character-models')
+        .upload(roughPath, charForm.textureRoughnessFile, { upsert: true, contentType: charForm.textureRoughnessFile.type || 'image/png' })
+      if (roughErr) { setCharError(roughErr.message); setCharSaving(false); return }
+      const { data: roughUrl } = supabase.storage.from('character-models').getPublicUrl(roughPath)
+      textureRoughnessUrl = roughUrl.publicUrl
+    }
+
     const { error } = await supabase.from('characters_config').upsert({
       id: charForm.id,
       name: charForm.name,
@@ -334,6 +362,8 @@ export default function AdminPanel() {
       offset_x: charForm.offsetX,
       offset_y: charForm.offsetY,
       glb_url: glbUrl,
+      texture_url: textureUrl,
+      texture_roughness_url: textureRoughnessUrl,
       enabled: true,
     }, { onConflict: 'id' })
 
@@ -346,7 +376,7 @@ export default function AdminPanel() {
   }
 
   const startEditCharacter = (c: DBCharacter) => {
-    setCharForm({ id: c.id, name: c.name, description: c.description, rarity: c.rarity ?? 'rare', defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, zoomScale: c.zoom_scale ?? 1.0, offsetX: c.offset_x ?? 0, offsetY: c.offset_y ?? 0, glbFile: null, existingGlbUrl: c.glb_url })
+    setCharForm({ id: c.id, name: c.name, description: c.description, rarity: c.rarity ?? 'rare', defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, zoomScale: c.zoom_scale ?? 1.0, offsetX: c.offset_x ?? 0, offsetY: c.offset_y ?? 0, glbFile: null, existingGlbUrl: c.glb_url, textureFile: null, textureRoughnessFile: null, existingTextureUrl: c.texture_url ?? '', existingTextureRoughnessUrl: c.texture_roughness_url ?? '' })
     setEditingCharId(c.id)
     setCharError('')
     setShowCharForm(false)
@@ -367,6 +397,9 @@ export default function AdminPanel() {
       offsetY: override?.offset_y ?? 0,
       glbFile: null,
       existingGlbUrl: override?.glb_url ?? c.glbPath,
+      textureFile: null, textureRoughnessFile: null,
+      existingTextureUrl: override?.texture_url ?? '',
+      existingTextureRoughnessUrl: override?.texture_roughness_url ?? '',
     })
     setEditingCharId(c.id)
     setCharError('')
@@ -962,6 +995,62 @@ export default function AdminPanel() {
                   </div>
                 </div>
               )}
+
+              {/* Texture upload */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                {/* Albedo texture */}
+                <div>
+                  <span style={label}>Texture — albedo / color map (jpg/png)</span>
+                  <div style={{ border: `2px dashed ${border}`, borderRadius: 10, padding: '14px', textAlign: 'center', background: bg }}>
+                    {charForm.textureFile ? (
+                      <div>
+                        <div style={{ fontSize: 12, color: fg, fontWeight: 500 }}>{charForm.textureFile.name}</div>
+                        <button onClick={() => setCharForm(f => ({ ...f, textureFile: null }))} style={{ marginTop: 4, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+                      </div>
+                    ) : charForm.existingTextureUrl ? (
+                      <div>
+                        <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>Texture uploaded</div>
+                        <label style={{ cursor: 'pointer', fontSize: 12, color: fg, textDecoration: 'underline' }}>
+                          Replace
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureFile: f })) }} />
+                        </label>
+                        <button onClick={() => setCharForm(f => ({ ...f, existingTextureUrl: '' }))} style={{ marginLeft: 8, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+                      </div>
+                    ) : (
+                      <label style={{ cursor: 'pointer' }}>
+                        <div style={{ fontSize: 12, color: muted }}>Upload albedo texture</div>
+                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureFile: f })) }} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+                {/* Roughness/metallic texture */}
+                <div>
+                  <span style={label}>Texture — roughness / metallic map (png)</span>
+                  <div style={{ border: `2px dashed ${border}`, borderRadius: 10, padding: '14px', textAlign: 'center', background: bg }}>
+                    {charForm.textureRoughnessFile ? (
+                      <div>
+                        <div style={{ fontSize: 12, color: fg, fontWeight: 500 }}>{charForm.textureRoughnessFile.name}</div>
+                        <button onClick={() => setCharForm(f => ({ ...f, textureRoughnessFile: null }))} style={{ marginTop: 4, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+                      </div>
+                    ) : charForm.existingTextureRoughnessUrl ? (
+                      <div>
+                        <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>Roughness map uploaded</div>
+                        <label style={{ cursor: 'pointer', fontSize: 12, color: fg, textDecoration: 'underline' }}>
+                          Replace
+                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureRoughnessFile: f })) }} />
+                        </label>
+                        <button onClick={() => setCharForm(f => ({ ...f, existingTextureRoughnessUrl: '' }))} style={{ marginLeft: 8, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+                      </div>
+                    ) : (
+                      <label style={{ cursor: 'pointer' }}>
+                        <div style={{ fontSize: 12, color: muted }}>Upload roughness map</div>
+                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureRoughnessFile: f })) }} />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
 
               <div style={{ marginBottom: 20 }}>
                 <span style={label}>GLB Model File{editingCharId ? ' (leave empty to keep current)' : ''}</span>

@@ -77,5 +77,7 @@ export interface DBCharacter {
   zoom_scale?: number
   offset_x?: number
   offset_y?: number
+  texture_url?: string
+  texture_roughness_url?: string
   enabled: boolean
 }
