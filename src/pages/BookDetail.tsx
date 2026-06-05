@@ -43,6 +43,8 @@ export default function BookDetailScreen() {
   const [summaryError, setSummaryError] = useState(false)
   const [customPages, setCustomPages] = useState<string>('')
   const [pagesSaved, setPagesSaved] = useState(false)
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
+  const [editEndPage, setEditEndPage] = useState('')
   const [bookDbId, setBookDbId] = useState<string | null>(null)
   // synopsis may come from nav state OR the DB books record — prefer DB
   const [synopsis, setSynopsis] = useState<string | null>(book?.synopsis ?? null)
@@ -229,6 +231,17 @@ export default function BookDetailScreen() {
     await supabase.from('user_books').update({ custom_pages: pages }).eq('id', userBook.id)
     setPagesSaved(true)
     setTimeout(() => setPagesSaved(false), 2000)
+  }
+
+  const saveSessionEndPage = async (s: ReadingSession) => {
+    const newEnd = parseInt(editEndPage)
+    if (isNaN(newEnd) || newEnd < 0) return
+    const newPagesRead = s.start_page != null ? Math.max(0, newEnd - s.start_page) : s.pages_read ?? 0
+    await supabase.from('reading_sessions')
+      .update({ end_page: newEnd, pages_read: newPagesRead })
+      .eq('id', s.id)
+    setSessions(prev => prev.map(r => r.id === s.id ? { ...r, end_page: newEnd, pages_read: newPagesRead } : r))
+    setEditingSessionId(null)
   }
 
   if (!book) {
@@ -494,7 +507,31 @@ export default function BookDetailScreen() {
                           )}
                           {dur && <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{dur}</div>}
                           {s.start_page != null && s.end_page != null && (
-                            <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>p.{s.start_page}–{s.end_page}</div>
+                            editingSessionId === s.id ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                                <span style={{ fontSize: 11, color: theme.muted }}>p.{s.start_page}–</span>
+                                <input
+                                  autoFocus
+                                  type="number"
+                                  value={editEndPage}
+                                  onChange={e => setEditEndPage(e.target.value)}
+                                  onKeyDown={e => { if (e.key === 'Enter') saveSessionEndPage(s); if (e.key === 'Escape') setEditingSessionId(null) }}
+                                  style={{ width: 60, padding: '3px 6px', fontSize: 12, borderRadius: 6, border: `1px solid ${theme.accent}`, background: theme.bg, color: theme.fg, textAlign: 'center' }}
+                                />
+                                <button onClick={() => saveSessionEndPage(s)} style={{ padding: '3px 8px', fontSize: 11, borderRadius: 6, background: theme.accent, color: theme.accentFg, border: 'none', cursor: 'pointer', fontWeight: 600 }}>OK</button>
+                                <button onClick={() => setEditingSessionId(null)} style={{ padding: '3px 6px', fontSize: 11, borderRadius: 6, background: 'none', color: theme.muted, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>×</button>
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, justifyContent: 'flex-end' }}>
+                                <span style={{ fontSize: 11, color: theme.muted }}>p.{s.start_page}–{s.end_page}</span>
+                                <button
+                                  onClick={() => { setEditingSessionId(s.id); setEditEndPage(String(s.end_page)) }}
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: theme.muted, display: 'flex', alignItems: 'center' }}
+                                  title="Edit end page">
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                </button>
+                              </div>
+                            )
                           )}
                         </div>
                       </div>
