@@ -1,7 +1,6 @@
 /**
  * Apple Watch companion — /watch
  * Abrir desde un Shortcut en Apple Watch con la URL clickaclick.lat/watch
- * Diseñado para ~184pt de ancho (Series 9). Sin NavBar, sin TabBar.
  * Auth persiste en el localStorage del WebKit del watch.
  */
 
@@ -24,12 +23,20 @@ const ACCENT = '#22C55E'
 const MUTED  = 'rgba(255,255,255,0.45)'
 const BORDER = 'rgba(255,255,255,0.12)'
 
-const btn = (bg = ACCENT, color = '#000'): React.CSSProperties => ({
+// Botón full-width
+const fullBtn = (bg = ACCENT, color = '#000'): React.CSSProperties => ({
   width: '100%', padding: '15px 12px', background: bg, color,
   border: 'none', borderRadius: 14, fontSize: 14, fontWeight: 700,
   cursor: 'pointer', boxSizing: 'border-box',
 })
-const ghostBtn: React.CSSProperties = {
+// Botón en fila (flex: 1, sin width: 100%)
+const rowBtn = (bg: string, color: string): React.CSSProperties => ({
+  flex: 1, padding: '14px 8px', background: bg, color,
+  border: bg === 'transparent' ? `1px solid ${BORDER}` : 'none',
+  borderRadius: 14, fontSize: 13, fontWeight: 700,
+  cursor: 'pointer', boxSizing: 'border-box',
+})
+const ghostFull: React.CSSProperties = {
   width: '100%', padding: '13px 12px', background: 'transparent',
   border: `1px solid ${BORDER}`, borderRadius: 14, fontSize: 13,
   color: MUTED, cursor: 'pointer', boxSizing: 'border-box',
@@ -44,10 +51,10 @@ const inputStyle: React.CSSProperties = {
 
 function SignInView() {
   const { signIn } = useAuth()
-  const [email, setEmail]   = useState('')
-  const [pass, setPass]     = useState('')
-  const [busy, setBusy]     = useState(false)
-  const [err, setErr]       = useState<string | null>(null)
+  const [email, setEmail] = useState('')
+  const [pass, setPass]   = useState('')
+  const [busy, setBusy]   = useState(false)
+  const [err, setErr]     = useState<string | null>(null)
 
   const submit = async () => {
     if (!email || !pass) return
@@ -63,8 +70,102 @@ function SignInView() {
       <input style={{ ...inputStyle, fontSize: 13, textAlign: 'left' }} type="email" placeholder="Email" value={email} onChange={e => setEmail(e.target.value)} autoComplete="username" />
       <input style={{ ...inputStyle, fontSize: 13, textAlign: 'left' }} type="password" placeholder="Contraseña" value={pass} onChange={e => setPass(e.target.value)} autoComplete="current-password" />
       {err && <div style={{ fontSize: 11, color: '#EF4444', textAlign: 'center' }}>{err}</div>}
-      <button style={btn()} disabled={busy} onClick={submit}>{busy ? '…' : 'Entrar'}</button>
+      <button style={fullBtn()} disabled={busy} onClick={submit}>{busy ? '…' : 'Entrar'}</button>
     </div>
+  )
+}
+
+// ─── Nota de voz ──────────────────────────────────────────────────────────────
+
+// Usa Web Speech API (SpeechRecognition) — on-device, sin subir audio
+// Si el watch WebKit no lo soporta, el botón no aparece.
+const SpeechRec: typeof SpeechRecognition | undefined =
+  (typeof window !== 'undefined')
+    ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition)
+    : undefined
+
+function VoiceNote({ ub, userId, pageRef }: { ub: UserBook; userId: string; pageRef: React.MutableRefObject<number> }) {
+  const [state, setState]         = useState<'idle' | 'recording' | 'preview'>('idle')
+  const [transcript, setTrans]    = useState('')
+  const [saving, setSaving]       = useState(false)
+  const [saved, setSaved]         = useState(false)
+  const recRef                    = useRef<SpeechRecognition | null>(null)
+
+  if (!SpeechRec) return null
+
+  const startRec = () => {
+    const r = new SpeechRec()
+    r.lang = 'es-ES'
+    r.interimResults = false
+    r.maxAlternatives = 1
+    r.onresult = (e) => {
+      setTrans(e.results[0][0].transcript)
+      setState('preview')
+    }
+    r.onerror = () => setState('idle')
+    r.onend   = () => { if (state === 'recording') setState('idle') }
+    recRef.current = r
+    r.start()
+    setState('recording')
+  }
+
+  const stopRec = () => {
+    recRef.current?.stop()
+    setState('idle')
+  }
+
+  const saveNote = async () => {
+    if (!transcript.trim()) return
+    setSaving(true)
+    await supabase.from('book_notes').insert({
+      user_id: userId,
+      book_id: ub.book_id,
+      page_number: pageRef.current || null,
+      content: transcript.trim(),
+    })
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => { setTrans(''); setState('idle'); setSaved(false) }, 1800)
+  }
+
+  if (saved) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '10px 0', color: ACCENT, fontSize: 12 }}>
+      <svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="6" stroke={ACCENT} strokeWidth="1.5" fill="none"/><path d="M4 7l2.5 2.5L10 5" stroke={ACCENT} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+      Nota guardada
+    </div>
+  )
+
+  if (state === 'preview') return (
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+      <div style={{ fontSize: 10, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8 }}>Nota</div>
+      <div style={{ fontSize: 12, color: '#fff', background: '#111', borderRadius: 10, padding: '10px', lineHeight: 1.5, minHeight: 40 }}>{transcript}</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button style={rowBtn(ACCENT, '#000')} disabled={saving} onClick={saveNote}>{saving ? '…' : 'Guardar'}</button>
+        <button style={rowBtn('transparent', MUTED)} onClick={() => { setTrans(''); setState('idle') }}>Descartar</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <button
+      style={{ ...ghostFull, marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: state === 'recording' ? '#EF4444' : MUTED }}
+      onClick={state === 'recording' ? stopRec : startRec}
+    >
+      {state === 'recording' ? (
+        <>
+          <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="4" fill="#EF4444"/></svg>
+          Grabando — toca para parar
+        </>
+      ) : (
+        <>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <rect x="4.5" y="1" width="5" height="8" rx="2.5" stroke="currentColor" strokeWidth="1.3"/>
+            <path d="M2 7.5a5.5 5.5 0 0011 0M7 13v1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
+          Nota de voz
+        </>
+      )}
+    </button>
   )
 }
 
@@ -81,6 +182,8 @@ function SessionView({ ub, userId }: { ub: UserBook; userId: string }) {
   const startRef    = useRef(Date.now())
   const accRef      = useRef(0)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // ref para que VoiceNote siempre lea la página actual
+  const currentPageRef = useRef(ub.current_page ?? 0)
 
   const title = (ub.book as { title?: string } | undefined)?.title ?? 'Libro'
   const shortTitle = title.length > 22 ? title.slice(0, 20) + '…' : title
@@ -110,19 +213,21 @@ function SessionView({ ub, userId }: { ub: UserBook; userId: string }) {
   }
 
   const endSession = () => {
-    if (phase === 'running') pause()
+    if (phase === 'running') {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      accRef.current += Math.floor((Date.now() - startRef.current) / 1000)
+    }
     setPhase('ending')
   }
 
   const save = async () => {
     if (saving) return
     setSaving(true)
-    if (intervalRef.current) clearInterval(intervalRef.current)
-    const duration = accRef.current
+    const duration  = accRef.current
     const startPage = ub.current_page ?? 0
-    const ep = parseInt(endPage) || startPage
+    const ep        = parseInt(endPage) || startPage
     const pagesRead = Math.max(0, ep - startPage)
-    const endedAt = new Date().toISOString()
+    const endedAt   = new Date().toISOString()
     const startedAt = new Date(Date.now() - duration * 1000).toISOString()
     await supabase.from('reading_sessions').insert({
       user_id: userId, book_id: ub.book_id,
@@ -137,6 +242,7 @@ function SessionView({ ub, userId }: { ub: UserBook; userId: string }) {
     setPhase('saved')
   }
 
+  // ── Guardado ──
   if (phase === 'saved') return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
       <svg width="44" height="44" viewBox="0 0 44 44">
@@ -148,6 +254,7 @@ function SessionView({ ub, userId }: { ub: UserBook; userId: string }) {
     </div>
   )
 
+  // ── Página final ──
   if (phase === 'ending') return (
     <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ fontSize: 13, fontWeight: 600, textAlign: 'center', color: '#fff' }}>{shortTitle}</div>
@@ -157,18 +264,22 @@ function SessionView({ ub, userId }: { ub: UserBook; userId: string }) {
         style={inputStyle}
         type="number"
         value={endPage}
-        onChange={e => setEndPage(e.target.value)}
+        onChange={e => { setEndPage(e.target.value); currentPageRef.current = parseInt(e.target.value) || 0 }}
         inputMode="numeric"
         min={ub.current_page ?? 0}
       />
-      <button style={btn()} disabled={saving} onClick={save}>{saving ? 'Guardando…' : 'Guardar'}</button>
-      <button style={ghostBtn} onClick={() => setPhase('paused')}>Volver</button>
+      <button style={fullBtn()} disabled={saving} onClick={save}>{saving ? 'Guardando…' : 'Guardar'}</button>
+      <button style={ghostFull} onClick={() => setPhase('paused')}>Volver</button>
     </div>
   )
 
+  // ── Timer principal ──
   return (
-    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-      <div style={{ fontSize: 11, color: MUTED, textAlign: 'center', letterSpacing: 0.3, textTransform: 'uppercase' }}>{shortTitle}</div>
+    <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+      <div style={{ fontSize: 11, color: MUTED, textAlign: 'center', letterSpacing: 0.3, textTransform: 'uppercase' }}>
+        {shortTitle}
+      </div>
+
       <div style={{
         fontSize: 46, fontWeight: 800, letterSpacing: -2, lineHeight: 1,
         color: phase === 'paused' ? MUTED : ACCENT,
@@ -176,17 +287,21 @@ function SessionView({ ub, userId }: { ub: UserBook; userId: string }) {
       }}>
         {fmtTime(secs)}
       </div>
+
       {phase === 'paused' && (
         <div style={{ fontSize: 10, color: MUTED, letterSpacing: 1.5, textTransform: 'uppercase' }}>Pausado</div>
       )}
-      <div style={{ width: '100%', display: 'flex', gap: 8, marginTop: 4 }}>
+
+      <div style={{ width: '100%', display: 'flex', gap: 8 }}>
         {phase === 'running' ? (
-          <button style={{ ...ghostBtn, flex: 1 }} onClick={pause}>Pausa</button>
+          <button style={rowBtn('#1a1a1a', '#fff')} onClick={pause}>Pausa</button>
         ) : (
-          <button style={{ ...ghostBtn, flex: 1, color: '#fff', borderColor: ACCENT }} onClick={resume}>Continuar</button>
+          <button style={rowBtn('#1a1a1a', ACCENT)} onClick={resume}>Continuar</button>
         )}
-        <button style={{ ...btn('#EF4444', '#fff'), flex: 1 }} onClick={endSession}>Terminar</button>
+        <button style={rowBtn('#EF4444', '#fff')} onClick={endSession}>Terminar</button>
       </div>
+
+      <VoiceNote ub={ub} userId={userId} pageRef={currentPageRef} />
     </div>
   )
 }
@@ -194,13 +309,12 @@ function SessionView({ ub, userId }: { ub: UserBook; userId: string }) {
 // ─── Root ─────────────────────────────────────────────────────────────────────
 
 export default function WatchScreen() {
-  const { user } = useAuth()
-  const [book, setBook]   = useState<UserBook | null | false>(null)
-  const [ready, setReady] = useState(false)
+  const { user }              = useAuth()
+  const [book, setBook]       = useState<UserBook | null | false>(null)
+  const [ready, setReady]     = useState(false)
 
   useEffect(() => {
     if (!user) { setReady(true); return }
-    // Libro más reciente = el que tiene la sesión más reciente
     supabase
       .from('reading_sessions')
       .select('book_id')
@@ -231,9 +345,7 @@ export default function WatchScreen() {
       padding: '16px 14px', boxSizing: 'border-box',
     }}>
       <div style={{ width: '100%', maxWidth: 210 }}>
-        {!ready && (
-          <div style={{ textAlign: 'center', color: MUTED, fontSize: 13 }}>…</div>
-        )}
+        {!ready && <div style={{ textAlign: 'center', color: MUTED, fontSize: 13 }}>…</div>}
         {ready && !user && <SignInView />}
         {ready && user && book === false && (
           <div style={{ textAlign: 'center', fontSize: 12, color: MUTED, lineHeight: 1.7 }}>
