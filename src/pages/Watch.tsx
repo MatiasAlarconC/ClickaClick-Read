@@ -79,7 +79,8 @@ function SignInView() {
 
 // Usa Web Speech API (SpeechRecognition) — on-device, sin subir audio
 // Si el watch WebKit no lo soporta, el botón no aparece.
-const SpeechRec: typeof SpeechRecognition | undefined =
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const SpeechRec: (new () => any) | undefined =
   (typeof window !== 'undefined')
     ? ((window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition)
     : undefined
@@ -89,7 +90,8 @@ function VoiceNote({ ub, userId, pageRef }: { ub: UserBook; userId: string; page
   const [transcript, setTrans]    = useState('')
   const [saving, setSaving]       = useState(false)
   const [saved, setSaved]         = useState(false)
-  const recRef                    = useRef<SpeechRecognition | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recRef                    = useRef<any>(null)
 
   if (!SpeechRec) return null
 
@@ -98,7 +100,7 @@ function VoiceNote({ ub, userId, pageRef }: { ub: UserBook; userId: string; page
     r.lang = 'es-ES'
     r.interimResults = false
     r.maxAlternatives = 1
-    r.onresult = (e) => {
+    r.onresult = (e: any) => {
       setTrans(e.results[0][0].transcript)
       setState('preview')
     }
