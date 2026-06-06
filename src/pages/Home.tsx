@@ -199,8 +199,8 @@ export function HomeScreen() {
                     <div style={{ fontFamily: 'Georgia, serif', fontSize: 15, color: theme.fg, lineHeight: 1.3, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ub.book?.title}</div>
                     <div style={{ fontSize: 12, color: theme.muted }}>{ub.book?.author}</div>
                   </div>
-                  <button onClick={() => navigate('/session', { state: { book: ub } })} style={{ flexShrink: 0, padding: '9px 16px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 18, display: 'flex', alignItems: 'center' }}>
-                    ⏱
+                  <button onClick={() => navigate('/session', { state: { book: ub } })} style={{ flexShrink: 0, width: 44, height: 44, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4.5V8l2.5 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                 </div>
               ))}

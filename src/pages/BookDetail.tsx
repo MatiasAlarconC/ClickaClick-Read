@@ -38,7 +38,16 @@ export default function BookDetailScreen() {
   const [newNote, setNewNote] = useState('')
   const [newNotePage, setNewNotePage] = useState('')
   const [addingToLib, setAddingToLib] = useState(false)
-  const [notesSummary, setNotesSummary] = useState<string | null>(null)
+  const summaryStorageKey = book?.id ? `notes_summary_${book.id}` : null
+  const [notesSummary, setNotesSummary] = useState<string | null>(() => {
+    try { return summaryStorageKey ? localStorage.getItem(summaryStorageKey) : null } catch { return null }
+  })
+  const [summaryPageRange, setSummaryPageRange] = useState<{ from: number | null; to: number | null } | null>(() => {
+    try {
+      const raw = summaryStorageKey ? localStorage.getItem(`${summaryStorageKey}_range`) : null
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  })
   const [summarizing, setSummarizing] = useState(false)
   const [summaryError, setSummaryError] = useState(false)
   const [customPages, setCustomPages] = useState<string>('')
@@ -442,10 +451,19 @@ export default function BookDetailScreen() {
                   </div>
                   <button
                     onClick={async () => {
-                      setSummarizing(true); setSummaryError(false); setNotesSummary(null)
+                      setSummarizing(true); setSummaryError(false)
                       try {
+                        const pages = notes.map(n => n.page_number).filter(Boolean) as number[]
+                        const range = pages.length > 0
+                          ? { from: Math.min(...pages), to: Math.max(...pages) }
+                          : { from: null, to: null }
                         const s = await summarizeNotes({ notes, bookTitle: book?.title ?? 'this book', userId: user?.id ?? null })
                         setNotesSummary(s)
+                        setSummaryPageRange(range)
+                        if (summaryStorageKey) {
+                          localStorage.setItem(summaryStorageKey, s)
+                          localStorage.setItem(`${summaryStorageKey}_range`, JSON.stringify(range))
+                        }
                       } catch { setSummaryError(true) }
                       setSummarizing(false)
                     }}
@@ -455,7 +473,14 @@ export default function BookDetailScreen() {
                   </button>
                 </div>
                 {notesSummary && (
-                  <div style={{ fontSize: 13, color: theme.fg, lineHeight: 1.7, borderTop: `1px solid ${theme.border}`, paddingTop: 12 }}>{notesSummary}</div>
+                  <div style={{ borderTop: `1px solid ${theme.border}`, paddingTop: 12 }}>
+                    {summaryPageRange && (summaryPageRange.from || summaryPageRange.to) && (
+                      <div style={{ fontSize: 10, color: theme.muted, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 8 }}>
+                        Pages {summaryPageRange.from ?? '?'} – {summaryPageRange.to ?? '?'}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 13, color: theme.fg, lineHeight: 1.7 }}>{notesSummary}</div>
+                  </div>
                 )}
                 {summaryError && (
                   <div style={{ fontSize: 12, color: theme.muted, marginTop: 8 }}>Could not generate summary. Try again.</div>

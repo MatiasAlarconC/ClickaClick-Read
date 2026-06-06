@@ -7,7 +7,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const tag = typeof req.query.tag === 'string' ? req.query.tag.replace(/[^a-zA-Z0-9_-]/g, '') : 'ambient'
   try {
     const upstream = await fetch(
-      `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_ID}&tags=${tag}&order=popularity_total_desc&limit=30&fuzzytags=1&audiodownload_allowed=1`
+      `https://api.jamendo.com/v3.0/tracks/?client_id=${JAMENDO_ID}&tags=${tag}&order=popularity_total_desc&limit=30&fuzzytags=1&audiodownload_allowed=1&acousticelectric=acoustic&speed=vlow,low`
     )
     const data = await upstream.json()
     const results = data?.results ?? []

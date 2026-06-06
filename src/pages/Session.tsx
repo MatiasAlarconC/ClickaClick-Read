@@ -7,44 +7,40 @@ import { supabase } from '../lib/supabase'
 import type { UserBook } from '../types'
 
 // ─── Music helpers ────────────────────────────────────────────────────────────
+// All tags point to calm/classical/lofi — reading music must never be upbeat
 function genreToMusicTag(genres: string[] | undefined): string {
-  if (!genres?.length) return 'ambient'
+  if (!genres?.length) return 'piano'
   const lower = genres.join(' ').toLowerCase()
-  if (/fantasy|magic|dragon|wizard|adventure|epic/.test(lower)) return 'instrumental'
+  if (/fantasy|magic|dragon|wizard|adventure|epic/.test(lower)) return 'classicalpiano'
   if (/thriller|crime|mystery|horror|suspense/.test(lower)) return 'ambient'
-  if (/romance|love|contemporary/.test(lower)) return 'acoustic'
-  if (/sci.?fi|space|technology|futuristic/.test(lower)) return 'electronic'
-  if (/histor|biograph|classic/.test(lower)) return 'classical'
-  return 'ambient'
+  if (/romance|love|contemporary/.test(lower)) return 'piano'
+  if (/sci.?fi|space|technology|futuristic/.test(lower)) return 'lofi'
+  if (/histor|biograph|classic/.test(lower)) return 'classicalpiano'
+  return 'piano'
 }
 
-// Calm royalty-free fallback tracks for focused reading (no API, always available)
-// All tracks are slow/ambient regardless of genre — reading music should never be upbeat
+// Public-domain classical fallback tracks (Musopen collection via archive.org)
+// Used only when Jamendo API fails — always calm, always instrumental
 const FALLBACK_TRACKS: Record<string, { url: string; name: string }[]> = {
-  ambient:      [
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',  name: 'Deep Focus I' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',  name: 'Deep Focus II' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',  name: 'Deep Focus III' },
+  piano:         [
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Chopin_-_Nocturne_Op.9_No.2_E_Flat_Major.mp3', name: 'Chopin — Nocturne Op.9 No.2' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Debussy_-_Clair_De_Lune.mp3',                  name: 'Debussy — Clair de Lune' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Chopin_-_Waltz_No._10_Op._69_No._2.mp3',       name: 'Chopin — Waltz Op.69 No.2' },
   ],
-  instrumental: [
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',  name: 'Story Flow I' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',  name: 'Story Flow II' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',  name: 'Story Flow III' },
+  classicalpiano:[
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Bach_-_Air_On_The_G_String.mp3',               name: 'Bach — Air on the G String' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Beethoven_-_Moonlight_Sonata_Mvt._1.mp3',      name: 'Beethoven — Moonlight Sonata' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Schubert_-_Ave_Maria.mp3',                     name: 'Schubert — Ave Maria' },
   ],
-  classical:    [
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',  name: 'Scholar\'s Study I' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',  name: 'Scholar\'s Study II' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',  name: 'Scholar\'s Study III' },
+  ambient:       [
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Debussy_-_Clair_De_Lune.mp3',                  name: 'Debussy — Clair de Lune' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Satie_-_Gymnopedies_No.1.mp3',                 name: 'Satie — Gymnopédie No.1' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Bach_-_Air_On_The_G_String.mp3',               name: 'Bach — Air on the G String' },
   ],
-  acoustic:     [
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',  name: 'Quiet Afternoon I' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3',  name: 'Quiet Afternoon II' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',  name: 'Quiet Afternoon III' },
-  ],
-  electronic:   [
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3',  name: 'Mind Space I' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3',  name: 'Mind Space II' },
-    { url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',  name: 'Mind Space III' },
+  lofi:          [
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Chopin_-_Nocturne_Op.9_No.2_E_Flat_Major.mp3', name: 'Chopin — Nocturne Op.9 No.2' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Satie_-_Gymnopedies_No.1.mp3',                 name: 'Satie — Gymnopédie No.1' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Debussy_-_Clair_De_Lune.mp3',                  name: 'Debussy — Clair de Lune' },
   ],
 }
 

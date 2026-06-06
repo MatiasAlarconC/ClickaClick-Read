@@ -13,15 +13,23 @@ export default function AIRecommendationsScreen() {
   const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [loading, setLoading] = useState(false)
-  const [recs, setRecs] = useState<BookRecommendation[]>([])
-  const [unavailable, setUnavailable] = useState(false)
-  const [noBooksInLib, setNoBooksInLib] = useState(false)
-  const [error, setError] = useState(false)
+  const CACHE_KEY_RECS = user ? `ai_recs_${user.id}` : 'ai_recs'
+  const CACHE_KEY_TS   = user ? `ai_recs_ts_${user.id}` : 'ai_recs_ts'
+  const CACHE_TTL_MS   = 24 * 60 * 60 * 1000
 
-  const fetchRecs = async () => {
+  const [loading, setLoading]           = useState(false)
+  const [backgrounding, setBackgrounding] = useState(false)
+  const [recs, setRecs]                 = useState<BookRecommendation[]>(() => {
+    try { return JSON.parse(localStorage.getItem(CACHE_KEY_RECS) ?? '[]') } catch { return [] }
+  })
+  const [unavailable, setUnavailable]   = useState(false)
+  const [noBooksInLib, setNoBooksInLib] = useState(false)
+  const [error, setError]               = useState(false)
+
+  const fetchRecs = async (background = false) => {
     if (!user) return
-    setLoading(true); setError(false); setUnavailable(false); setNoBooksInLib(false)
+    if (background) setBackgrounding(true)
+    else { setLoading(true); setError(false); setUnavailable(false); setNoBooksInLib(false) }
 
     // Use finished books first; fall back to currently-reading books
     let { data: userBooks } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).eq('status', 'finished').limit(20)
@@ -53,10 +61,28 @@ export default function AIRecommendationsScreen() {
       return rec
     }))
 
-    setRecs(enriched); setLoading(false)
+    setRecs(enriched)
+    try {
+      localStorage.setItem(CACHE_KEY_RECS, JSON.stringify(enriched))
+      localStorage.setItem(CACHE_KEY_TS, String(Date.now()))
+    } catch { /* storage full */ }
+    if (background) setBackgrounding(false)
+    else setLoading(false)
   }
 
-  useEffect(() => { fetchRecs() }, [user])
+  useEffect(() => {
+    if (!user) return
+    const ts = parseInt(localStorage.getItem(CACHE_KEY_TS) ?? '0')
+    const stale = Date.now() - ts > CACHE_TTL_MS
+    const hasCached = recs.length > 0
+    if (hasCached && stale) {
+      // Show cached immediately, refresh quietly in background
+      fetchRecs(true)
+    } else if (!hasCached) {
+      fetchRecs(false)
+    }
+    // If hasCached && !stale: use cache, no fetch needed
+  }, [user])
 
   return (
     <div style={{ minHeight: '100%', background: theme.bg, position: 'relative' }}>
@@ -69,7 +95,10 @@ export default function AIRecommendationsScreen() {
         <div style={{ marginBottom: 6 }}>
           <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase', color: theme.muted }}>Powered by AI</div>
         </div>
-        <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 400, color: theme.fg, letterSpacing: -1, marginBottom: 28, lineHeight: 1.15 }}>What should<br />you read next?</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 28 }}>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 400, color: theme.fg, letterSpacing: -1, lineHeight: 1.15 }}>What should<br />you read next?</div>
+          {backgrounding && <div style={{ width: 8, height: 8, borderRadius: '50%', background: theme.accent, opacity: 0.7, animation: 'pulse 1.5s infinite', flexShrink: 0, marginTop: 8 }} />}
+        </div>
 
         {loading && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '48px 0' }}>
