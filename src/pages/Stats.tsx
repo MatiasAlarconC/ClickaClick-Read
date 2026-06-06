@@ -16,6 +16,7 @@ export default function StatsScreen() {
   const [sessions, setSessions] = useState<ReadingSession[]>([])
   const [userBooks, setUserBooks] = useState<UserBook[]>([])
   const [loading, setLoading] = useState(true)
+  const [showPagesBreakdown, setShowPagesBreakdown] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -69,6 +70,40 @@ export default function StatsScreen() {
     const todayPages = todayTimedSessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
     const todayMins = Math.round(todayTimedSessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / 60)
     return { booksFinished, pagesRead, hours, dailyAvgPages, pacePerHour, avgDailyMins, todayPages, todayMins }
+  }, [sessions, userBooks])
+
+  const pagesBreakdown = useMemo(() => {
+    const sessionPagesByBook: Record<string, number> = {}
+    for (const s of sessions) {
+      if (s.book_id) sessionPagesByBook[s.book_id] = (sessionPagesByBook[s.book_id] ?? 0) + (s.pages_read ?? 0)
+    }
+    const thisYearStart = new Date(new Date().getFullYear(), 0, 1)
+    const bookIds = new Set([
+      ...Object.keys(sessionPagesByBook),
+      ...userBooks.filter(b => b.status === 'finished').map(b => b.book_id),
+    ])
+    const rows: { title: string; author: string; cover: string | null; pages: number }[] = []
+    for (const bid of bookIds) {
+      const ub = userBooks.find(b => b.book_id === bid)
+      if (!ub) continue
+      const bookMeta = ub.book as { title?: string; author?: string; cover_url?: string | null; pages_default?: number | null } | undefined
+      let pages = sessionPagesByBook[bid] ?? 0
+      if (ub.status === 'finished') {
+        const finishedAt = ub.finished_at ? new Date(ub.finished_at) : null
+        if (!finishedAt || finishedAt >= thisYearStart) {
+          const bookPages = ub.custom_pages ?? bookMeta?.pages_default ?? 0
+          if (bookPages > pages) pages = bookPages
+        }
+      }
+      if (pages === 0) continue
+      rows.push({
+        title: bookMeta?.title ?? 'Unknown',
+        author: bookMeta?.author ?? '',
+        cover: bookMeta?.cover_url ?? null,
+        pages,
+      })
+    }
+    return rows.sort((a, b) => b.pages - a.pages)
   }, [sessions, userBooks])
 
   // Heatmap: last 16 weeks × 7 days (timed sessions only)
@@ -186,14 +221,22 @@ export default function StatsScreen() {
         {/* Stats grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
           {[
-            { label: 'Books', value: String(stats.booksFinished), sub: 'this year' },
-            { label: 'Pages', value: stats.pagesRead.toLocaleString(), sub: 'this year' },
-            { label: 'Hours', value: String(stats.hours), sub: 'of reading' },
-            { label: 'Daily avg', value: `${stats.dailyAvgPages} pg`, sub: 'per day' },
+            { label: 'Books', value: String(stats.booksFinished), sub: 'this year', clickable: false },
+            { label: 'Pages', value: stats.pagesRead.toLocaleString(), sub: 'this year', clickable: true },
+            { label: 'Hours', value: String(stats.hours), sub: 'of reading', clickable: false },
+            { label: 'Daily avg', value: `${stats.dailyAvgPages} pg`, sub: 'per day', clickable: false },
           ].map((s, i) => (
             <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
-              style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 16px 14px' }}>
-              <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: theme.muted, marginBottom: 5 }}>{s.label}</div>
+              onClick={s.clickable ? () => setShowPagesBreakdown(true) : undefined}
+              style={{ background: theme.bgSecondary, borderRadius: 16, padding: '16px 16px 14px', cursor: s.clickable ? 'pointer' : 'default', position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: 0.9, textTransform: 'uppercase', color: theme.muted }}>{s.label}</div>
+                {s.clickable && (
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ opacity: 0.4 }}>
+                    <path d="M2 6H10M10 6L7 3M10 6L7 9" stroke={theme.fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </div>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, color: theme.fg, lineHeight: 1 }}>{s.value}</div>
               <div style={{ fontSize: 11, color: theme.muted, marginTop: 3 }}>{s.sub}</div>
             </motion.div>
@@ -408,6 +451,63 @@ export default function StatsScreen() {
       </div>
 
       <TabBar activeTab="stats" onTabChange={t => navigate(`/${t === 'home' ? 'home' : t}`)} theme={theme} />
+
+      {/* Pages breakdown sheet */}
+      {showPagesBreakdown && (
+        <div
+          onClick={() => setShowPagesBreakdown(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
+          <motion.div
+            initial={{ y: '100%' }} animate={{ y: 0 }} transition={{ type: 'spring', damping: 28, stiffness: 260 }}
+            onClick={e => e.stopPropagation()}
+            style={{ width: '100%', background: theme.bgElevated, borderRadius: '20px 20px 0 0', maxHeight: '78vh', display: 'flex', flexDirection: 'column', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+            {/* Handle + header */}
+            <div style={{ padding: '12px 20px 0', flexShrink: 0 }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: theme.border, margin: '0 auto 16px' }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg }}>Pages by Book</div>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.accent }}>{stats.pagesRead.toLocaleString()}</div>
+              </div>
+              <div style={{ fontSize: 11, color: theme.muted, marginBottom: 16 }}>This year · {pagesBreakdown.length} book{pagesBreakdown.length !== 1 ? 's' : ''}</div>
+              <div style={{ height: 1, background: theme.border, marginBottom: 4 }} />
+            </div>
+            {/* List */}
+            <div style={{ overflowY: 'auto', padding: '4px 20px 24px', flex: 1 }}>
+              {pagesBreakdown.length === 0 ? (
+                <div style={{ fontSize: 13, color: theme.muted, textAlign: 'center', padding: '32px 0' }}>No pages recorded yet this year.</div>
+              ) : (
+                pagesBreakdown.map((row, i) => {
+                  const pct = stats.pagesRead > 0 ? (row.pages / stats.pagesRead) * 100 : 0
+                  return (
+                    <div key={i} style={{ paddingTop: 14, paddingBottom: 14, borderBottom: i < pagesBreakdown.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+                        {row.cover ? (
+                          <img src={row.cover} alt="" style={{ width: 36, height: 52, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 36, height: 52, borderRadius: 4, background: theme.border, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke={theme.muted} strokeWidth="1.2"/><path d="M4 5h6M4 7.5h4" stroke={theme.muted} strokeWidth="1" strokeLinecap="round"/></svg>
+                          </div>
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: theme.fg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.title}</div>
+                          <div style={{ fontSize: 11, color: theme.muted, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.author}</div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.fg, lineHeight: 1 }}>{row.pages.toLocaleString()}</div>
+                          <div style={{ fontSize: 10, color: theme.muted, marginTop: 2 }}>{pct.toFixed(1)}%</div>
+                        </div>
+                      </div>
+                      <div style={{ height: 3, background: theme.border, borderRadius: 2, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: theme.accent, borderRadius: 2 }} />
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   )
 }
