@@ -139,7 +139,8 @@ export default function SessionScreen() {
   // Single unified timer effect — sets refs and starts interval atomically
   useEffect(() => {
     if (!playing) {
-      pauseStartTs.current = Date.now()
+      // Only record pause start if the session has already begun (avoids counting pre-play wait time)
+      if (sessionStartTs.current !== null) pauseStartTs.current = Date.now()
       return
     }
     // Start or resume: update refs before tick() runs

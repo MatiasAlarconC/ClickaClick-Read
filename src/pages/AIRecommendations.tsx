@@ -122,7 +122,7 @@ export default function AIRecommendationsScreen() {
                 : 'AI could not generate recommendations right now. This may be a temporary issue.'}
             </div>
             {!noBooksInLib && (
-              <button onClick={fetchRecs} style={{ marginTop: 14, padding: '10px 22px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, cursor: 'pointer' }}>Try Again</button>
+              <button onClick={() => fetchRecs(false)} style={{ marginTop: 14, padding: '10px 22px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, cursor: 'pointer' }}>Try Again</button>
             )}
           </div>
         )}
@@ -130,7 +130,7 @@ export default function AIRecommendationsScreen() {
         {error && (
           <div style={{ padding: '24px', background: theme.bgSecondary, borderRadius: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 13, color: theme.muted }}>Something went wrong. Please try again.</div>
-            <button onClick={fetchRecs} style={{ marginTop: 12, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14 }}>Retry</button>
+            <button onClick={() => fetchRecs(false)} style={{ marginTop: 12, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14 }}>Retry</button>
           </div>
         )}
 
@@ -154,7 +154,7 @@ export default function AIRecommendationsScreen() {
               )
             })}
 
-            <button onClick={fetchRecs} style={{ marginTop: 8, padding: 15, background: 'none', border: `1.5px solid ${theme.border}`, borderRadius: 12, fontSize: 14, color: theme.muted }}>
+            <button onClick={() => fetchRecs(false)} style={{ marginTop: 8, padding: 15, background: 'none', border: `1.5px solid ${theme.border}`, borderRadius: 12, fontSize: 14, color: theme.muted }}>
               Get new recommendations
             </button>
           </div>
