@@ -45,6 +45,7 @@ export default function BookDetailScreen() {
   const [pagesSaved, setPagesSaved] = useState(false)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editEndPage, setEditEndPage] = useState('')
+  const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null)
   const [bookDbId, setBookDbId] = useState<string | null>(null)
   // synopsis may come from nav state OR the DB books record — prefer DB
   const [synopsis, setSynopsis] = useState<string | null>(book?.synopsis ?? null)
@@ -242,6 +243,21 @@ export default function BookDetailScreen() {
       .eq('id', s.id)
     setSessions(prev => prev.map(r => r.id === s.id ? { ...r, end_page: newEnd, pages_read: newPagesRead } : r))
     setEditingSessionId(null)
+  }
+
+  const deleteSession = async (s: ReadingSession) => {
+    await supabase.from('reading_sessions').delete().eq('id', s.id)
+    const remaining = sessions.filter(r => r.id !== s.id)
+    setSessions(remaining)
+    // Update current_page to the end_page of the most recent remaining session
+    if (userBook) {
+      const lastEndPage = remaining
+        .filter(r => r.end_page != null)
+        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0]?.end_page ?? null
+      await supabase.from('user_books')
+        .update({ current_page: lastEndPage })
+        .eq('id', userBook.id)
+    }
   }
 
   if (!book) {
@@ -497,8 +513,24 @@ export default function BookDetailScreen() {
                   return (
                     <div key={s.id} style={{ padding: '14px 0', borderBottom: i < sessions.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div>
-                          <div style={{ fontSize: 14, fontWeight: 500, color: theme.fg }}>{dateStr}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ fontSize: 14, fontWeight: 500, color: theme.fg }}>{dateStr}</div>
+                            {confirmDeleteSessionId === s.id ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ fontSize: 11, color: '#ef4444' }}>Delete?</span>
+                                <button onClick={() => { deleteSession(s); setConfirmDeleteSessionId(null) }}
+                                  style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: '#ef4444', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Yes</button>
+                                <button onClick={() => setConfirmDeleteSessionId(null)}
+                                  style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: 'none', color: theme.muted, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>No</button>
+                              </div>
+                            ) : (
+                              <button onClick={() => setConfirmDeleteSessionId(s.id)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: theme.muted, display: 'flex', alignItems: 'center' }}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><polyline points="3 6 5 6 21 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M10 11v6M14 11v6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                              </button>
+                            )}
+                          </div>
                           <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{isManual ? 'Manual update' : timeStr}</div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
