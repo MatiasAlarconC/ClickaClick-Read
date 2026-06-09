@@ -1,15 +1,9 @@
 import { supabase } from '../lib/supabase'
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined
-
-export function isGeminiConfigured(): boolean {
-  return !!(GEMINI_API_KEY && GEMINI_API_KEY.trim().length > 0)
-}
-
-// Log key presence at module init (never logs the actual key value)
-if (import.meta.env.DEV || import.meta.env.PROD) {
-  console.info('[ClickaClick AI] GEMINI key configured:', isGeminiConfigured())
-}
+// The Gemini API key now lives server-side in /api/gemini.ts
+// It is NOT a VITE_ variable — it never gets bundled into the client JS bundle
+// isGeminiConfigured() always returns true; the server returns 503 if unconfigured
+export function isGeminiConfigured(): boolean { return true }
 
 interface GeminiConfig {
   enabled: boolean
@@ -22,7 +16,7 @@ interface GeminiConfig {
 
 let configCache: GeminiConfig | null = null
 let configCacheTime = 0
-const CACHE_TTL = 60_000 // 1 minute
+const CACHE_TTL = 60_000
 
 async function getConfig(): Promise<GeminiConfig> {
   const now = Date.now()
@@ -32,7 +26,6 @@ async function getConfig(): Promise<GeminiConfig> {
     const { data } = await supabase.from('admin_config').select('key, value')
     const map: Record<string, string> = {}
     for (const row of data ?? []) map[row.key] = row.value
-
     configCache = {
       enabled: map['gemini_enabled'] !== 'false',
       model: map['gemini_model'] ?? 'gemini-2.5-flash',
@@ -52,71 +45,24 @@ async function getConfig(): Promise<GeminiConfig> {
   return configCache
 }
 
+// All Gemini calls go through the serverless proxy — the API key never leaves the server
 async function callGemini(prompt: string, model: string, jsonMode = false): Promise<{ text: string; tokens: number }> {
-  if (!GEMINI_API_KEY) {
-    console.error('[ClickaClick AI] VITE_GEMINI_API_KEY is not set — check Vercel environment variables')
-    throw new Error('No Gemini API key')
+  const res = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, model, jsonMode }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(err.error ?? `Gemini proxy error ${res.status}`)
   }
-
-  // Fallback chain: try configured model → 2.5-flash → 2.0-flash → 1.5-flash (most stable)
-  const candidates = [model, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'].filter((m, i, a) => a.indexOf(m) === i)
-
-  let lastError: Error = new Error('Gemini unreachable')
-  for (const m of candidates) {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${GEMINI_API_KEY}`
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          maxOutputTokens: jsonMode ? 4096 : 2048,
-          temperature: 0.7,
-          ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
-        },
-      }),
-    })
-    if (res.ok) {
-      const data = await res.json()
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-      if (!text) {
-        const reason = data.candidates?.[0]?.finishReason ?? 'UNKNOWN'
-        console.warn(`[ClickaClick AI] Gemini returned empty response (${m}), finishReason: ${reason}`)
-        throw new Error(`Gemini empty response: ${reason}`)
-      }
-      const tokens = data.usageMetadata?.totalTokenCount ?? 0
-      return { text, tokens }
-    }
-    if (res.status === 403) {
-      const body = await res.text().catch(() => '')
-      console.error(`[ClickaClick AI] 403 FORBIDDEN — API key is invalid, expired, or IP-restricted. Check Vercel env vars. Body:`, body)
-      throw new Error('Gemini 403: invalid key')
-    }
-    if (res.status === 429) {
-      const body = await res.text().catch(() => '')
-      console.warn(`[ClickaClick AI] Gemini 429 (${m}):`, body)
-      lastError = new Error('Gemini 429')
-      continue // try next model in chain
-    }
-    if (res.status >= 500) {
-      const body = await res.text().catch(() => '')
-      console.error(`[ClickaClick AI] Gemini ${res.status} (${m}):`, body)
-      throw new Error(`Gemini ${res.status}`)
-    }
-    // 404 / 400 likely means deprecated model — try next candidate
-    const body = await res.text().catch(() => '')
-    console.warn(`[ClickaClick AI] Gemini ${res.status} (${m}), trying next:`, body)
-    lastError = new Error(`Gemini ${res.status}`)
-  }
-  throw lastError
+  return res.json()
 }
 
 async function logUsage(feature: string, tokens: number, model: string, userId: string | null) {
   try {
     await supabase.from('ai_usage_log').insert({ feature, tokens_used: tokens, model, user_id: userId })
-  } catch {
-    // never throw on logging failure
-  }
+  } catch { /* never throw on logging failure */ }
 }
 
 export interface BookRecommendation {
@@ -133,8 +79,11 @@ export async function getRecommendations(params: {
   if (!cfg.enabled || !cfg.recommendations_enabled) return []
 
   const count = params.count ?? 10
-  const booksStr = params.finishedBooks.map(b => `"${b.title}" by ${b.author}${b.rating ? ` (rated ${b.rating}/5)` : ''}${b.genres?.length ? ` [${b.genres.join(', ')}]` : ''}`).join('\n')
-  const excludeStr = params.exclude?.length ? `\nDo NOT include: ${params.exclude.map(t => `"${t}"`).join(', ')}.` : ''
+  const booksStr = params.finishedBooks.map(b =>
+    `"${b.title}" by ${b.author}${b.rating ? ` (rated ${b.rating}/5)` : ''}${b.genres?.length ? ` [${b.genres.join(', ')}]` : ''}`
+  ).join('\n')
+  const excludeStr = params.exclude?.length
+    ? `\nDo NOT include: ${params.exclude.map(t => `"${t}"`).join(', ')}.` : ''
   const prompt = `You are a book recommendation engine. Output ONLY a valid JSON array, no markdown, no explanation.\n\nReader's books:\n${booksStr}${excludeStr}\n\nRecommend exactly ${count} books. Keep "reason" under 15 words. Return:\n[{"title":"...","author":"...","reason":"..."}]`
 
   try {
@@ -146,7 +95,7 @@ export async function getRecommendations(params: {
     return JSON.parse(json)
   } catch (err) {
     console.error('[ClickaClick AI] recommendations failed:', err)
-    throw err   // propagate so callers can show the real error
+    throw err
   }
 }
 
@@ -177,10 +126,7 @@ export async function summarizeNotes(params: {
   const cfg = await getConfig()
   if (!cfg.enabled || !cfg.summary_enabled) throw new Error('AI summaries are disabled')
 
-  const notesText = params.notes
-    .map(n => `[p.${n.page_number ?? '?'}] ${n.content}`)
-    .join('\n')
-
+  const notesText = params.notes.map(n => `[p.${n.page_number ?? '?'}] ${n.content}`).join('\n')
   const prompt = `I'm reading "${params.bookTitle}". Here are my reading notes:\n\n${notesText}\n\nWrite a concise 3-5 sentence summary of my reading progress and key insights based on these notes. Focus on themes, questions, and ideas I seem to be tracking. Write in second person ("You've been following...").`
 
   const { text, tokens } = await callGemini(prompt, cfg.model)
@@ -189,11 +135,8 @@ export async function summarizeNotes(params: {
 }
 
 export interface SeriesInfo {
-  seriesName: string
-  position: number
-  totalBooks: number
-  nextTitle: string
-  nextAuthor: string
+  seriesName: string; position: number; totalBooks: number
+  nextTitle: string; nextAuthor: string
 }
 
 export async function detectBookSeries(params: {
