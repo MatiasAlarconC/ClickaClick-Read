@@ -101,6 +101,18 @@ export default function SessionScreen() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(false)
 
+  // ePub anchor — shown when last session was virtual, to help user locate place in physical book
+  interface EpubAnchor { sentence: string; chapter: string; cfi: string; progress: number }
+  const [epubAnchor, setEpubAnchor] = useState<EpubAnchor | null>(() => {
+    try {
+      const raw = userBook?.book_id ? localStorage.getItem(`epub_anchor_${userBook.book_id}`) : null
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  })
+  const [anchorExpanded, setAnchorExpanded] = useState(true)
+  const [pageConfirmed, setPageConfirmed] = useState(false)
+  const [correctedPage, setCorrectedPage] = useState('')
+
   // Music
   const [musicOn, setMusicOn] = useState(false)
   const [musicLoading, setMusicLoading] = useState(false)
@@ -418,6 +430,62 @@ export default function SessionScreen() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ePub anchor banner — last-sentence bridge from previous virtual session */}
+      {epubAnchor && anchorExpanded && (
+        <div style={{ margin: '0 0 20px', padding: '14px 16px', background: dark ? '#1a1130' : '#f3f0ff', borderRadius: 14, border: '1px solid #7C3AED44' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#7C3AED', marginBottom: 2 }}>Last ePub sentence</div>
+              {epubAnchor.chapter && <div style={{ fontSize: 11, color: muted }}>{epubAnchor.chapter}</div>}
+            </div>
+            <button onClick={() => setAnchorExpanded(false)} style={{ background: 'none', border: 'none', color: muted, fontSize: 18, lineHeight: 1, cursor: 'pointer' }}>×</button>
+          </div>
+          <div style={{ fontSize: 13, color: fg, fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>
+            "{epubAnchor.sentence}"
+          </div>
+          <div style={{ fontSize: 12, color: muted, marginBottom: 10 }}>
+            Estimated page: <strong style={{ color: fg }}>{Math.round(epubAnchor.progress * (userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0))}</strong>
+            {' '}of {userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? '?'}
+          </div>
+          {!pageConfirmed ? (
+            <div>
+              <div style={{ fontSize: 11, color: muted, marginBottom: 6 }}>Found a different page? Correct it:</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  type="number"
+                  value={correctedPage}
+                  onChange={e => setCorrectedPage(e.target.value)}
+                  placeholder={String(Math.round(epubAnchor.progress * (userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0)))}
+                  style={{ flex: 1, padding: '8px 10px', background: dark ? '#0d0d0d' : '#fff', border: '1px solid #7C3AED55', borderRadius: 8, fontSize: 14, color: fg }}
+                />
+                <button
+                  onClick={() => {
+                    const pg = correctedPage || String(Math.round(epubAnchor.progress * (userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0)))
+                    // Update startPage via localStorage so the corrected value takes effect
+                    if (correctedPage && userBook) {
+                      supabase.from('user_books').update({ current_page: parseInt(correctedPage) }).eq('id', userBook.id)
+                      // Also recalibrate ratio: correctedPage / (estimatedPage) adjusts epub_page_ratio
+                      const est = Math.round(epubAnchor.progress * (userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0))
+                      if (est > 0) {
+                        const newRatio = parseInt(correctedPage) / est
+                        supabase.from('user_books').update({ epub_page_ratio: newRatio }).eq('id', userBook.id)
+                      }
+                    }
+                    setPageConfirmed(true)
+                    setAnchorExpanded(false)
+                    localStorage.removeItem(`epub_anchor_${userBook?.book_id}`)
+                  }}
+                  style={{ padding: '8px 14px', background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  Confirm
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: '#22C55E' }}>Page confirmed — starting from {correctedPage}</div>
+          )}
+        </div>
+      )}
 
       {/* Book cover */}
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>

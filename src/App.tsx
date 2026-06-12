@@ -20,6 +20,7 @@ import AdminPanel from './pages/admin/AdminPanel'
 import PublicProfileScreen from './pages/PublicProfile'
 import FriendsScreen from './pages/Friends'
 import WatchScreen from './pages/Watch'
+import EpubReaderPage from './pages/EpubReader'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -68,6 +69,7 @@ function AppRoutes() {
         <Route path="/profile/:userId" element={<ProtectedRoute><PublicProfileScreen /></ProtectedRoute>} />
         <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
         <Route path="/watch" element={<WatchScreen />} />
+        <Route path="/read" element={<ProtectedRoute><EpubReaderPage /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AnimatePresence>

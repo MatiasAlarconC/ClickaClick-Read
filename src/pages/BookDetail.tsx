@@ -56,6 +56,9 @@ export default function BookDetailScreen() {
   const [editEndPage, setEditEndPage] = useState('')
   const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null)
   const [bookDbId, setBookDbId] = useState<string | null>(null)
+  const [epubUploading, setEpubUploading] = useState(false)
+  const [epubPath, setEpubPath] = useState<string | null>(null)
+  const [showModeModal, setShowModeModal] = useState(false)
   // synopsis may come from nav state OR the DB books record — prefer DB
   const [synopsis, setSynopsis] = useState<string | null>(book?.synopsis ?? null)
   const [seriesInfo, setSeriesInfo] = useState<SeriesInfo | null | undefined>(undefined)
@@ -93,6 +96,7 @@ export default function BookDetailScreen() {
               setUserBook(data as UserBook)
               setRating(data.user_rating ?? 0)
               setCustomPages(String(data.custom_pages ?? book.pages ?? ''))
+              setEpubPath(data.epub_storage_path ?? null)
               // Update synopsis from DB if the nav state didn't have one
               if (!synopsis && data.book?.synopsis) setSynopsis(data.book.synopsis)
             }
@@ -243,6 +247,18 @@ export default function BookDetailScreen() {
     setTimeout(() => setPagesSaved(false), 2000)
   }
 
+  const uploadEpub = async (file: File) => {
+    if (!user || !userBook || !bookDbId) return
+    setEpubUploading(true)
+    const path = `${user.id}/${bookDbId}.epub`
+    const { error } = await supabase.storage.from('epubs').upload(path, file, { upsert: true, contentType: 'application/epub+zip' })
+    if (!error) {
+      await supabase.from('user_books').update({ epub_storage_path: path }).eq('id', userBook.id)
+      setEpubPath(path)
+    }
+    setEpubUploading(false)
+  }
+
   const saveSessionEndPage = async (s: ReadingSession) => {
     const newEnd = parseInt(editEndPage)
     if (isNaN(newEnd) || newEnd < 0) return
@@ -339,9 +355,19 @@ export default function BookDetailScreen() {
           )}
           {/* Book is in library — show contextual actions */}
           {userBook?.status === 'reading' && (
-            <button onClick={() => navigate('/session', { state: { book: userBook } })} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
-              ▶ Start Session
+            <button
+              onClick={() => epubPath ? setShowModeModal(true) : navigate('/session', { state: { book: userBook } })}
+              style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
+              <svg width="10" height="12" viewBox="0 0 10 12" fill="none" style={{ marginRight: 5, verticalAlign: 'middle' }}><path d="M1 1l8 5.5L1 12V1z" fill="currentColor"/></svg>
+              Start Session
             </button>
+          )}
+          {userBook?.status === 'reading' && (
+            <label style={{ padding: '8px 14px', background: theme.bgSecondary, color: epubPath ? '#22C55E' : theme.muted, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5 5h4M5 7.5h4M5 10h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+              {epubUploading ? 'Uploading…' : epubPath ? 'ePub loaded' : 'Upload ePub'}
+              <input type="file" accept=".epub,application/epub+zip" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadEpub(f) }} disabled={epubUploading} />
+            </label>
           )}
           {userBook?.status === 'want_to_read' && (
             <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
@@ -607,6 +633,37 @@ export default function BookDetailScreen() {
           </div>
         )}
       </div>
+
+      {/* Mode picker modal — shown when epub is loaded and user taps Start Session */}
+      {showModeModal && userBook && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 100, display: 'flex', alignItems: 'flex-end' }} onClick={() => setShowModeModal(false)}>
+          <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} onClick={e => e.stopPropagation()}
+            style={{ width: '100%', background: theme.bgElevated, borderRadius: '20px 20px 0 0', padding: '28px 24px 40px' }}>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, marginBottom: 6 }}>How are you reading?</div>
+            <div style={{ fontSize: 13, color: theme.muted, marginBottom: 24 }}>You have an ePub for this book</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <button
+                onClick={() => { setShowModeModal(false); navigate('/read', { state: { userBook, epubPath } }) }}
+                style={{ padding: '16px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                <div style={{ textAlign: 'left' }}>
+                  <div>Virtual (ePub)</div>
+                  <div style={{ fontSize: 12, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>Read on screen with highlights</div>
+                </div>
+              </button>
+              <button
+                onClick={() => { setShowModeModal(false); navigate('/session', { state: { book: userBook } }) }}
+                style={{ padding: '16px 20px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 14, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 2h9l4 4v12a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><path d="M13 2v4h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <div style={{ textAlign: 'left' }}>
+                  <div>Physical Book</div>
+                  <div style={{ fontSize: 12, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>Track pages from your print copy</div>
+                </div>
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   )
 }

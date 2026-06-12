@@ -45,6 +45,9 @@ export interface UserBook {
   started_at: string | null
   finished_at: string | null
   added_at: string
+  epub_storage_path: string | null
+  epub_page_ratio: number | null
+  progress_pct: number | null
   book?: Book
 }
 
@@ -59,6 +62,11 @@ export interface ReadingSession {
   end_page: number | null
   pages_read: number | null
   is_manual?: boolean
+  session_type?: string
+  epub_cfi_start?: string | null
+  epub_cfi_end?: string | null
+  last_sentence?: string | null
+  chapter_name?: string | null
   book?: Book
 }
 
