@@ -98,6 +98,7 @@ export default function SessionScreen() {
   const [showEndModal, setShowEndModal] = useState(false)
   const [endPage, setEndPage] = useState('')
   const [note, setNote] = useState('')
+  const [lastSentence, setLastSentence] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(false)
 
@@ -275,7 +276,7 @@ export default function SessionScreen() {
     const resolvedEndPage = endPage || page
     const pagesRead = Math.max(0, parseInt(resolvedEndPage) - parseInt(startPage))
 
-    const sessionPayload = {
+    const sessionPayload: Record<string, unknown> = {
       user_id: user.id,
       book_id: userBook.book_id,
       started_at: sessionStartTs.current
@@ -286,7 +287,9 @@ export default function SessionScreen() {
       start_page: parseInt(startPage),
       end_page: parseInt(resolvedEndPage),
       pages_read: pagesRead,
+      session_type: 'physical',
     }
+    if (lastSentence.trim()) sessionPayload.last_sentence = lastSentence.trim()
 
     // Persist locally before network call — recovered on next visit if needed
     localStorage.setItem('pendingSession', JSON.stringify(sessionPayload))
@@ -308,6 +311,12 @@ export default function SessionScreen() {
     }
 
     localStorage.removeItem('pendingSession')
+
+    // Save last sentence as epub anchor so the ePub reader can position itself
+    if (lastSentence.trim() && userBook.book_id) {
+      const anchor = { sentence: lastSentence.trim(), chapter: '', cfi: '', progress: 0 }
+      localStorage.setItem(`epub_anchor_${userBook.book_id}`, JSON.stringify(anchor))
+    }
 
     // Await the note insert so it actually fires before navigation
     if (note.trim()) {
@@ -563,10 +572,17 @@ export default function SessionScreen() {
                   style={{ width: '100%', padding: '13px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 16, color: fg }} />
               </div>
 
-              <div style={{ marginBottom: 24 }}>
+              <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: muted, display: 'block', marginBottom: 8 }}>Quick note (optional)</label>
                 <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Any thoughts or highlights…" rows={3}
                   style={{ width: '100%', padding: '13px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 14, color: fg, resize: 'none' }} />
+              </div>
+
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: muted, display: 'block', marginBottom: 4 }}>Last sentence (optional)</label>
+                <div style={{ fontSize: 12, color: muted, marginBottom: 8 }}>The ePub reader will open to this sentence next time.</div>
+                <textarea value={lastSentence} onChange={e => setLastSentence(e.target.value)} placeholder="Type the last sentence you read…" rows={2}
+                  style={{ width: '100%', padding: '13px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 14, color: fg, resize: 'none', fontStyle: lastSentence ? 'italic' : 'normal' }} />
               </div>
 
               {saveError && (

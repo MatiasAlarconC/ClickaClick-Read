@@ -357,8 +357,8 @@ export default function BookDetailScreen() {
           {userBook?.status === 'reading' && (
             <button
               onClick={() => epubPath ? setShowModeModal(true) : navigate('/session', { state: { book: userBook } })}
-              style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
-              <svg width="10" height="12" viewBox="0 0 10 12" fill="none" style={{ marginRight: 5, verticalAlign: 'middle' }}><path d="M1 1l8 5.5L1 12V1z" fill="currentColor"/></svg>
+              style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+              <svg width="10" height="12" viewBox="0 0 10 12" fill="none"><path d="M1 1l8 5.5L1 12V1z" fill="currentColor"/></svg>
               Start Session
             </button>
           )}
