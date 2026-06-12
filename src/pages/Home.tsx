@@ -17,6 +17,8 @@ export function HomeScreen() {
   const [yearlyCount, setYearlyCount] = useState(0)
   const [yearlyGoal, setYearlyGoal] = useState(12)
   const [weekDays, setWeekDays] = useState<boolean[]>([false,false,false,false,false,false,false])
+  const [showModeModal, setShowModeModal] = useState(false)
+  const [modeBook, setModeBook] = useState<UserBook | null>(null)
 
   const now = new Date()
   const h = now.getHours()
@@ -71,6 +73,11 @@ export function HomeScreen() {
   const progress = (totalPages > 0 && activeBook?.current_page)
     ? Math.min(activeBook.current_page / totalPages, 1)
     : 0
+
+  const startSession = (ub: UserBook) => {
+    if (ub.epub_storage_path) { setModeBook(ub); setShowModeModal(true) }
+    else navigate('/session', { state: { book: ub } })
+  }
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
@@ -183,7 +190,7 @@ export function HomeScreen() {
                   <ProgressBar progress={progress} theme={theme} height={3} />
                 </div>
               </div>
-              <button onClick={() => navigate('/session', { state: { book: activeBook } })} style={{ width: '100%', padding: 13, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <button onClick={() => startSession(activeBook)} style={{ width: '100%', padding: 13, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 500, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 Start Reading Session
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 6.5H11M11 6.5L7 2.5M11 6.5L7 10.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               </button>
@@ -199,7 +206,7 @@ export function HomeScreen() {
                     <div style={{ fontFamily: 'Georgia, serif', fontSize: 15, color: theme.fg, lineHeight: 1.3, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ub.book?.title}</div>
                     <div style={{ fontSize: 12, color: theme.muted }}>{ub.book?.author}</div>
                   </div>
-                  <button onClick={() => navigate('/session', { state: { book: ub } })} style={{ flexShrink: 0, width: 44, height: 44, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <button onClick={() => startSession(ub)} style={{ flexShrink: 0, width: 44, height: 44, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5"/><path d="M8 4.5V8l2.5 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                   </button>
                 </div>
@@ -245,6 +252,34 @@ export function HomeScreen() {
           </div>
         </div>
       </div>
+
+      {/* Mode picker modal */}
+      <AnimatePresence>
+        {showModeModal && modeBook && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+            onClick={() => setShowModeModal(false)}>
+            <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }}
+              onClick={e => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 500, background: theme.bg, borderRadius: '22px 22px 0 0', padding: '28px 22px 44px' }}>
+              <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, marginBottom: 6 }}>How do you want to read?</div>
+              <div style={{ fontSize: 13, color: theme.muted, marginBottom: 24 }}>{(modeBook.book as any)?.title}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <button onClick={() => { setShowModeModal(false); navigate('/read', { state: { userBook: modeBook, epubPath: modeBook.epub_storage_path } }) }}
+                  style={{ padding: '16px 18px', background: theme.fg, color: theme.bg, border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+                  <div>Virtual (ePub)</div>
+                  <div style={{ fontSize: 12, fontWeight: 400, opacity: 0.6, marginTop: 2 }}>Read from the digital file</div>
+                </button>
+                <button onClick={() => { setShowModeModal(false); navigate('/session', { state: { book: modeBook } }) }}
+                  style={{ padding: '16px 18px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+                  <div>Physical Book</div>
+                  <div style={{ fontSize: 12, fontWeight: 400, color: theme.muted, marginTop: 2 }}>Track time with physical copy</div>
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <TabBar activeTab="home" onTabChange={(t) => navigate(`/${t === 'home' ? 'home' : t}`)} theme={theme} />
     </div>

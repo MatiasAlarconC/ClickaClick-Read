@@ -72,15 +72,17 @@ function flattenToc(toc: any[]): any[] {
 }
 
 // ─── Settings storage ─────────────────────────────────────────────────────────
+type ReaderSettings = { theme: ThemeId; fontSize: number; fontId: FontId; marginH: number }
+const DEFAULTS: ReaderSettings = { theme: 'light', fontSize: 18, fontId: 'serif', marginH: 20 }
 const SETTINGS_KEY = 'epub_reader_settings'
-function loadSettings() {
+function loadSettings(): ReaderSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
-    if (raw) return JSON.parse(raw) as { theme: ThemeId; fontSize: number; fontId: FontId }
+    if (raw) return { ...DEFAULTS, ...(JSON.parse(raw) as Partial<ReaderSettings>) }
   } catch { /* ignore */ }
-  return { theme: 'light' as ThemeId, fontSize: 18, fontId: 'serif' as FontId }
+  return { ...DEFAULTS }
 }
-function saveSettings(s: { theme: ThemeId; fontSize: number; fontId: FontId }) {
+function saveSettings(s: ReaderSettings) {
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch { /* ignore */ }
 }
 
@@ -102,7 +104,7 @@ export default function EpubReaderPage() {
   // ── Persistent settings ──
   const [settings, _setSettings] = useState(loadSettings)
   const settingsRef = useRef(settings)
-  const setSettings = useCallback((fn: (prev: typeof settings) => typeof settings) => {
+  const setSettings = useCallback((fn: (prev: ReaderSettings) => ReaderSettings) => {
     _setSettings(prev => {
       const next = fn(prev)
       settingsRef.current = next
@@ -110,7 +112,7 @@ export default function EpubReaderPage() {
       return next
     })
   }, [])
-  const { theme: themeId, fontSize, fontId } = settings
+  const { theme: themeId, fontSize, fontId, marginH } = settings
   const T = THEMES[themeId]
 
   // ── Session timer ──
@@ -138,6 +140,7 @@ export default function EpubReaderPage() {
   const [noteText, setNoteText]             = useState('')
   const [noteSaved, setNoteSaved]           = useState(false)
   const [positionMarked, setPositionMarked] = useState(false)
+  const [awaitingAnchor, setAwaitingAnchor] = useState(false)
 
   // ── Session end ──
   const [anchorSentence, setAnchorSentence] = useState('')
@@ -151,7 +154,7 @@ export default function EpubReaderPage() {
   const totalPages = userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0
 
   // ── Apply theme/font/size to rendition ────────────────────────────────────────
-  const applyTheme = useCallback((rend: Rendition, tid: ThemeId, fid: FontId, fs: number) => {
+  const applyTheme = useCallback((rend: Rendition, tid: ThemeId, fid: FontId, fs: number, mH: number) => {
     const fontCss = FONTS[fid].css
     const combined = EPUB_CSS[tid] + `
       html, body, p, span, div, li {
@@ -159,6 +162,7 @@ export default function EpubReaderPage() {
         font-size: ${fs}px !important;
         line-height: 1.75 !important;
       }
+      body { padding-left: ${mH}px !important; padding-right: ${mH}px !important; }
     `
     rend.themes.register('custom', { '*': {} })
     rend.themes.override('background-color', THEMES[tid].bg)
@@ -228,7 +232,8 @@ export default function EpubReaderPage() {
         await rendition.display(savedCfi ?? undefined)
 
         rendition.on('rendered', () => {
-          applyTheme(rendition, settingsRef.current.theme, settingsRef.current.fontId, settingsRef.current.fontSize)
+          const s = settingsRef.current
+          applyTheme(rendition, s.theme, s.fontId, s.fontSize, s.marginH ?? 20)
         })
 
         rendition.on('locationChanged', (loc: any) => {
@@ -278,9 +283,9 @@ export default function EpubReaderPage() {
 
   useEffect(() => {
     if (rendRef.current && ready) {
-      applyTheme(rendRef.current, themeId, fontId, fontSize)
+      applyTheme(rendRef.current, themeId, fontId, fontSize, marginH)
     }
-  }, [themeId, fontId, fontSize, ready, applyTheme])
+  }, [themeId, fontId, fontSize, marginH, ready, applyTheme])
 
   // ── Navigation ─────────────────────────────────────────────────────────────────
   const goNext = () => { rendRef.current?.next(); setSelection(null) }
@@ -309,8 +314,13 @@ export default function EpubReaderPage() {
     setAnchorSentence(selection.text)
     setAnchorCfi(selection.cfi)
     setSelection(null)
-    setPositionMarked(true)
-    setTimeout(() => setPositionMarked(false), 2000)
+    if (awaitingAnchor) {
+      setAwaitingAnchor(false)
+      setShowEnd(true)
+    } else {
+      setPositionMarked(true)
+      setTimeout(() => setPositionMarked(false), 2000)
+    }
   }
 
   // ── Session end ────────────────────────────────────────────────────────────────
@@ -465,7 +475,20 @@ export default function EpubReaderPage() {
       {/* ── "Position marked" toast ───────────────────────────────────────────── */}
       {positionMarked && (
         <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: T.fg, color: T.bg, padding: '8px 16px', borderRadius: 20, fontSize: 13, fontWeight: 500, zIndex: 60, whiteSpace: 'nowrap' }}>
-          ✓ Position marked
+          ✓ Last position marked
+        </div>
+      )}
+
+      {/* ── "Awaiting anchor" instruction banner ─────────────────────────────── */}
+      {awaitingAnchor && !showEnd && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 55, background: T.fg, color: T.bg, padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Select the last sentence you read</div>
+            <div style={{ fontSize: 11, opacity: 0.65 }}>Tap + hold text, then tap "Mark end"</div>
+          </div>
+          <button onClick={() => { setAwaitingAnchor(false); setShowEnd(true) }} style={{ padding: '8px 14px', background: T.bg, color: T.fg, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
+            Skip
+          </button>
         </div>
       )}
 
@@ -494,6 +517,28 @@ export default function EpubReaderPage() {
                   <span style={{ fontSize: 22, lineHeight: 1, color: T.fg }}>A</span>
                 </button>
                 <span style={{ fontSize: 12, color: T.muted, minWidth: 32, textAlign: 'right' }}>{fontSize}px</span>
+              </div>
+            </div>
+
+            {/* Margins */}
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: T.muted, marginBottom: 12 }}>Margins</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button onClick={() => setSettings(s => ({ ...s, marginH: Math.max(0, (s.marginH ?? 20) - 5) }))} style={sizeBtnStyle(T)}>
+                  <span style={{ fontSize: 18, lineHeight: 1, color: T.fg }}>←</span>
+                </button>
+                <div style={{ flex: 1, position: 'relative', height: 28, display: 'flex', alignItems: 'center' }}>
+                  <div style={{ position: 'absolute', left: 0, right: 0, height: 3, background: T.uiBorder, borderRadius: 2 }}>
+                    <div style={{ height: '100%', width: `${((marginH) / 60) * 100}%`, background: T.fg, opacity: 0.5, borderRadius: 2, transition: 'width 0.15s' }} />
+                  </div>
+                  <input type="range" min={0} max={60} step={5} value={marginH}
+                    onChange={e => setSettings(s => ({ ...s, marginH: parseInt(e.target.value) }))}
+                    style={{ position: 'absolute', inset: 0, width: '100%', opacity: 0, cursor: 'pointer', height: '100%', margin: 0 }} />
+                </div>
+                <button onClick={() => setSettings(s => ({ ...s, marginH: Math.min(60, (s.marginH ?? 20) + 5) }))} style={sizeBtnStyle(T)}>
+                  <span style={{ fontSize: 18, lineHeight: 1, color: T.fg }}>→</span>
+                </button>
+                <span style={{ fontSize: 12, color: T.muted, minWidth: 32, textAlign: 'right' }}>{marginH}px</span>
               </div>
             </div>
 
@@ -585,18 +630,22 @@ export default function EpubReaderPage() {
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: anchorError ? '#EF4444' : T.muted, marginBottom: 4 }}>
                 Last sentence *
               </div>
-              <div style={{ fontSize: 12, color: T.muted, marginBottom: 10, lineHeight: 1.6 }}>
-                Select text and tap "Mark end", or type it here. Syncs your place with the physical book.
-              </div>
               {anchorSentence ? (
                 <div style={{ padding: '10px 12px', background: `${T.fg}08`, border: `1px solid ${T.uiBorder}`, borderRadius: 10, fontSize: 13, color: T.fg, fontStyle: 'italic', marginBottom: 8, lineHeight: 1.55 }}>
                   "{anchorSentence.slice(0, 120)}{anchorSentence.length > 120 ? '…' : ''}"
                   <button onClick={() => { setAnchorSentence(''); setAnchorCfi('') }} style={{ marginLeft: 8, background: 'none', border: 'none', color: T.muted, fontSize: 12, cursor: 'pointer' }}>change</button>
                 </div>
               ) : (
-                <textarea value={anchorSentence} onChange={e => { setAnchorSentence(e.target.value); setAnchorError(false) }}
-                  placeholder="Type or paste the last sentence…" rows={3}
-                  style={{ width: '100%', padding: '10px 12px', background: T.bg, border: `1.5px solid ${anchorError ? '#EF4444' : T.uiBorder}`, borderRadius: 10, fontSize: 13, color: T.fg, resize: 'none', outline: 'none' }} />
+                <>
+                  {/* Primary action: go back and select text */}
+                  <button onClick={() => { setShowEnd(false); setAwaitingAnchor(true) }} style={{ width: '100%', padding: '12px', background: `${T.fg}10`, border: `1.5px dashed ${T.fg}40`, borderRadius: 10, fontSize: 13, color: T.fg, cursor: 'pointer', marginBottom: 10, textAlign: 'center', fontWeight: 500 }}>
+                    ← Go select text in book
+                  </button>
+                  <div style={{ fontSize: 11, color: T.muted, textAlign: 'center', marginBottom: 8 }}>or type it manually</div>
+                  <textarea value={anchorSentence} onChange={e => { setAnchorSentence(e.target.value); setAnchorError(false) }}
+                    placeholder="Paste the last sentence you read…" rows={2}
+                    style={{ width: '100%', padding: '10px 12px', background: T.bg, border: `1.5px solid ${anchorError ? '#EF4444' : T.uiBorder}`, borderRadius: 10, fontSize: 13, color: T.fg, resize: 'none', outline: 'none' }} />
+                </>
               )}
               {anchorError && <div style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }}>Required — helps locate your place in the physical book</div>}
             </div>
