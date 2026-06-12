@@ -1,6 +1,5 @@
 {
   "rewrites": [
-    { "source": "/watch", "destination": "/api/watch" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
