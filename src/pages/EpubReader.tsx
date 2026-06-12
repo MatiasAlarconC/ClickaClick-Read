@@ -369,14 +369,31 @@ export default function EpubReaderPage() {
   return (
     <div style={{ height: '100dvh', background: T.bg, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden', transition: 'background 0.25s' }}>
 
+      {/* Safe-area + animation CSS injected once */}
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
+        .epub-top {
+          padding-top: max(12px, env(safe-area-inset-top));
+        }
+        .epub-bottom {
+          padding-bottom: max(12px, env(safe-area-inset-bottom));
+        }
+        .epub-viewer-wrap {
+          margin-top: calc(var(--top-h, 57px) + env(safe-area-inset-top));
+          margin-bottom: var(--bot-h, 52px);
+          transition: margin 0.25s ease, opacity 0.35s;
+        }
+      `}</style>
+
       {/* ── Top bar ─────────────────────────────────────────────────────────── */}
-      <div style={{
+      <div className="epub-top" style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30,
         background: T.uiBg, borderBottom: `1px solid ${T.uiBorder}`,
-        padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10,
-        transform: showBars ? 'translateY(0)' : 'translateY(-100%)',
+        paddingLeft: 14, paddingRight: 14, paddingBottom: 10,
+        display: 'flex', alignItems: 'center', gap: 10,
+        transform: showBars ? 'translateY(0)' : 'translateY(-110%)',
         transition: 'transform 0.25s ease',
-        boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+        boxShadow: '0 2px 16px rgba(0,0,0,0.1)',
       }}>
         <button onClick={() => navigate(-1)} style={iconBtn(T)}>
           <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M6 1L1 6L6 11" stroke={T.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -385,138 +402,133 @@ export default function EpubReaderPage() {
           <div style={{ fontSize: 12, fontWeight: 600, color: T.fg, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
           {chapterName && <div style={{ fontSize: 10, color: T.muted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chapterName}</div>}
         </div>
-
-        {/* Timer */}
-        <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: running ? '#22C55E' : T.muted, flexShrink: 0 }}>{fmtTime(secs)}</div>
-
-        {/* Pause / Resume */}
-        <button onClick={running ? pause : resume} style={iconBtn(T)} title={running ? 'Pause' : 'Resume'}>
+        <button onClick={running ? pause : resume} style={iconBtn(T)}>
           {running
             ? <svg width="10" height="12" viewBox="0 0 10 12" fill="none"><rect x="1" y="1" width="3" height="10" rx="1" fill={T.muted}/><rect x="6" y="1" width="3" height="10" rx="1" fill={T.muted}/></svg>
             : <svg width="10" height="12" viewBox="0 0 10 12" fill="none"><path d="M1 1l8 5-8 5V1z" fill={T.muted}/></svg>
           }
         </button>
-
-        {/* Settings */}
-        <button onClick={() => setShowSettings(s => !s)} style={iconBtn(T, showSettings)} title="Display settings">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-            <circle cx="7" cy="7" r="2.5" stroke={showSettings ? T.accent : T.muted} strokeWidth="1.3"/>
-            <path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.8 2.8l1.1 1.1M10.1 10.1l1.1 1.1M2.8 11.2l1.1-1.1M10.1 3.9l1.1-1.1" stroke={showSettings ? T.accent : T.muted} strokeWidth="1.3" strokeLinecap="round"/>
-          </svg>
-        </button>
-
-        {/* End session */}
-        <button onClick={openEndModal} style={{ padding: '6px 12px', background: T.accent, color: '#fff', border: 'none', borderRadius: 8, fontSize: 11, fontWeight: 700, flexShrink: 0, cursor: 'pointer' }}>End</button>
+        <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', color: running ? '#22C55E' : T.muted, flexShrink: 0 }}>{fmtTime(secs)}</div>
+        <button onClick={openEndModal} style={{ padding: '6px 14px', background: T.accent, color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 700, flexShrink: 0, cursor: 'pointer' }}>End</button>
       </div>
 
       {/* ── Progress bar ────────────────────────────────────────────────────── */}
-      <div style={{ position: 'absolute', top: showBars ? 57 : 0, left: 0, right: 0, height: 2, zIndex: 29, background: T.uiBorder, transition: 'top 0.25s ease' }}>
-        <div style={{ height: '100%', width: `${progress}%`, background: T.accent, transition: 'width 0.4s ease' }} />
+      <div style={{ position: 'absolute', top: showBars ? 'calc(var(--top-h,57px) + env(safe-area-inset-top))' : 0, left: 0, right: 0, height: 2, zIndex: 29, background: T.uiBorder, transition: 'top 0.25s ease' }}>
+        <div style={{ height: '100%', width: `${progress}%`, background: T.accent, transition: 'width 0.5s ease' }} />
       </div>
-
-      {/* ── Settings sheet ───────────────────────────────────────────────────── */}
-      {showSettings && (
-        <div style={{
-          position: 'absolute', top: 59, left: 0, right: 0, zIndex: 28,
-          background: T.uiBg, borderBottom: `1px solid ${T.uiBorder}`,
-          padding: '16px 18px 18px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-        }}>
-          {/* Font size */}
-          <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: T.muted, marginBottom: 10 }}>Font size</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <button
-                onClick={() => setSettings(s => ({ ...s, fontSize: Math.max(12, s.fontSize - 2) }))}
-                style={sizeBtnStyle(T)}>
-                <span style={{ fontSize: 18, lineHeight: 1 }}>A</span>
-              </button>
-              <div style={{ flex: 1, height: 3, background: T.uiBorder, borderRadius: 2, position: 'relative' }}>
-                <div style={{ position: 'absolute', left: 0, height: '100%', width: `${((fontSize - 12) / 16) * 100}%`, background: T.accent, borderRadius: 2, transition: 'width 0.15s' }} />
-                <input
-                  type="range" min={12} max={28} step={1} value={fontSize}
-                  onChange={e => setSettings(s => ({ ...s, fontSize: parseInt(e.target.value) }))}
-                  style={{ position: 'absolute', inset: '-8px 0', width: '100%', opacity: 0, cursor: 'pointer', margin: 0 }}
-                />
-              </div>
-              <button
-                onClick={() => setSettings(s => ({ ...s, fontSize: Math.min(28, s.fontSize + 2) }))}
-                style={sizeBtnStyle(T)}>
-                <span style={{ fontSize: 24, lineHeight: 1 }}>A</span>
-              </button>
-              <span style={{ fontSize: 12, color: T.muted, minWidth: 28, textAlign: 'right' }}>{fontSize}px</span>
-            </div>
-          </div>
-
-          {/* Font family */}
-          <div style={{ marginBottom: 18 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: T.muted, marginBottom: 10 }}>Typeface</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {(Object.keys(FONTS) as FontId[]).map(fid => (
-                <button key={fid}
-                  onClick={() => setSettings(s => ({ ...s, fontId: fid }))}
-                  style={{
-                    flex: 1, padding: '10px 8px', borderRadius: 10,
-                    background: fontId === fid ? `${T.accent}18` : T.uiBg,
-                    border: `1.5px solid ${fontId === fid ? T.accent : T.uiBorder}`,
-                    cursor: 'pointer',
-                  }}>
-                  <div style={{ fontSize: 18, fontFamily: FONTS[fid].css, color: T.fg, lineHeight: 1, marginBottom: 4 }}>{FONTS[fid].preview}</div>
-                  <div style={{ fontSize: 10, color: fontId === fid ? T.accent : T.muted, fontWeight: 600 }}>{FONTS[fid].label}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Theme */}
-          <div>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: T.muted, marginBottom: 10 }}>Theme</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {(Object.keys(THEMES) as ThemeId[]).map(tid => (
-                <button key={tid}
-                  onClick={() => setSettings(s => ({ ...s, theme: tid }))}
-                  style={{
-                    flex: 1, padding: '10px 8px', borderRadius: 10,
-                    background: THEMES[tid].bg,
-                    border: `2px solid ${themeId === tid ? T.accent : THEMES[tid].uiBorder}`,
-                    cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
-                  }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: THEMES[tid].fg }}>{THEMES[tid].name}</span>
-                  <span style={{ fontSize: 10, color: THEMES[tid].muted }}>Aa</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Loading overlay ──────────────────────────────────────────────────── */}
       {!ready && (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', zIndex: 10, gap: 12 }}>
           <div style={{ width: 24, height: 24, border: `2px solid ${T.muted}`, borderTopColor: T.accent, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
           <div style={{ color: T.muted, fontSize: 13 }}>Loading book…</div>
-          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
         </div>
       )}
 
       {/* ── ePub viewer ─────────────────────────────────────────────────────── */}
-      <div ref={viewerRef} style={{ flex: 1, opacity: ready ? 1 : 0, marginTop: showBars ? 59 : 2, marginBottom: selection ? 120 : 0, transition: 'opacity 0.4s, margin 0.25s ease' }} />
+      <div ref={viewerRef} className="epub-viewer-wrap" style={{ flex: 1, opacity: ready ? 1 : 0 }} />
 
       {/* ── Prev / Next tap zones ────────────────────────────────────────────── */}
-      <button onClick={goPrev} style={{ position: 'absolute', left: 0, top: 80, bottom: selection ? 200 : 80, width: 52, background: 'transparent', border: 'none', zIndex: 20, cursor: 'pointer' }} aria-label="Previous page" />
-      <button onClick={goNext} style={{ position: 'absolute', right: 0, top: 80, bottom: selection ? 200 : 80, width: 52, background: 'transparent', border: 'none', zIndex: 20, cursor: 'pointer' }} aria-label="Next page" />
+      <button onClick={goPrev} style={{ position: 'absolute', left: 0, top: '15%', bottom: '15%', width: 52, background: 'transparent', border: 'none', zIndex: 20, cursor: 'pointer' }} aria-label="Previous page" />
+      <button onClick={goNext} style={{ position: 'absolute', right: 0, top: '15%', bottom: '15%', width: 52, background: 'transparent', border: 'none', zIndex: 20, cursor: 'pointer' }} aria-label="Next page" />
 
-      {/* ── Bottom page counter ──────────────────────────────────────────────── */}
-      {showBars && !selection && (
-        <div style={{ position: 'absolute', bottom: 12, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 20, pointerEvents: 'none' }}>
-          <div style={{ fontSize: 11, color: T.muted, background: T.uiBg, border: `1px solid ${T.uiBorder}`, borderRadius: 20, padding: '4px 12px' }}>{progress}%</div>
+      {/* ── Bottom bar ──────────────────────────────────────────────────────── */}
+      <div className="epub-bottom" style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 30,
+        background: T.uiBg, borderTop: `1px solid ${T.uiBorder}`,
+        paddingTop: 10, paddingLeft: 20, paddingRight: 20,
+        display: 'flex', alignItems: 'center', gap: 14,
+        transform: showBars ? 'translateY(0)' : 'translateY(110%)',
+        transition: 'transform 0.25s ease',
+      }}>
+        {/* Progress */}
+        <div style={{ fontSize: 12, color: T.muted, flexShrink: 0 }}>{progress}%</div>
+        {/* Progress track */}
+        <div style={{ flex: 1, height: 3, background: T.uiBorder, borderRadius: 2, overflow: 'hidden' }}>
+          <div style={{ height: '100%', width: `${progress}%`, background: T.accent, borderRadius: 2, transition: 'width 0.5s ease' }} />
+        </div>
+        {/* Settings icon */}
+        <button onClick={() => setShowSettings(s => !s)} style={iconBtn(T, showSettings)} title="Display settings">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
+            <path d="M7.5 9.5a2 2 0 100-4 2 2 0 000 4z" stroke={showSettings ? T.accent : T.muted} strokeWidth="1.3"/>
+            <path d="M7.5 1v1.5M7.5 12.5V14M1 7.5h1.5M12.5 7.5H14M3 3l1 1M11 11l1 1M3 12l1-1M11 4l1-1" stroke={showSettings ? T.accent : T.muted} strokeWidth="1.3" strokeLinecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* ── Settings bottom sheet ────────────────────────────────────────────── */}
+      {showSettings && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 45, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }} onClick={() => setShowSettings(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background: T.uiBg, borderRadius: '20px 20px 0 0', padding: '20px 20px 36px', boxShadow: '0 -4px 30px rgba(0,0,0,0.2)', maxHeight: '70dvh', overflowY: 'auto' }}>
+            {/* Handle */}
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: T.uiBorder, margin: '0 auto 20px' }} />
+
+            {/* Font size */}
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: T.muted, marginBottom: 12 }}>Font size</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <button onClick={() => setSettings(s => ({ ...s, fontSize: Math.max(12, s.fontSize - 2) }))} style={sizeBtnStyle(T)}>
+                  <span style={{ fontSize: 16, lineHeight: 1, color: T.fg }}>A</span>
+                </button>
+                <div style={{ flex: 1, position: 'relative', height: 28, display: 'flex', alignItems: 'center' }}>
+                  <div style={{ position: 'absolute', left: 0, right: 0, height: 3, background: T.uiBorder, borderRadius: 2 }}>
+                    <div style={{ height: '100%', width: `${((fontSize - 12) / 16) * 100}%`, background: T.accent, borderRadius: 2, transition: 'width 0.15s' }} />
+                  </div>
+                  <input type="range" min={12} max={28} step={1} value={fontSize}
+                    onChange={e => setSettings(s => ({ ...s, fontSize: parseInt(e.target.value) }))}
+                    style={{ position: 'absolute', inset: 0, width: '100%', opacity: 0, cursor: 'pointer', height: '100%', margin: 0 }} />
+                </div>
+                <button onClick={() => setSettings(s => ({ ...s, fontSize: Math.min(28, s.fontSize + 2) }))} style={sizeBtnStyle(T)}>
+                  <span style={{ fontSize: 22, lineHeight: 1, color: T.fg }}>A</span>
+                </button>
+                <span style={{ fontSize: 12, color: T.muted, minWidth: 32, textAlign: 'right' }}>{fontSize}px</span>
+              </div>
+            </div>
+
+            {/* Typeface */}
+            <div style={{ marginBottom: 22 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: T.muted, marginBottom: 12 }}>Typeface</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {(Object.keys(FONTS) as FontId[]).map(fid => (
+                  <button key={fid} onClick={() => setSettings(s => ({ ...s, fontId: fid }))} style={{
+                    flex: 1, padding: '12px 8px', borderRadius: 12,
+                    background: fontId === fid ? `${T.accent}15` : T.bg,
+                    border: `2px solid ${fontId === fid ? T.accent : T.uiBorder}`,
+                    cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                  }}>
+                    <span style={{ fontSize: 22, fontFamily: FONTS[fid].css, color: T.fg, lineHeight: 1 }}>Aa</span>
+                    <span style={{ fontSize: 10, color: fontId === fid ? T.accent : T.muted, fontWeight: 600 }}>{FONTS[fid].label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Theme */}
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: T.muted, marginBottom: 12 }}>Theme</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {(Object.keys(THEMES) as ThemeId[]).map(tid => (
+                  <button key={tid} onClick={() => setSettings(s => ({ ...s, theme: tid }))} style={{
+                    flex: 1, padding: '12px 8px', borderRadius: 12,
+                    background: THEMES[tid].bg,
+                    border: `2px solid ${themeId === tid ? T.accent : THEMES[tid].uiBorder}`,
+                    cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                  }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: THEMES[tid].fg }}>{THEMES[tid].name}</span>
+                    <span style={{ fontSize: 11, color: THEMES[tid].muted, fontFamily: 'Georgia, serif' }}>Aa</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
       {/* ── Selection toolbar ────────────────────────────────────────────────── */}
-      {selection && (
-        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 40, background: T.uiBg, borderTop: `1px solid ${T.uiBorder}`, padding: '14px 16px', boxShadow: '0 -4px 20px rgba(0,0,0,0.12)' }}>
+      {selection && !showSettings && (
+        <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 40, background: T.uiBg, borderTop: `1px solid ${T.uiBorder}`, padding: '12px 14px 28px', boxShadow: '0 -4px 20px rgba(0,0,0,0.12)' }}>
           <div style={{ fontSize: 12, color: T.muted, marginBottom: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontStyle: 'italic' }}>
-            "{selection.text.length > 80 ? selection.text.slice(0, 80) + '…' : selection.text}"
+            "{selection.text.length > 70 ? selection.text.slice(0, 70) + '…' : selection.text}"
           </div>
           {noteSaved ? (
             <div style={{ fontSize: 13, color: '#22C55E', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -525,31 +537,25 @@ export default function EpubReaderPage() {
             </div>
           ) : showNoteInput ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <textarea
-                value={noteText} onChange={e => setNoteText(e.target.value)}
-                placeholder="Add a note…" rows={2} autoFocus
-                style={{ width: '100%', padding: '8px 10px', background: T.bg, border: `1px solid ${T.uiBorder}`, borderRadius: 8, fontSize: 13, color: T.fg, resize: 'none', outline: 'none' }}
-              />
+              <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Add a note…" rows={2} autoFocus
+                style={{ width: '100%', padding: '8px 10px', background: T.bg, border: `1px solid ${T.uiBorder}`, borderRadius: 8, fontSize: 13, color: T.fg, resize: 'none', outline: 'none' }} />
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => saveHighlight(noteText)} style={{ flex: 1, padding: '9px', background: T.accent, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Save</button>
-                <button onClick={() => { setShowNoteInput(false); setNoteText('') }} style={{ padding: '9px 16px', background: 'transparent', border: `1px solid ${T.uiBorder}`, borderRadius: 8, fontSize: 13, color: T.muted, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => saveHighlight(noteText)} style={{ flex: 1, padding: '10px', background: T.accent, color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Save</button>
+                <button onClick={() => { setShowNoteInput(false); setNoteText('') }} style={{ padding: '10px 16px', background: 'transparent', border: `1px solid ${T.uiBorder}`, borderRadius: 8, fontSize: 13, color: T.muted, cursor: 'pointer' }}>Cancel</button>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => saveHighlight('')} style={{ flex: 1, padding: '9px', background: `${T.accent}18`, color: T.accent, border: `1px solid ${T.accent}44`, borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 11l3-1 6-6-2-2-6 6-1 3z" stroke={T.accent} strokeWidth="1.2" strokeLinejoin="round"/></svg>
+              <button onClick={() => saveHighlight('')} style={{ flex: 1, padding: '10px 6px', background: `${T.accent}18`, color: T.accent, border: `1px solid ${T.accent}44`, borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 Highlight
               </button>
-              <button onClick={() => setShowNoteInput(true)} style={{ flex: 1, padding: '9px', background: T.uiBg, color: T.fg, border: `1px solid ${T.uiBorder}`, borderRadius: 8, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1.5" width="10" height="10" rx="2" stroke={T.muted} strokeWidth="1.2"/><path d="M4 5h5M4 7.5h3" stroke={T.muted} strokeWidth="1.2" strokeLinecap="round"/></svg>
-                Add note
+              <button onClick={() => setShowNoteInput(true)} style={{ flex: 1, padding: '10px 6px', background: T.bg, color: T.fg, border: `1px solid ${T.uiBorder}`, borderRadius: 10, fontSize: 12, cursor: 'pointer' }}>
+                + Note
               </button>
-              <button onClick={() => { setAnchorSentence(selection.text); setAnchorCfi(selection.cfi); setSelection(null) }} style={{ flex: 1, padding: '9px', background: T.uiBg, color: T.muted, border: `1px solid ${T.uiBorder}`, borderRadius: 8, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v11M1 6.5h11" stroke={T.muted} strokeWidth="1.3" strokeLinecap="round"/></svg>
+              <button onClick={() => { setAnchorSentence(selection.text); setAnchorCfi(selection.cfi); setSelection(null) }} style={{ flex: 1, padding: '10px 6px', background: T.bg, color: T.muted, border: `1px solid ${T.uiBorder}`, borderRadius: 10, fontSize: 12, cursor: 'pointer' }}>
                 Anchor
               </button>
-              <button onClick={() => setSelection(null)} style={{ width: 36, padding: '9px', background: 'transparent', border: `1px solid ${T.uiBorder}`, borderRadius: 8, color: T.muted, fontSize: 16, cursor: 'pointer' }}>×</button>
+              <button onClick={() => setSelection(null)} style={{ width: 38, background: 'transparent', border: `1px solid ${T.uiBorder}`, borderRadius: 10, color: T.muted, fontSize: 18, cursor: 'pointer' }}>×</button>
             </div>
           )}
         </div>
@@ -559,33 +565,27 @@ export default function EpubReaderPage() {
       {showEnd && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 50, display: 'flex', alignItems: 'flex-end' }}>
           <div style={{ width: '100%', background: T.uiBg, borderRadius: '20px 20px 0 0', padding: '28px 20px 40px', maxHeight: '82dvh', overflowY: 'auto', boxShadow: '0 -4px 40px rgba(0,0,0,0.3)' }}>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: T.fg, marginBottom: 4 }}>End Reading Session</div>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: T.fg, marginBottom: 4 }}>End Session</div>
             <div style={{ fontSize: 12, color: T.muted, marginBottom: 22 }}>{fmtTime(accRef.current)} · {progress}% complete</div>
 
-            {/* Anchor — required */}
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: anchorError ? '#EF4444' : T.muted, marginBottom: 6 }}>
-                Last sentence you read *
+                Last sentence *
               </div>
               <div style={{ fontSize: 12, color: T.muted, marginBottom: 10, lineHeight: 1.6 }}>
-                Select text in the book first, then tap "Anchor" — or type it here. Helps you find your place in the physical copy.
+                Select text in the book and tap "Anchor", or type it here. Needed to sync your place with the physical book.
               </div>
-
               {anchorSentence ? (
                 <div style={{ padding: '10px 12px', background: `${T.accent}12`, border: `1px solid ${T.accent}44`, borderRadius: 10, fontSize: 13, color: T.fg, fontStyle: 'italic', marginBottom: 8, lineHeight: 1.55 }}>
                   "{anchorSentence.slice(0, 120)}{anchorSentence.length > 120 ? '…' : ''}"
                   <button onClick={() => { setAnchorSentence(''); setAnchorCfi('') }} style={{ marginLeft: 8, background: 'none', border: 'none', color: T.muted, fontSize: 12, cursor: 'pointer' }}>change</button>
                 </div>
               ) : (
-                <textarea
-                  value={anchorSentence}
-                  onChange={e => { setAnchorSentence(e.target.value); setAnchorError(false) }}
-                  placeholder="Type or paste the last sentence…"
-                  rows={3}
-                  style={{ width: '100%', padding: '10px 12px', background: T.bg, border: `1.5px solid ${anchorError ? '#EF4444' : T.uiBorder}`, borderRadius: 10, fontSize: 13, color: T.fg, resize: 'none', outline: 'none' }}
-                />
+                <textarea value={anchorSentence} onChange={e => { setAnchorSentence(e.target.value); setAnchorError(false) }}
+                  placeholder="Type or paste the last sentence…" rows={3}
+                  style={{ width: '100%', padding: '10px 12px', background: T.bg, border: `1.5px solid ${anchorError ? '#EF4444' : T.uiBorder}`, borderRadius: 10, fontSize: 13, color: T.fg, resize: 'none', outline: 'none' }} />
               )}
-              {anchorError && <div style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }}>Required — helps you locate your place in the physical book</div>}
+              {anchorError && <div style={{ fontSize: 11, color: '#EF4444', marginTop: 4 }}>Required — helps locate your place in the physical book</div>}
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
