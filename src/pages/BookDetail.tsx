@@ -250,8 +250,18 @@ export default function BookDetailScreen() {
     await supabase.from('reading_sessions')
       .update({ end_page: newEnd, pages_read: newPagesRead })
       .eq('id', s.id)
-    setSessions(prev => prev.map(r => r.id === s.id ? { ...r, end_page: newEnd, pages_read: newPagesRead } : r))
+    const updated = sessions.map(r => r.id === s.id ? { ...r, end_page: newEnd, pages_read: newPagesRead } : r)
+    setSessions(updated)
     setEditingSessionId(null)
+    // Sync current_page to the most recent session's end_page
+    if (userBook) {
+      const lastEndPage = updated
+        .filter(r => r.end_page != null)
+        .sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())[0]?.end_page ?? null
+      await supabase.from('user_books')
+        .update({ current_page: lastEndPage })
+        .eq('id', userBook.id)
+    }
   }
 
   const deleteSession = async (s: ReadingSession) => {

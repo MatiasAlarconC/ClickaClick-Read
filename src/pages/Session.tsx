@@ -435,11 +435,10 @@ export default function SessionScreen() {
         <div style={{ fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 48, fontWeight: 200, color: fg, letterSpacing: 3, lineHeight: 1 }}>{fmt(secs)}</div>
       </div>
 
-      {/* Current page */}
+      {/* Current page — static display; user sets final page in the End modal */}
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 40 }}>
         <span style={{ fontSize: 13, color: muted }}>Page</span>
-        <input value={page} onChange={e => setPage(e.target.value)} type="number"
-          style={{ width: 64, textAlign: 'center', padding: '7px 10px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 16, fontWeight: 500, color: fg }} />
+        <span style={{ padding: '7px 10px', background: dark ? '#1A1A1A' : '#F5F5F3', borderRadius: 10, fontSize: 16, fontWeight: 500, color: fg }}>{page}</span>
         <span style={{ fontSize: 13, color: muted }}>/ {userBook?.custom_pages ?? userBook?.book?.pages_default ?? '?'}</span>
       </div>
 
