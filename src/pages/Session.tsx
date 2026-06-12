@@ -460,21 +460,47 @@ export default function SessionScreen() {
                   style={{ flex: 1, padding: '8px 10px', background: dark ? '#0d0d0d' : '#fff', border: '1px solid #7C3AED55', borderRadius: 8, fontSize: 14, color: fg }}
                 />
                 <button
-                  onClick={() => {
-                    const pg = correctedPage || String(Math.round(epubAnchor.progress * (userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0)))
-                    // Update startPage via localStorage so the corrected value takes effect
-                    if (correctedPage && userBook) {
-                      supabase.from('user_books').update({ current_page: parseInt(correctedPage) }).eq('id', userBook.id)
-                      // Also recalibrate ratio: correctedPage / (estimatedPage) adjusts epub_page_ratio
-                      const est = Math.round(epubAnchor.progress * (userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0))
-                      if (est > 0) {
-                        const newRatio = parseInt(correctedPage) / est
-                        supabase.from('user_books').update({ epub_page_ratio: newRatio }).eq('id', userBook.id)
-                      }
+                  onClick={async () => {
+                    if (!correctedPage || !userBook) {
+                      setPageConfirmed(true)
+                      setAnchorExpanded(false)
+                      localStorage.removeItem(`epub_anchor_${userBook?.book_id}`)
+                      return
                     }
+                    const corrected = parseInt(correctedPage)
+                    const est = Math.round(epubAnchor.progress * (userBook.custom_pages ?? (userBook.book as any)?.pages_default ?? 0))
+
+                    // 1. Update current_page so this physical session starts from the right page
+                    await supabase.from('user_books')
+                      .update({ current_page: corrected })
+                      .eq('id', userBook.id)
+
+                    // 2. Recalibrate epub_page_ratio for future estimates
+                    if (est > 0) {
+                      await supabase.from('user_books')
+                        .update({ epub_page_ratio: corrected / est })
+                        .eq('id', userBook.id)
+                    }
+
+                    // 3. Retroactively fix end_page of the most recent epub session
+                    const { data: lastEpub } = await supabase
+                      .from('reading_sessions')
+                      .select('id')
+                      .eq('user_id', user!.id)
+                      .eq('book_id', userBook.book_id)
+                      .eq('session_type', 'epub')
+                      .order('started_at', { ascending: false })
+                      .limit(1)
+                      .maybeSingle()
+                    if (lastEpub) {
+                      await supabase.from('reading_sessions')
+                        .update({ end_page: corrected })
+                        .eq('id', lastEpub.id)
+                    }
+
                     setPageConfirmed(true)
                     setAnchorExpanded(false)
-                    localStorage.removeItem(`epub_anchor_${userBook?.book_id}`)
+                    localStorage.removeItem(`epub_anchor_${userBook.book_id}`)
                   }}
                   style={{ padding: '8px 14px', background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                   Confirm
