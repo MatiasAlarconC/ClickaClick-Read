@@ -40,12 +40,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>([])
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) fetchProfile(session.user.id)
+    const init = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (session?.user) {
+          // Proactively refresh if token expires within 10 minutes
+          const expiresAt = session.expires_at ?? 0
+          if (expiresAt - Math.floor(Date.now() / 1000) < 600) {
+            const { data: refreshed } = await supabase.auth.refreshSession()
+            const s = refreshed.session ?? session
+            setSession(s); setUser(s.user); fetchProfile(s.user.id)
+          } else {
+            setSession(session); setUser(session.user); fetchProfile(session.user.id)
+          }
+        } else {
+          setSession(null); setUser(null)
+        }
+      } catch { /* silently fall through — onAuthStateChange handles it */ }
       setLoading(false)
-    })
+    }
+    init()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
@@ -58,7 +72,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     })
 
-    return () => subscription.unsubscribe()
+    // Refresh token whenever the PWA is brought back to foreground
+    const handleVisibility = () => {
+      if (!document.hidden) supabase.auth.refreshSession().catch(() => {})
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
   }, [])
 
   async function fetchProfile(userId: string) {
