@@ -27,6 +27,8 @@ export default function LibraryScreen() {
   const [tab, setTab] = useState<LibTab>('reading')
   const [books, setBooks] = useState<Record<BookTab, UserBook[]>>({ reading: [], finished: [], want_to_read: [] })
   const [loading, setLoading] = useState(true)
+  type SessionItem = { book_id: string; pages_read: number | null; started_at: string }
+  const [sessionsByBook, setSessionsByBook] = useState<Record<string, SessionItem[]>>({})
 
   // Discover tab state
   const [recs, setRecs] = useState<BookRecommendation[]>([])
@@ -132,6 +134,24 @@ export default function LibraryScreen() {
         if (b.status in grouped) grouped[b.status as BookTab].push(b)
       }
       setBooks(grouped)
+      // Load recent sessions for reading books (used for finish prediction)
+      const readingIds = grouped.reading.map(b => b.book_id)
+      if (readingIds.length > 0) {
+        const cutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString()
+        const { data: sess } = await supabase
+          .from('reading_sessions')
+          .select('book_id, pages_read, started_at')
+          .in('book_id', readingIds)
+          .gte('started_at', cutoff)
+          .neq('is_manual', true)
+          .gt('pages_read', 0)
+        const byBook: Record<string, SessionItem[]> = {}
+        for (const s of (sess ?? []) as SessionItem[]) {
+          if (!byBook[s.book_id]) byBook[s.book_id] = []
+          byBook[s.book_id].push(s)
+        }
+        setSessionsByBook(byBook)
+      }
     }
     setLoading(false)
   }
@@ -221,22 +241,32 @@ export default function LibraryScreen() {
             </div>
           ) : (
             books[tab as BookTab].map((book, i) => (
-              <SwipeableBookRow key={book.id} book={book} index={i} total={books[tab as BookTab].length} tab={tab as BookTab} theme={theme} userId={user?.id ?? ''} onPress={() => navigate('/detail', { state: { book: book.book } })} onDelete={() => {
-                setBooks(prev => ({
-                  ...prev,
-                  [tab]: prev[tab as BookTab].filter(b => b.id !== book.id)
-                }))
-                supabase.from('user_books').delete().eq('id', book.id)
-              }} onFinish={() => {
-                if (tab === 'reading') {
-                  supabase.from('user_books').update({ status: 'finished', finished_at: new Date().toISOString() }).eq('id', book.id)
+              <SwipeableBookRow key={book.id} book={book} index={i} total={books[tab as BookTab].length} tab={tab as BookTab} theme={theme} userId={user?.id ?? ''}
+                sessions={sessionsByBook[book.book_id] ?? []}
+                onPress={() => navigate('/detail', { state: { book: book.book } })}
+                onDelete={() => {
+                  setBooks(prev => ({ ...prev, [tab]: prev[tab as BookTab].filter(b => b.id !== book.id) }))
+                  supabase.from('user_books').delete().eq('id', book.id)
+                }}
+                onFinish={() => {
+                  if (tab === 'reading') {
+                    supabase.from('user_books').update({ status: 'finished', finished_at: new Date().toISOString() }).eq('id', book.id)
+                    setBooks(prev => ({
+                      reading: prev.reading.filter(b => b.id !== book.id),
+                      finished: [{ ...book, status: 'finished' as const }, ...prev.finished],
+                      want_to_read: prev.want_to_read,
+                    }))
+                  }
+                }}
+                onDrop={() => {
+                  supabase.from('user_books').update({ status: 'want_to_read' }).eq('id', book.id)
                   setBooks(prev => ({
                     reading: prev.reading.filter(b => b.id !== book.id),
-                    finished: [{ ...book, status: 'finished' }, ...prev.finished],
-                    want_to_read: prev.want_to_read,
+                    finished: prev.finished,
+                    want_to_read: [{ ...book, status: 'want_to_read' as const }, ...prev.want_to_read],
                   }))
-                }
-              }} />
+                }}
+              />
             ))
           )}
         </div>
@@ -248,9 +278,37 @@ export default function LibraryScreen() {
   )
 }
 
-function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onDelete, onFinish }: {
+function computePrediction(sessions: { book_id: string; pages_read: number | null; started_at: string }[], currentPage: number, totalPages: number): { label: string } | null {
+  if (!sessions.length || totalPages <= 0 || currentPage >= totalPages) return null
+  const byDay: Record<string, number> = {}
+  for (const s of sessions) {
+    const day = s.started_at.slice(0, 10)
+    byDay[day] = (byDay[day] ?? 0) + (s.pages_read ?? 0)
+  }
+  const days = Object.values(byDay)
+  if (!days.length) return null
+  const avgPerDay = days.reduce((a, b) => a + b, 0) / days.length
+  if (avgPerDay <= 0) return null
+  const pagesLeft = totalPages - currentPage
+  const daysLeft = Math.ceil(pagesLeft / avgPerDay)
+  const finish = new Date()
+  finish.setDate(finish.getDate() + daysLeft)
+  const now = new Date()
+  const diffDays = Math.round((finish.getTime() - now.getTime()) / 86400000)
+  let label: string
+  if (diffDays <= 1) label = 'Finish today'
+  else if (diffDays <= 7) label = `Finish in ${diffDays} days`
+  else if (diffDays <= 14) label = `Finish next week`
+  else {
+    label = `Finish ${finish.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+  }
+  return { label }
+}
+
+function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onDelete, onFinish, onDrop, sessions }: {
   book: UserBook; index: number; total: number; tab: LibTab; theme: import('../types').Theme; userId: string
-  onPress: () => void; onDelete: () => void; onFinish: () => void
+  onPress: () => void; onDelete: () => void; onFinish: () => void; onDrop?: () => void
+  sessions?: { book_id: string; pages_read: number | null; started_at: string }[]
 }) {
   const x = useMotionValue(0)
   const deleteOpacity = useTransform(x, [-100, -40], [1, 0])
@@ -264,6 +322,7 @@ function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onD
   const progress = tab === 'reading'
     ? (totalPages > 0 ? Math.min(currentPage / totalPages, 1) : 0)
     : 1
+  const prediction = tab === 'reading' ? computePrediction(sessions ?? [], currentPage, totalPages) : null
 
   const saveCurrentPage = async () => {
     setEditingPage(false)
@@ -340,6 +399,20 @@ function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onD
                 <span style={{ fontSize: 11, color: theme.fg, fontWeight: 600 }}>{Math.round(progress * 100)}%</span>
               </div>
               <ProgressBar progress={progress} theme={theme} height={3} />
+              {(prediction || onDrop) && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                  {prediction ? (
+                    <span style={{ fontSize: 10, color: theme.muted }}>{prediction.label}</span>
+                  ) : <span />}
+                  {onDrop && (
+                    <button
+                      onClick={e => { e.stopPropagation(); onDrop() }}
+                      style={{ fontSize: 10, color: theme.muted, background: 'none', border: `1px solid ${theme.border}`, borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}>
+                      Drop
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {tab === 'finished' && (

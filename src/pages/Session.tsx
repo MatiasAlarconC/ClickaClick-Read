@@ -455,11 +455,17 @@ export default function SessionScreen() {
       </AnimatePresence>
 
       {/* ePub anchor banner — last-sentence bridge from previous virtual session */}
-      {epubAnchor && anchorExpanded && (
+      {epubAnchor && anchorExpanded && (() => {
+          const isPhysical = !epubAnchor.cfi && !epubAnchor.chapter && !epubAnchor.progress
+          const totalPagesForAnchor = userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0
+          const estimatedPage = epubAnchor.progress > 0 ? Math.round(epubAnchor.progress * totalPagesForAnchor) : 0
+          return (
         <div style={{ margin: '0 0 20px', padding: '14px 16px', background: dark ? '#1a1a1a' : '#f5f5f3', borderRadius: 14, border: `1px solid ${dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: muted, marginBottom: 2 }}>Last ePub sentence</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: muted, marginBottom: 2 }}>
+                {isPhysical ? 'Last physical position' : 'Last ePub sentence'}
+              </div>
               {epubAnchor.chapter && <div style={{ fontSize: 11, color: muted }}>{epubAnchor.chapter}</div>}
             </div>
             <button onClick={() => setAnchorExpanded(false)} style={{ background: 'none', border: 'none', color: muted, fontSize: 18, lineHeight: 1, cursor: 'pointer' }}>×</button>
@@ -467,10 +473,12 @@ export default function SessionScreen() {
           <div style={{ fontSize: 13, color: fg, fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>
             "{epubAnchor.sentence}"
           </div>
+          {estimatedPage > 0 && (
           <div style={{ fontSize: 12, color: muted, marginBottom: 10 }}>
-            Estimated page: <strong style={{ color: fg }}>{Math.round(epubAnchor.progress * (userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0))}</strong>
-            {' '}of {userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? '?'}
+            Estimated page: <strong style={{ color: fg }}>{estimatedPage}</strong>
+            {' '}of {totalPagesForAnchor || '?'}
           </div>
+          )}
           {!pageConfirmed ? (
             <div>
               <div style={{ fontSize: 11, color: muted, marginBottom: 6 }}>Found a different page? Correct it:</div>
@@ -534,7 +542,8 @@ export default function SessionScreen() {
             <div style={{ fontSize: 12, color: '#22C55E' }}>Page confirmed — starting from {correctedPage}</div>
           )}
         </div>
-      )}
+          )
+        })()}
 
       {/* Book cover */}
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
