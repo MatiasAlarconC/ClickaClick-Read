@@ -154,7 +154,7 @@ export default function EpubReaderPage() {
   const totalPages = userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0
 
   // ── Apply theme/font/size to rendition ────────────────────────────────────────
-  const applyTheme = useCallback((rend: Rendition, tid: ThemeId, fid: FontId, fs: number, mH: number) => {
+  const applyTheme = useCallback((rend: Rendition, tid: ThemeId, fid: FontId, fs: number) => {
     const fontCss = FONTS[fid].css
     const combined = EPUB_CSS[tid] + `
       html, body, p, span, div, li {
@@ -162,7 +162,6 @@ export default function EpubReaderPage() {
         font-size: ${fs}px !important;
         line-height: 1.75 !important;
       }
-      body { padding-left: ${mH}px !important; padding-right: ${mH}px !important; }
     `
     rend.themes.register('custom', { '*': {} })
     rend.themes.override('background-color', THEMES[tid].bg)
@@ -233,7 +232,7 @@ export default function EpubReaderPage() {
 
         rendition.on('rendered', () => {
           const s = settingsRef.current
-          applyTheme(rendition, s.theme, s.fontId, s.fontSize, s.marginH ?? 20)
+          applyTheme(rendition, s.theme, s.fontId, s.fontSize)
         })
 
         rendition.on('locationChanged', (loc: any) => {
@@ -283,9 +282,16 @@ export default function EpubReaderPage() {
 
   useEffect(() => {
     if (rendRef.current && ready) {
-      applyTheme(rendRef.current, themeId, fontId, fontSize, marginH)
+      applyTheme(rendRef.current, themeId, fontId, fontSize)
     }
-  }, [themeId, fontId, fontSize, marginH, ready, applyTheme])
+  }, [themeId, fontId, fontSize, ready, applyTheme])
+
+  // Margin changes resize the viewer container → tell epubjs to recalculate columns
+  useEffect(() => {
+    if (rendRef.current && ready) {
+      rendRef.current.resize?.()
+    }
+  }, [marginH, ready])
 
   // ── Navigation ─────────────────────────────────────────────────────────────────
   const goNext = () => { rendRef.current?.next(); setSelection(null) }
@@ -327,6 +333,23 @@ export default function EpubReaderPage() {
   const openEndModal = () => {
     if (running) pause()
     setShowSettings(false)
+    // Auto-fill anchor from the current visible epub text (saves iOS users from fighting the native copy menu)
+    if (!anchorSentence) {
+      try {
+        const contents = rendRef.current?.getContents()
+        if (contents?.length) {
+          const doc = contents[0].document as Document | undefined
+          const nodes = Array.from(doc?.querySelectorAll('p, li, blockquote') ?? [])
+          for (const node of nodes) {
+            const text = (node as HTMLElement).innerText?.trim()
+            if (text && text.length > 30) {
+              setAnchorSentence(text.slice(0, 300))
+              break
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
     setShowEnd(true)
   }
 
@@ -443,7 +466,8 @@ export default function EpubReaderPage() {
       )}
 
       {/* ── ePub viewer ──────────────────────────────────────────────────────── */}
-      <div ref={viewerRef} className="epub-viewer-wrap" style={{ flex: 1, opacity: ready ? 1 : 0 }} />
+      <div ref={viewerRef} className="epub-viewer-wrap"
+        style={{ flex: 1, opacity: ready ? 1 : 0, paddingLeft: marginH, paddingRight: marginH }} />
 
       {/* ── Prev / Next tap zones ─────────────────────────────────────────────── */}
       <button onClick={goPrev} style={{ position: 'absolute', left: 0, top: '15%', bottom: '15%', width: 52, background: 'transparent', border: 'none', zIndex: 20, cursor: 'pointer' }} aria-label="Previous page" />

@@ -216,15 +216,15 @@ export function PrimaryButton({ label, onPress, disabled = false, style = {}, th
 }
 
 // ─── Form input ──────────────────────────────────────────────────────────────
-export function FormInput({ label, type = 'text', value, onChange, placeholder, theme }: {
-  label: string; type?: string; value: string; onChange: (v: string) => void; placeholder?: string; theme: Theme
+export function FormInput({ label, type = 'text', value, onChange, placeholder, theme, autoComplete }: {
+  label: string; type?: string; value: string; onChange: (v: string) => void; placeholder?: string; theme: Theme; autoComplete?: string
 }) {
   const [focused, setFocused] = React.useState(false)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <label style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted }}>{label}</label>
       <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        autoComplete={autoComplete} onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
         style={{ width: '100%', padding: '13px 0', background: 'none', border: 'none', borderBottom: `1.5px solid ${focused ? theme.fg : theme.border}`, color: theme.fg, fontSize: 16, transition: 'border-color 0.2s' }}/>
     </div>
   )
