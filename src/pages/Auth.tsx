@@ -79,9 +79,9 @@ export function SignUpScreen() {
         <div style={{ fontSize: 14, color: theme.muted, marginBottom: 44 }}>Start your reading journey today</div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-          <FormInput label="Full Name" value={name} onChange={setName} placeholder="Matias Rodriguez" theme={theme} />
-          <FormInput label="Email" type="email" value={email} onChange={setEmail} placeholder="matias@example.com" theme={theme} />
-          <FormInput label="Password" type="password" value={password} onChange={setPassword} placeholder="Min. 8 characters" theme={theme} />
+          <FormInput label="Full Name" value={name} onChange={setName} placeholder="Matias Rodriguez" theme={theme} autoComplete="name" />
+          <FormInput label="Email" type="email" value={email} onChange={setEmail} placeholder="matias@example.com" theme={theme} autoComplete="username" />
+          <FormInput label="Password" type="password" value={password} onChange={setPassword} placeholder="Min. 8 characters" theme={theme} autoComplete="new-password" />
         </div>
 
         {error && <div style={{ marginTop: 16, padding: '10px 14px', background: '#ff4444' + '20', borderRadius: 10, fontSize: 13, color: '#ff4444' }}>{error}</div>}
@@ -127,8 +127,8 @@ export function SignInScreen() {
         <div style={{ fontSize: 14, color: theme.muted, marginBottom: 44 }}>Sign in to continue reading</div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-          <FormInput label="Email" type="email" value={email} onChange={setEmail} placeholder="matias@example.com" theme={theme} />
-          <FormInput label="Password" type="password" value={password} onChange={setPassword} placeholder="Your password" theme={theme} />
+          <FormInput label="Email" type="email" value={email} onChange={setEmail} placeholder="matias@example.com" theme={theme} autoComplete="username" />
+          <FormInput label="Password" type="password" value={password} onChange={setPassword} placeholder="Your password" theme={theme} autoComplete="current-password" />
         </div>
 
         <div style={{ textAlign: 'right', marginTop: 14 }}>

@@ -1,8 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 // Standalone Apple Watch companion page.
-// Returns self-contained HTML — no React bundle, no large JS deps.
-// Supabase JS loaded from CDN so the tiny WatchOS WebKit can handle it.
+// Self-contained HTML — no React bundle — works on WatchOS's limited WebKit.
 export default function handler(_req: VercelRequest, res: VercelResponse) {
   const SUPABASE_URL = process.env.VITE_SUPABASE_URL ?? ''
   const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY ?? ''
@@ -54,7 +53,7 @@ const {createClient}=window.supabase
 const sb=createClient('${SUPABASE_URL}','${SUPABASE_KEY}',{auth:{persistSession:true,autoRefreshToken:true}})
 
 let _books=[]
-let _secs=0,_acc=0,_start=0,_phase='running',_book=null,_timer=null
+let _secs=0,_acc=0,_start=0,_phase='idle',_book=null,_timer=null
 
 function el(id){return document.getElementById(id)}
 function app(html){document.getElementById('app').innerHTML=html}
@@ -62,8 +61,9 @@ function pad(n){return String(n).padStart(2,'0')}
 function fmt(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;return h>0?pad(h)+':'+pad(m)+':'+pad(ss):pad(m)+':'+pad(ss)}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 
+// Do NOT call refreshSession() here — getSession() handles refresh internally.
+// Calling refreshSession() eagerly causes 429 rate limit errors.
 async function init(){
-  try{await sb.auth.refreshSession()}catch(e){}
   const {data:{session}}=await sb.auth.getSession()
   if(!session){showSignIn();return}
   await loadBook(session.user.id)
@@ -95,7 +95,7 @@ async function loadBook(uid){
   const q=sb.from('user_books').select('id,book_id,current_page,book:books(title,author,cover_url)').eq('user_id',uid).eq('status','reading')
   const{data}=bid?await q.eq('book_id',bid).maybeSingle():await q.order('added_at',{ascending:false}).limit(1).maybeSingle()
   if(!data){await showPicker(uid);return}
-  _book=data;showSession()
+  _book=data;showReady()
 }
 
 async function showPicker(uid){
@@ -106,16 +106,29 @@ async function showPicker(uid){
     _books.map((b,i)=>'<button class="bbook" onclick="pickBook('+i+')"><div style="flex:1;min-width:0"><div class="bt">'+esc(b.book?.title||'Libro')+'</div><div class="ba">'+esc(b.book?.author||'')+'</div></div></button>').join(''))
 }
 
-function pickBook(i){_book=_books[i];showSession()}
+function pickBook(i){_book=_books[i];showReady()}
 
-function showSession(){
+// Show a "ready" screen — user taps Start to begin timing.
+// This prevents auto-start race condition on first load.
+function showReady(){
+  const title=_book?.book?.title||'Libro'
+  const short=title.length>24?title.slice(0,22)+'…':title
+  _secs=0;_acc=0;_phase='idle'
+  app(\`
+    <div style="text-align:center;font-size:11px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">\${esc(short)}</div>
+    <button class="btn btn-primary" onclick="startSession()">▶ Iniciar sesión</button>
+    <button class="btn btn-ghost" onclick="changePicker()">Cambiar libro</button>
+  \`)
+}
+
+function startSession(){
   const title=_book?.book?.title||'Libro'
   const short=title.length>22?title.slice(0,20)+'…':title
   _phase='running';_secs=0;_acc=0
   app(\`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
       <div style="flex:1;font-size:11px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">\${esc(short)}</div>
-      <button style="width:26px;height:26px;border-radius:50%;background:#1a1a1a;border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.45);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center" onclick="cancelSession()">×</button>
+      <button style="width:26px;height:26px;border-radius:50%;background:#1a1a1a;border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.45);font-size:14px;cursor:pointer" onclick="cancelSession()">×</button>
     </div>
     <div class="timer" id="tmr">00:00</div>
     <div class="row">
@@ -157,25 +170,25 @@ function endSession(){
     <div class="muted" style="text-align:center;margin-top:4px">¿En qué página quedaste?</div>
     <input type="number" id="pgi" value="\${cur}" inputmode="numeric" min="\${cur}">
     <button class="btn btn-primary" onclick="saveSession()">Guardar sesión</button>
-    <button class="btn btn-ghost" onclick="showSession()">Volver</button>
+    <button class="btn btn-ghost" onclick="startSession()">Volver</button>
   \`)
 }
 
 async function saveSession(){
   app('<div class="muted" style="text-align:center">Guardando…</div>')
-  try{await sb.auth.refreshSession()}catch(e){}
   const{data:{session}}=await sb.auth.getSession()
   if(!session){showSignIn('Sesión expirada');return}
   const b=_book,cur=b?.current_page||0
   const ep=parseInt(el('pgi')?.value||'0')||cur
   const now=Date.now()
-  await sb.from('reading_sessions').insert({
+  const{error}=await sb.from('reading_sessions').insert({
     user_id:session.user.id,book_id:b.book_id,
     started_at:new Date(now-_secs*1000).toISOString(),
     ended_at:new Date(now).toISOString(),
     duration_seconds:_secs,
     start_page:cur,end_page:ep,pages_read:Math.max(0,ep-cur)
   })
+  if(error){app('<div class="err" style="text-align:center">Error al guardar. <button class="btn btn-ghost" style="margin-top:8px" onclick="endSession()">Reintentar</button></div>');return}
   if(ep!==cur)await sb.from('user_books').update({current_page:ep}).eq('id',b.id)
   app(\`
     <svg width="48" height="48" viewBox="0 0 48 48" style="display:block;margin:0 auto">
@@ -184,25 +197,26 @@ async function saveSession(){
     </svg>
     <div style="font-family:Georgia,serif;font-size:16px;text-align:center">Sesión guardada</div>
     <div class="muted" style="text-align:center">\${fmt(_secs)}</div>
-    <button class="btn btn-ghost" style="margin-top:8px" onclick="init()">Nueva sesión</button>
+    <button class="btn btn-ghost" style="margin-top:8px" onclick="showReady()">Nueva sesión</button>
   \`)
 }
 
-function cancelSession(){
-  clearInterval(_timer);_book=null
-  sb.auth.getSession().then(({data:{session}})=>{
-    if(session)loadBook(session.user.id);else showSignIn()
-  })
+function cancelSession(){clearInterval(_timer);showReady()}
+
+async function changePicker(){
+  const{data:{session}}=await sb.auth.getSession()
+  if(session)await showPicker(session.user.id);else showSignIn()
 }
 
 window.doSignIn=doSignIn
 window.pickBook=pickBook
-window.showSession=showSession
+window.showReady=showReady
+window.startSession=startSession
 window.togglePause=togglePause
 window.endSession=endSession
 window.saveSession=saveSession
 window.cancelSession=cancelSession
-window.init=init
+window.changePicker=changePicker
 
 init()
 </script>
