@@ -11,42 +11,50 @@ import type { UserBook } from '../types'
 function genreToMusicTag(genres: string[] | undefined): string {
   if (!genres?.length) return 'piano'
   const lower = genres.join(' ').toLowerCase()
-  if (/fantasy|magic|dragon|wizard|adventure|epic/.test(lower)) return 'classicalpiano'
-  if (/thriller|crime|mystery|horror|suspense/.test(lower)) return 'ambient'
-  if (/romance|love|contemporary/.test(lower)) return 'piano'
-  if (/sci.?fi|space|technology|futuristic/.test(lower)) return 'lofi'
-  if (/histor|biograph|classic/.test(lower)) return 'classicalpiano'
+  if (/fantasy|magic|dragon|wizard|adventure|epic|mythology/.test(lower)) return 'classicalpiano'
+  if (/thriller|crime|mystery|horror|suspense|dark|noir/.test(lower)) return 'ambient'
+  if (/romance|love|contemporary|chick.?lit|women.?fiction/.test(lower)) return 'piano'
+  if (/sci.?fi|space|technology|futuristic|dystopia|cyberpunk/.test(lower)) return 'lofi'
+  if (/histor|biograph|classic|literary|memoir|war/.test(lower)) return 'classicalpiano'
+  if (/self.?help|business|psychology|philosophy|essay|non.?fiction/.test(lower)) return 'ambient'
+  if (/poetry|art|music|creative/.test(lower)) return 'piano'
   return 'piano'
 }
 
 // Public-domain classical fallback tracks (Musopen collection via archive.org)
-// Used only when Jamendo API fails — always calm, always instrumental
+// Used when Jamendo returns no results — always calm, always instrumental
 const FALLBACK_TRACKS: Record<string, { url: string; name: string }[]> = {
-  piano:         [
+  piano: [
     { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Chopin_-_Nocturne_Op.9_No.2_E_Flat_Major.mp3', name: 'Chopin — Nocturne Op.9 No.2' },
     { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Debussy_-_Clair_De_Lune.mp3',                  name: 'Debussy — Clair de Lune' },
     { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Chopin_-_Waltz_No._10_Op._69_No._2.mp3',       name: 'Chopin — Waltz Op.69 No.2' },
-  ],
-  classicalpiano:[
-    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Bach_-_Air_On_The_G_String.mp3',               name: 'Bach — Air on the G String' },
-    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Beethoven_-_Moonlight_Sonata_Mvt._1.mp3',      name: 'Beethoven — Moonlight Sonata' },
-    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Schubert_-_Ave_Maria.mp3',                     name: 'Schubert — Ave Maria' },
-  ],
-  ambient:       [
-    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Debussy_-_Clair_De_Lune.mp3',                  name: 'Debussy — Clair de Lune' },
     { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Satie_-_Gymnopedies_No.1.mp3',                 name: 'Satie — Gymnopédie No.1' },
-    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Bach_-_Air_On_The_G_String.mp3',               name: 'Bach — Air on the G String' },
   ],
-  lofi:          [
+  classicalpiano: [
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Bach_-_Air_On_The_G_String.mp3',          name: 'Bach — Air on the G String' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Beethoven_-_Moonlight_Sonata_Mvt._1.mp3', name: 'Beethoven — Moonlight Sonata' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Schubert_-_Ave_Maria.mp3',                name: 'Schubert — Ave Maria' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Chopin_-_Nocturne_Op.9_No.2_E_Flat_Major.mp3', name: 'Chopin — Nocturne Op.9 No.2' },
+  ],
+  ambient: [
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Satie_-_Gymnopedies_No.1.mp3',           name: 'Satie — Gymnopédie No.1' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Debussy_-_Clair_De_Lune.mp3',            name: 'Debussy — Clair de Lune' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Bach_-_Air_On_The_G_String.mp3',         name: 'Bach — Air on the G String' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Schubert_-_Ave_Maria.mp3',               name: 'Schubert — Ave Maria' },
+  ],
+  lofi: [
     { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Chopin_-_Nocturne_Op.9_No.2_E_Flat_Major.mp3', name: 'Chopin — Nocturne Op.9 No.2' },
     { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Satie_-_Gymnopedies_No.1.mp3',                 name: 'Satie — Gymnopédie No.1' },
     { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Debussy_-_Clair_De_Lune.mp3',                  name: 'Debussy — Clair de Lune' },
+    { url: 'https://archive.org/download/MusopenCollectionAsMp3s/Bach_-_Air_On_The_G_String.mp3',               name: 'Bach — Air on the G String' },
   ],
 }
 
-function pickFallback(tag: string): { url: string; name: string } {
+function pickFallback(tag: string, exclude?: string): { url: string; name: string } {
   const list = FALLBACK_TRACKS[tag] ?? FALLBACK_TRACKS.ambient
-  return list[Math.floor(Math.random() * list.length)]
+  const candidates = exclude ? list.filter(t => t.url !== exclude) : list
+  const pool = candidates.length > 0 ? candidates : list
+  return pool[Math.floor(Math.random() * pool.length)]
 }
 
 async function fetchJamendoTrack(tag: string): Promise<{ url: string; name: string } | null> {
@@ -215,6 +223,9 @@ export default function SessionScreen() {
       const audio = new Audio(track.url)
       audio.loop = true
       audio.volume = volume
+      audio.addEventListener('error', () => {
+        if (audioRef.current === audio) setMusicError(true)
+      }, { once: true })
       audioRef.current = audio
       setMusicTrackName(track.name)
       try {
@@ -248,6 +259,9 @@ export default function SessionScreen() {
     if (track) {
       const audio = new Audio(track.url)
       audio.loop = true; audio.volume = volume
+      audio.addEventListener('error', () => {
+        if (audioRef.current === audio) setMusicError(true)
+      }, { once: true })
       audioRef.current = audio
       setMusicTrackName(track.name)
       try { await audio.play(); setMusicOn(true) } catch { /* blocked */ }
@@ -442,10 +456,10 @@ export default function SessionScreen() {
 
       {/* ePub anchor banner — last-sentence bridge from previous virtual session */}
       {epubAnchor && anchorExpanded && (
-        <div style={{ margin: '0 0 20px', padding: '14px 16px', background: dark ? '#1a1130' : '#f3f0ff', borderRadius: 14, border: '1px solid #7C3AED44' }}>
+        <div style={{ margin: '0 0 20px', padding: '14px 16px', background: dark ? '#1a1a1a' : '#f5f5f3', borderRadius: 14, border: `1px solid ${dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: '#7C3AED', marginBottom: 2 }}>Last ePub sentence</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: muted, marginBottom: 2 }}>Last ePub sentence</div>
               {epubAnchor.chapter && <div style={{ fontSize: 11, color: muted }}>{epubAnchor.chapter}</div>}
             </div>
             <button onClick={() => setAnchorExpanded(false)} style={{ background: 'none', border: 'none', color: muted, fontSize: 18, lineHeight: 1, cursor: 'pointer' }}>×</button>
@@ -466,7 +480,7 @@ export default function SessionScreen() {
                   value={correctedPage}
                   onChange={e => setCorrectedPage(e.target.value)}
                   placeholder={String(Math.round(epubAnchor.progress * (userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0)))}
-                  style={{ flex: 1, padding: '8px 10px', background: dark ? '#0d0d0d' : '#fff', border: '1px solid #7C3AED55', borderRadius: 8, fontSize: 14, color: fg }}
+                  style={{ flex: 1, padding: '8px 10px', background: dark ? '#0d0d0d' : '#fff', border: `1px solid ${dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)'}`, borderRadius: 8, fontSize: 14, color: fg }}
                 />
                 <button
                   onClick={async () => {
@@ -511,7 +525,7 @@ export default function SessionScreen() {
                     setAnchorExpanded(false)
                     localStorage.removeItem(`epub_anchor_${userBook.book_id}`)
                   }}
-                  style={{ padding: '8px 14px', background: '#7C3AED', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  style={{ padding: '8px 14px', background: fg, color: bg, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                   Confirm
                 </button>
               </div>

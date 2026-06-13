@@ -9,6 +9,33 @@ import type { SeriesInfo } from '../services/gemini'
 import { searchBooks } from '../services/books'
 import type { SearchResult, UserBook, BookNote, ReadingSession } from '../types'
 
+function computeFinishPrediction(
+  sessions: ReadingSession[],
+  currentPage: number,
+  totalPages: number,
+): { finishDate: Date; pagesPerDay: number } | null {
+  const remaining = totalPages - currentPage
+  if (remaining <= 0 || !totalPages) return null
+  const cutoff = Date.now() - 90 * 24 * 3600 * 1000
+  const recent = sessions.filter(
+    s => !s.is_manual && (s.pages_read ?? 0) > 0 && new Date(s.started_at).getTime() > cutoff
+  )
+  if (recent.length === 0) return null
+  const byDay: Record<string, number> = {}
+  for (const s of recent) {
+    const day = new Date(s.started_at).toDateString()
+    byDay[day] = (byDay[day] ?? 0) + (s.pages_read ?? 0)
+  }
+  const daysActive = Object.keys(byDay).length
+  const pagesRead = Object.values(byDay).reduce((a, b) => a + b, 0)
+  const pagesPerDay = pagesRead / daysActive
+  if (pagesPerDay <= 0) return null
+  const daysToFinish = Math.ceil(remaining / pagesPerDay)
+  const finishDate = new Date()
+  finishDate.setDate(finishDate.getDate() + daysToFinish)
+  return { finishDate, pagesPerDay: Math.round(pagesPerDay * 10) / 10 }
+}
+
 /** Strip HTML tags from Google Books / Open Library descriptions */
 function stripHtml(html: string): string {
   return html
@@ -394,6 +421,28 @@ export default function BookDetailScreen() {
         {/* Overview tab */}
         {activeTab === 'overview' && (
           <div style={{ paddingBottom: 40 }}>
+            {/* Finish prediction — only when reading and have session data */}
+            {userBook?.status === 'reading' && (() => {
+              const totalPages = userBook.custom_pages ?? (userBook.book as any)?.pages_default ?? book.pages ?? 0
+              const currentPage = userBook.current_page ?? 0
+              if (!totalPages) return null
+              const pred = computeFinishPrediction(sessions, currentPage, totalPages)
+              if (!pred) return null
+              const { finishDate, pagesPerDay } = pred
+              const today = new Date()
+              const daysLeft = Math.ceil((finishDate.getTime() - today.getTime()) / (1000 * 3600 * 24))
+              const dateStr = finishDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
+              const daysText = daysLeft <= 0 ? 'today' : daysLeft === 1 ? 'tomorrow' : daysLeft <= 7 ? `in ${daysLeft} days` : `on ${dateStr}`
+              const remaining = totalPages - currentPage
+              return (
+                <div style={{ marginBottom: 22, padding: '14px 16px', background: theme.bgSecondary, borderRadius: 14, border: `1px solid ${theme.border}` }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 5 }}>At your pace</div>
+                  <div style={{ fontSize: 16, fontWeight: 500, color: theme.fg }}>Finish {daysText}</div>
+                  <div style={{ fontSize: 12, color: theme.muted, marginTop: 3 }}>{pagesPerDay} pages/day avg · {remaining} pages left</div>
+                </div>
+              )
+            })()}
+
             {synopsis ? (
               <p style={{ fontSize: 14, color: theme.fgDim, lineHeight: 1.75, marginBottom: 22, whiteSpace: 'pre-wrap' }}>{stripHtml(synopsis)}</p>
             ) : (
