@@ -141,6 +141,7 @@ export default function EpubReaderPage() {
   const [noteSaved, setNoteSaved]           = useState(false)
   const [positionMarked, setPositionMarked] = useState(false)
   const [awaitingAnchor, setAwaitingAnchor] = useState(false)
+  const awaitingAnchorRef = useRef(false)
 
   // ── Session end ──
   const [anchorSentence, setAnchorSentence] = useState('')
@@ -148,6 +149,8 @@ export default function EpubReaderPage() {
   const [anchorError, setAnchorError]       = useState(false)
   const [endNote, setEndNote]               = useState('')
   const [saving, setSaving]                 = useState(false)
+  const [showAnchorBanner, setShowAnchorBanner] = useState(false)
+  const [anchorBannerText, setAnchorBannerText] = useState('')
 
   const bookMeta   = userBook?.book as { title?: string } | undefined
   const title      = bookMeta?.title ?? 'Book'
@@ -179,6 +182,28 @@ export default function EpubReaderPage() {
     })
   }, [])
 
+  // ── Tap-to-mark: inject per-paragraph click handlers into epub iframes ────────
+  // iOS intercepts text selection with its native menu, so we use tap instead.
+  // Registered on every 'rendered' event (page turn) so new paragraphs get handlers.
+  const injectTapToMark = useCallback((rend: Rendition) => {
+    try {
+      rend.getContents().forEach((c: any) => {
+        const doc = c.document as Document
+        doc.querySelectorAll('p, li, blockquote').forEach((el: Element) => {
+          el.addEventListener('click', () => {
+            if (!awaitingAnchorRef.current) return
+            const text = (el as HTMLElement).innerText?.trim()
+            if (text && text.length > 10) {
+              setAnchorSentence(text.slice(0, 300))
+              setAwaitingAnchor(false)
+              setShowEnd(true)
+            }
+          })
+        })
+      })
+    } catch { /* ignore — iframe may not be ready */ }
+  }, [])
+
   // ── Timer ──────────────────────────────────────────────────────────────────────
   const startTick = useCallback(() => {
     intervalRef.current = setInterval(() => {
@@ -204,6 +229,8 @@ export default function EpubReaderPage() {
     startTick()
   }, [startTick])
 
+  useEffect(() => { awaitingAnchorRef.current = awaitingAnchor }, [awaitingAnchor])
+
   // ── Load ePub ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!epubPath || !user || !viewerRef.current) return
@@ -228,11 +255,19 @@ export default function EpubReaderPage() {
         rendRef.current = rendition
 
         const savedCfi = localStorage.getItem(`epub_cfi_${userBook.id}`)
-        await rendition.display(savedCfi ?? undefined)
+        // Read physical session anchor — used to resume position if no epub CFI saved yet
+        let physAnchor: { sentence: string; cfi: string; progress: number } | null = null
+        try {
+          const raw = localStorage.getItem(`epub_anchor_${userBook.book_id}`)
+          if (raw) physAnchor = JSON.parse(raw)
+        } catch { /* ignore */ }
+        // Priority: last epub position > previous epub end CFI > beginning
+        await rendition.display(savedCfi ?? physAnchor?.cfi ?? undefined)
 
         rendition.on('rendered', () => {
           const s = settingsRef.current
           applyTheme(rendition, s.theme, s.fontId, s.fontSize)
+          injectTapToMark(rendition)
         })
 
         rendition.on('locationChanged', (loc: any) => {
@@ -263,10 +298,26 @@ export default function EpubReaderPage() {
         })
 
         book.ready.then(() => {
-          book.locations.generate(1024).catch(() => {})
+          book.locations.generate(1024).then(() => {
+            // Navigate to physical session progress if no epub position exists yet
+            if (!savedCfi && !physAnchor?.cfi && physAnchor?.progress && physAnchor.progress > 0) {
+              const targetCfi = book.locations.cfiFromPercentage(physAnchor.progress)
+              if (targetCfi) rendRef.current?.display(targetCfi).catch(() => {})
+            }
+          }).catch(() => {})
         })
 
-        if (!cancelled) setReady(true)
+        if (!cancelled) {
+          setReady(true)
+          // Show "last physical position" banner when opening epub for first time after a physical session
+          if (!savedCfi && physAnchor?.sentence) {
+            const preview = physAnchor.sentence.length > 90
+              ? physAnchor.sentence.slice(0, 90) + '…'
+              : physAnchor.sentence
+            setAnchorBannerText(preview)
+            setShowAnchorBanner(true)
+          }
+        }
       } catch (e) {
         if (!cancelled) setError(String(e))
       }
@@ -357,7 +408,6 @@ export default function EpubReaderPage() {
     if (!anchorSentence.trim()) { setAnchorError(true); return }
     if (!user || !userBook) return
     setSaving(true)
-    await supabase.auth.refreshSession()
     const duration = accRef.current
     const prog = progress / 100
     const physPages = totalPages > 0 ? Math.round(prog * totalPages) : null
@@ -508,7 +558,7 @@ export default function EpubReaderPage() {
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 55, background: T.fg, color: T.bg, padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 2 }}>Select the last sentence you read</div>
-            <div style={{ fontSize: 11, opacity: 0.65 }}>Tap + hold text, then tap "Mark end"</div>
+            <div style={{ fontSize: 11, opacity: 0.65 }}>Tap the paragraph where you stopped</div>
           </div>
           <button onClick={() => { setAwaitingAnchor(false); setShowEnd(true) }} style={{ padding: '8px 14px', background: T.bg, color: T.fg, border: 'none', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>
             Skip
@@ -639,6 +689,17 @@ export default function EpubReaderPage() {
               <button onClick={() => setSelection(null)} style={{ width: 38, background: 'transparent', border: `1px solid ${T.uiBorder}`, borderRadius: 10, color: T.muted, fontSize: 18, cursor: 'pointer' }}>×</button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Last physical position banner ────────────────────────────────────── */}
+      {showAnchorBanner && anchorBannerText && (
+        <div style={{ position: 'absolute', bottom: showBars ? 70 : 20, left: 16, right: 16, zIndex: 35, background: T.uiBg, border: `1px solid ${T.uiBorder}`, borderRadius: 12, padding: '10px 14px', boxShadow: '0 4px 20px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: T.muted, marginBottom: 3 }}>Last physical position</div>
+            <div style={{ fontSize: 12, color: T.fg, fontStyle: 'italic', lineHeight: 1.4 }}>"{anchorBannerText}"</div>
+          </div>
+          <button onClick={() => setShowAnchorBanner(false)} style={{ background: 'none', border: 'none', color: T.muted, fontSize: 20, lineHeight: 1, cursor: 'pointer', flexShrink: 0 }}>×</button>
         </div>
       )}
 
