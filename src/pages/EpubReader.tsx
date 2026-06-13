@@ -262,7 +262,7 @@ export default function EpubReaderPage() {
           if (raw) physAnchor = JSON.parse(raw)
         } catch { /* ignore */ }
         // Priority: last epub position > previous epub end CFI > beginning
-        await rendition.display(savedCfi ?? physAnchor?.cfi ?? undefined)
+        await rendition.display(savedCfi || physAnchor?.cfi || undefined)
 
         rendition.on('rendered', () => {
           const s = settingsRef.current
