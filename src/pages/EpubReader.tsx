@@ -182,23 +182,34 @@ export default function EpubReaderPage() {
     })
   }, [])
 
-  // ── Tap-to-mark: inject per-paragraph click handlers into epub iframes ────────
+  // ── Tap-to-mark: inject a single body-level click handler per iframe ──────────
   // iOS intercepts text selection with its native menu, so we use tap instead.
-  // Registered on every 'rendered' event (page turn) so new paragraphs get handlers.
+  // Uses event delegation from body so child spans/em/strong inside paragraphs work.
+  // Re-registered on every 'rendered' event but deduped via __ccTapHandler sentinel.
   const injectTapToMark = useCallback((rend: Rendition) => {
     try {
       rend.getContents().forEach((c: any) => {
         const doc = c.document as Document
+        if (!doc?.body) return
+        // Remove stale handler from previous render
+        const old = (doc as any).__ccTapHandler
+        if (old) doc.body.removeEventListener('click', old)
+        const handler = (e: MouseEvent) => {
+          if (!awaitingAnchorRef.current) return
+          const target = e.target as HTMLElement
+          const el = target.closest?.('p, li, blockquote, div, section') ?? target
+          const text = (el as HTMLElement).innerText?.trim() ?? ''
+          if (text && text.length > 10) {
+            setAnchorSentence(text.slice(0, 300))
+            setAwaitingAnchor(false)
+            setShowEnd(true)
+          }
+        }
+        ;(doc as any).__ccTapHandler = handler
+        doc.body.addEventListener('click', handler)
+        // Give paragraphs a pointer cursor so iOS treats them as tappable
         doc.querySelectorAll('p, li, blockquote').forEach((el: Element) => {
-          el.addEventListener('click', () => {
-            if (!awaitingAnchorRef.current) return
-            const text = (el as HTMLElement).innerText?.trim()
-            if (text && text.length > 10) {
-              setAnchorSentence(text.slice(0, 300))
-              setAwaitingAnchor(false)
-              setShowEnd(true)
-            }
-          })
+          (el as HTMLElement).style.cursor = 'pointer'
         })
       })
     } catch { /* ignore — iframe may not be ready */ }
@@ -289,6 +300,7 @@ export default function EpubReaderPage() {
         })
 
         rendition.on('click', () => {
+          if (awaitingAnchorRef.current) return // tap handled by injectTapToMark
           setSelection(sel => {
             if (sel) return sel
             showBarsRef.current = !showBarsRef.current

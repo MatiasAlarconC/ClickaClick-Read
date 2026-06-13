@@ -222,7 +222,7 @@ export default function BookDetailScreen() {
     return data.id
   }
 
-  const addToLibrary = async (status: 'reading' | 'finished' | 'want_to_read') => {
+  const addToLibrary = async (status: 'reading' | 'finished' | 'want_to_read' | 'dropped') => {
     if (!user || !book) return
     setAddingToLib(true)
     const bookId = await ensureBookInDb()
@@ -335,7 +335,7 @@ export default function BookDetailScreen() {
   }
 
   const statusLabel = userBook ? {
-    reading: 'Reading', finished: 'Finished', want_to_read: 'Want to Read'
+    reading: 'Reading', finished: 'Finished', want_to_read: 'Want to Read', dropped: 'Dropped'
   }[userBook.status] : null
 
   return (
@@ -396,7 +396,7 @@ export default function BookDetailScreen() {
               <input type="file" accept=".epub,application/epub+zip" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadEpub(f) }} disabled={epubUploading} />
             </label>
           )}
-          {userBook?.status === 'want_to_read' && (
+          {(userBook?.status === 'want_to_read' || userBook?.status === 'dropped') && (
             <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
               {addingToLib ? '…' : 'Start Reading'}
             </button>
@@ -404,6 +404,11 @@ export default function BookDetailScreen() {
           {userBook?.status === 'reading' && (
             <button onClick={() => addToLibrary('finished')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
               {addingToLib ? '…' : 'Mark Finished'}
+            </button>
+          )}
+          {userBook?.status === 'reading' && (
+            <button onClick={() => addToLibrary('dropped')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.bgSecondary, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
+              {addingToLib ? '…' : 'Drop'}
             </button>
           )}
         </div>

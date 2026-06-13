@@ -8,13 +8,14 @@ import { getRecommendations, isGeminiConfigured, type BookRecommendation } from 
 import { searchBooks } from '../services/books'
 import type { UserBook } from '../types'
 
-type BookTab = 'reading' | 'finished' | 'want_to_read'
+type BookTab = 'reading' | 'finished' | 'want_to_read' | 'dropped'
 type LibTab = BookTab | 'discover'
 
 const TAB_LABELS: Record<LibTab, string> = {
   reading: 'Reading',
   finished: 'Finished',
   want_to_read: 'Want to Read',
+  dropped: 'Dropped',
   discover: '✦ For You',
 }
 
@@ -25,7 +26,7 @@ export default function LibraryScreen() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [tab, setTab] = useState<LibTab>('reading')
-  const [books, setBooks] = useState<Record<BookTab, UserBook[]>>({ reading: [], finished: [], want_to_read: [] })
+  const [books, setBooks] = useState<Record<BookTab, UserBook[]>>({ reading: [], finished: [], want_to_read: [], dropped: [] })
   const [loading, setLoading] = useState(true)
   type SessionItem = { book_id: string; pages_read: number | null; started_at: string }
   const [sessionsByBook, setSessionsByBook] = useState<Record<string, SessionItem[]>>({})
@@ -129,7 +130,7 @@ export default function LibraryScreen() {
     setLoading(true)
     const { data } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).order('added_at', { ascending: false })
     if (data) {
-      const grouped: Record<BookTab, UserBook[]> = { reading: [], finished: [], want_to_read: [] }
+      const grouped: Record<BookTab, UserBook[]> = { reading: [], finished: [], want_to_read: [], dropped: [] }
       for (const b of data as UserBook[]) {
         if (b.status in grouped) grouped[b.status as BookTab].push(b)
       }
@@ -258,14 +259,6 @@ export default function LibraryScreen() {
                     }))
                   }
                 }}
-                onDrop={() => {
-                  supabase.from('user_books').update({ status: 'want_to_read' }).eq('id', book.id)
-                  setBooks(prev => ({
-                    reading: prev.reading.filter(b => b.id !== book.id),
-                    finished: prev.finished,
-                    want_to_read: [{ ...book, status: 'want_to_read' as const }, ...prev.want_to_read],
-                  }))
-                }}
               />
             ))
           )}
@@ -296,7 +289,8 @@ function computePrediction(sessions: { book_id: string; pages_read: number | nul
   const now = new Date()
   const diffDays = Math.round((finish.getTime() - now.getTime()) / 86400000)
   let label: string
-  if (diffDays <= 1) label = 'Finish today'
+  if (diffDays <= 0) label = 'Finish today'
+  else if (diffDays === 1) label = 'Finish tomorrow'
   else if (diffDays <= 7) label = `Finish in ${diffDays} days`
   else if (diffDays <= 14) label = `Finish next week`
   else {
@@ -305,9 +299,9 @@ function computePrediction(sessions: { book_id: string; pages_read: number | nul
   return { label }
 }
 
-function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onDelete, onFinish, onDrop, sessions }: {
+function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onDelete, onFinish, sessions }: {
   book: UserBook; index: number; total: number; tab: LibTab; theme: import('../types').Theme; userId: string
-  onPress: () => void; onDelete: () => void; onFinish: () => void; onDrop?: () => void
+  onPress: () => void; onDelete: () => void; onFinish: () => void
   sessions?: { book_id: string; pages_read: number | null; started_at: string }[]
 }) {
   const x = useMotionValue(0)
@@ -399,18 +393,9 @@ function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onD
                 <span style={{ fontSize: 11, color: theme.fg, fontWeight: 600 }}>{Math.round(progress * 100)}%</span>
               </div>
               <ProgressBar progress={progress} theme={theme} height={3} />
-              {(prediction || onDrop) && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-                  {prediction ? (
-                    <span style={{ fontSize: 10, color: theme.muted }}>{prediction.label}</span>
-                  ) : <span />}
-                  {onDrop && (
-                    <button
-                      onClick={e => { e.stopPropagation(); onDrop() }}
-                      style={{ fontSize: 10, color: theme.muted, background: 'none', border: `1px solid ${theme.border}`, borderRadius: 6, padding: '2px 8px', cursor: 'pointer' }}>
-                      Drop
-                    </button>
-                  )}
+              {prediction && (
+                <div style={{ marginTop: 5 }}>
+                  <span style={{ fontSize: 10, color: theme.muted }}>{prediction.label}</span>
                 </div>
               )}
             </div>
