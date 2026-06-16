@@ -82,7 +82,7 @@ const BUILTIN_CONDITIONS: Record<string, AchievementCondition> = {
 
 const DEFAULT_CONFIGS: Config[] = [
   { key: 'gemini_enabled', value: 'true' },
-  { key: 'gemini_model', value: 'gemini-1.5-flash' },
+  { key: 'gemini_model', value: 'gemini-2.5-flash' },
   { key: 'gemini_summary_enabled', value: 'true' },
   { key: 'gemini_recommendations_enabled', value: 'true' },
   { key: 'gemini_wrapped_enabled', value: 'true' },
@@ -523,9 +523,10 @@ export default function AdminPanel() {
               <div style={label}>Gemini Model</div>
               <select value={configValue('gemini_model')} onChange={e => updateConfig('gemini_model', e.target.value)}
                 style={{ ...input, WebkitAppearance: 'none' }}>
-                <option value="gemini-1.5-flash">gemini-1.5-flash (fast, cheap)</option>
-                <option value="gemini-1.5-pro">gemini-1.5-pro (smart, slower)</option>
-                <option value="gemini-2.0-flash">gemini-2.0-flash (latest)</option>
+                <option value="gemini-2.5-flash">gemini-2.5-flash (recommended)</option>
+                <option value="gemini-2.0-flash">gemini-2.0-flash (stable)</option>
+                <option value="gemini-2.5-flash-lite">gemini-2.5-flash-lite (fast, cheap)</option>
+                <option value="gemini-2.5-pro">gemini-2.5-pro (most capable)</option>
               </select>
             </div>
             <div style={{ ...card, marginBottom: 16 }}>
