@@ -7,12 +7,12 @@ const API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { prompt, model = 'gemini-1.5-flash', jsonMode = false } = req.body ?? {}
+  const { prompt, model = 'gemini-2.5-flash', jsonMode = false } = req.body ?? {}
   if (!prompt) return res.status(400).json({ error: 'Missing prompt' })
   if (!API_KEY) return res.status(503).json({ error: 'Gemini API key not configured on server' })
 
-  // Prefer stable models; gemini-2.5-flash requires a preview suffix that changes
-  const candidates = [model, 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b']
+  // gemini-1.5-flash is deprecated — only use 2.x models
+  const candidates = [model, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
     .filter((m, i, a) => a.indexOf(m) === i)
 
   let lastError = 'Gemini unreachable'
