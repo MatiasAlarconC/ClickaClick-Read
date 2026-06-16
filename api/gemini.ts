@@ -6,16 +6,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-    const { prompt, model = 'gemini-2.0-flash', jsonMode = false } = req.body ?? {}
+    const { prompt, model = 'gemini-2.5-flash', jsonMode = false } = req.body ?? {}
     if (!prompt) return res.status(400).json({ error: 'Missing prompt' })
     if (!API_KEY) return res.status(503).json({ error: 'Gemini API key not configured on server' })
 
     // Reject deprecated 1.x models — replace silently so stale DB values don't break anything
-    const safeModel = String(model).startsWith('gemini-1') ? 'gemini-2.0-flash' : String(model)
+    const safeModel = String(model).startsWith('gemini-1') ? 'gemini-2.5-flash' : String(model)
 
     // Try requested model first, then stable fallbacks. Each attempt has 4s before we move on,
     // keeping total runtime well under Vercel Hobby's 10s limit.
-    const candidates = [safeModel, 'gemini-2.0-flash', 'gemini-2.5-flash']
+    const candidates = [safeModel, 'gemini-2.5-flash', 'gemini-2.0-flash']
       .filter((m, i, a) => a.indexOf(m) === i)
 
     let lastError = 'Gemini unreachable'
