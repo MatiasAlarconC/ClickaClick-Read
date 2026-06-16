@@ -253,9 +253,9 @@ export default function LibraryScreen() {
                   if (tab === 'reading') {
                     supabase.from('user_books').update({ status: 'finished', finished_at: new Date().toISOString() }).eq('id', book.id)
                     setBooks(prev => ({
+                      ...prev,
                       reading: prev.reading.filter(b => b.id !== book.id),
                       finished: [{ ...book, status: 'finished' as const }, ...prev.finished],
-                      want_to_read: prev.want_to_read,
                     }))
                   }
                 }}
