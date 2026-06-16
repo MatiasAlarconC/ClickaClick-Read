@@ -1,25 +1,25 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-// GEMINI_API_KEY must be set in Vercel env vars WITHOUT the VITE_ prefix
-// so it never gets bundled into the client JavaScript
-const API_KEY = process.env.GEMINI_API_KEY
+// Prefer GEMINI_API_KEY (server-only). Fall back to VITE_GEMINI_API_KEY in case
+// the user configured only the VITE_ var in Vercel env settings.
+const API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { prompt, model = 'gemini-1.5-flash', jsonMode = false } = req.body ?? {}
+  const { prompt, model = 'gemini-2.5-flash', jsonMode = false } = req.body ?? {}
   if (!prompt) return res.status(400).json({ error: 'Missing prompt' })
   if (!API_KEY) return res.status(503).json({ error: 'Gemini API key not configured on server' })
 
-  // Prefer stable models; gemini-2.5-flash requires a preview suffix that changes
-  const candidates = [model, 'gemini-1.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b']
+  // gemini-1.5-flash is deprecated — only use 2.x models
+  const candidates = [model, 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite']
     .filter((m, i, a) => a.indexOf(m) === i)
 
   let lastError = 'Gemini unreachable'
   for (const m of candidates) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${API_KEY}`
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 20_000)
+    const timeout = setTimeout(() => controller.abort(), 8_000) // Vercel Hobby kills at 10s
     try {
       const upstream = await fetch(url, {
         method: 'POST',
