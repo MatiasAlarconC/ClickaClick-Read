@@ -6,24 +6,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-    const { prompt, model = 'gemini-2.5-flash', jsonMode = false } = req.body ?? {}
+    const { prompt, model = 'gemini-2.0-flash', jsonMode = false } = req.body ?? {}
     if (!prompt) return res.status(400).json({ error: 'Missing prompt' })
     if (!API_KEY) return res.status(503).json({ error: 'Gemini API key not configured on server' })
 
-    // Reject deprecated 1.x models — replace silently so stale DB values don't break anything
-    const safeModel = String(model).startsWith('gemini-1') ? 'gemini-2.5-flash' : String(model)
+    // Replace deprecated 1.x models silently
+    const safeModel = String(model).startsWith('gemini-1') ? 'gemini-2.0-flash' : String(model)
 
-    // Try requested model first, then stable fallbacks. Each attempt has 4s before we move on,
-    // keeping total runtime well under Vercel Hobby's 10s limit.
-    const candidates = [safeModel, 'gemini-2.5-flash', 'gemini-2.0-flash']
+    // gemini-2.0-flash first (non-thinking, reliably fast under Vercel's 10s limit)
+    // gemini-2.5-flash as fallback (thinking model — may be slower)
+    const candidates = [safeModel, 'gemini-2.0-flash', 'gemini-2.5-flash']
       .filter((m, i, a) => a.indexOf(m) === i)
+
+    console.log(`[gemini] request model=${safeModel} jsonMode=${jsonMode} promptLen=${prompt.length}`)
 
     let lastError = 'Gemini unreachable'
 
     for (const m of candidates) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${API_KEY}`
       const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), 4_000)
+      const timer = setTimeout(() => controller.abort(), 7_000)
 
       try {
         const upstream = await fetch(url, {
@@ -41,6 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
         clearTimeout(timer)
 
+        console.log(`[gemini] ${m} → HTTP ${upstream.status}`)
+
         if (upstream.ok) {
           const data = await upstream.json()
           const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
@@ -49,23 +53,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(200).json({ text, tokens, model: m })
         }
 
-        clearTimeout(timer)
         const body = await upstream.text().catch(() => '')
-        lastError = `${m} → HTTP ${upstream.status}: ${body.slice(0, 200)}`
+        lastError = `${m} → HTTP ${upstream.status}: ${body.slice(0, 300)}`
+        console.error(`[gemini] error: ${lastError}`)
 
-        if (upstream.status === 429) continue   // quota — try next model
-        if (upstream.status === 403) break      // bad key — stop immediately
-        if (upstream.status >= 500) break       // Google-side error — stop
-        // 400 / 404 = model not found or invalid request → try next
+        if (upstream.status === 403) break      // bad key — stop
+        if (upstream.status >= 500) break       // Google error — stop
+        // 400/404/429 → try next candidate
       } catch (e) {
         clearTimeout(timer)
         lastError = `${m} → ${String(e)}`
-        // timeout / network — try next candidate
+        console.error(`[gemini] exception: ${lastError}`)
       }
     }
 
     return res.status(502).json({ error: lastError })
   } catch (fatal) {
+    console.error(`[gemini] fatal: ${String(fatal)}`)
     return res.status(500).json({ error: 'Fatal: ' + String(fatal) })
   }
 }
