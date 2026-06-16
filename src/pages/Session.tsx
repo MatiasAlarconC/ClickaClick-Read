@@ -328,7 +328,10 @@ export default function SessionScreen() {
 
     // Save last sentence as epub anchor so the ePub reader can position itself
     if (lastSentence.trim() && userBook.book_id) {
-      const anchor = { sentence: lastSentence.trim(), chapter: '', cfi: '', progress: 0 }
+      const totalPagesForProgress = userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0
+      const endPageNum = parseInt(resolvedEndPage) || 0
+      const progress = totalPagesForProgress > 0 ? endPageNum / totalPagesForProgress : 0
+      const anchor = { sentence: lastSentence.trim(), chapter: '', cfi: '', progress }
       localStorage.setItem(`epub_anchor_${userBook.book_id}`, JSON.stringify(anchor))
     }
 

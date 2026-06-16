@@ -31,7 +31,7 @@ export interface Book {
   isbn: string | null
 }
 
-export type ReadingStatus = 'reading' | 'finished' | 'want_to_read'
+export type ReadingStatus = 'reading' | 'finished' | 'want_to_read' | 'dropped'
 
 export interface UserBook {
   id: string
