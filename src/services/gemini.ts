@@ -28,7 +28,7 @@ async function getConfig(): Promise<GeminiConfig> {
     for (const row of data ?? []) map[row.key] = row.value
     configCache = {
       enabled: map['gemini_enabled'] !== 'false',
-      model: map['gemini_model'] ?? 'gemini-2.5-flash',
+      model: map['gemini_model'] ?? 'gemini-1.5-flash',
       summary_enabled: map['gemini_summary_enabled'] !== 'false',
       recommendations_enabled: map['gemini_recommendations_enabled'] !== 'false',
       wrapped_enabled: map['gemini_wrapped_enabled'] !== 'false',
@@ -36,7 +36,7 @@ async function getConfig(): Promise<GeminiConfig> {
     }
   } catch {
     configCache = {
-      enabled: true, model: 'gemini-2.5-flash',
+      enabled: true, model: 'gemini-1.5-flash',
       summary_enabled: true, recommendations_enabled: true,
       wrapped_enabled: true, monthly_token_budget: 500000,
     }

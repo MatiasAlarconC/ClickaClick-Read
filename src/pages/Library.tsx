@@ -9,13 +9,19 @@ import { searchBooks } from '../services/books'
 import type { UserBook } from '../types'
 
 type BookTab = 'reading' | 'finished' | 'want_to_read' | 'dropped'
-type LibTab = BookTab | 'discover'
+type LibTab = BookTab | 'discover' | 'summaries'
+
+interface SavedSummary {
+  bookId: string; bookTitle: string; bookAuthor: string
+  summary: string; pageRange: { from: number | null; to: number | null }; savedAt: string
+}
 
 const TAB_LABELS: Record<LibTab, string> = {
   reading: 'Reading',
   finished: 'Finished',
   want_to_read: 'Want to Read',
   dropped: 'Dropped',
+  summaries: 'Summaries',
   discover: '✦ For You',
 }
 
@@ -158,7 +164,11 @@ export default function LibraryScreen() {
   }
 
   const totalBooks = books.reading.length + books.finished.length + books.want_to_read.length
-  const isBookTab = tab !== 'discover'
+  const isBookTab = tab !== 'discover' && tab !== 'summaries'
+  const summaries: SavedSummary[] = (() => {
+    if (!user?.id) return []
+    try { return JSON.parse(localStorage.getItem(`cc_summaries_${user.id}`) ?? '[]') } catch { return [] }
+  })()
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, position: 'relative', paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
@@ -176,6 +186,32 @@ export default function LibraryScreen() {
             </button>
           ))}
         </div>
+
+        {/* Summaries tab */}
+        {tab === 'summaries' && (
+          <div style={{ paddingBottom: 100 }}>
+            {summaries.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.muted, marginBottom: 8 }}>No summaries yet</div>
+                <div style={{ fontSize: 13, color: theme.muted, opacity: 0.7 }}>When you generate an AI summary on a finished book it will appear here.</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {summaries.map((s, i) => (
+                  <div key={`${s.bookId}-${i}`} style={{ padding: 16, background: theme.bgSecondary, borderRadius: 16, border: `1px solid ${theme.border}` }}>
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, color: theme.fg, marginBottom: 3 }}>{s.bookTitle}</div>
+                    <div style={{ fontSize: 12, color: theme.muted, marginBottom: 12 }}>
+                      {s.bookAuthor}
+                      {s.pageRange.from || s.pageRange.to ? ` · pp. ${s.pageRange.from ?? '?'}–${s.pageRange.to ?? '?'}` : ''}
+                      {' · '}{new Date(s.savedAt).toLocaleDateString()}
+                    </div>
+                    <div style={{ fontSize: 13, color: theme.fgDim, lineHeight: 1.7 }}>{s.summary}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Discover tab */}
         {tab === 'discover' && (

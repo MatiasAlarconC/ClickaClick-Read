@@ -90,10 +90,10 @@ export default function BookDetailScreen() {
   const [synopsis, setSynopsis] = useState<string | null>(book?.synopsis ?? null)
   const [seriesInfo, setSeriesInfo] = useState<SeriesInfo | null | undefined>(undefined)
 
-  const SECKRY_SERIES: Record<string, import('../services/gemini').SeriesInfo> = {
-    'seckry-1': { seriesName: 'Seckry Sevenstars', position: 1, totalBooks: 3, nextTitle: 'Seckry Sevenstars and the Trinity Awakening', nextAuthor: 'Joseph Evans' },
-    'seckry-2': { seriesName: 'Seckry Sevenstars', position: 2, totalBooks: 3, nextTitle: 'Seckry Sevenstars and the Fate of the Fractured Part One', nextAuthor: 'Joseph Evans' },
-    'seckry-3': { seriesName: 'Seckry Sevenstars', position: 3, totalBooks: 3, nextTitle: '', nextAuthor: 'Joseph Evans' },
+  const SECKRY_BY_TITLE: Record<string, import('../services/gemini').SeriesInfo> = {
+    'seckry sevenstars': { seriesName: 'Seckry Sevenstars', position: 1, totalBooks: 3, nextTitle: 'Seckry Sevenstars and the Trinity Awakening', nextAuthor: 'Joseph Evans' },
+    'seckry sevenstars and the trinity awakening': { seriesName: 'Seckry Sevenstars', position: 2, totalBooks: 3, nextTitle: 'Seckry Sevenstars and the Fate of the Fractured Part One', nextAuthor: 'Joseph Evans' },
+    'seckry sevenstars and the fate of the fractured part one': { seriesName: 'Seckry Sevenstars', position: 3, totalBooks: 3, nextTitle: '', nextAuthor: 'Joseph Evans' },
   }
 
   useEffect(() => {
@@ -145,9 +145,9 @@ export default function BookDetailScreen() {
       })
 
     // Detect series in background (non-blocking)
-    const bookId = book.id ?? book.google_books_id ?? ''
-    if (SECKRY_SERIES[bookId]) {
-      setSeriesInfo(SECKRY_SERIES[bookId])
+    const titleKey = book.title.toLowerCase().trim()
+    if (SECKRY_BY_TITLE[titleKey]) {
+      setSeriesInfo(SECKRY_BY_TITLE[titleKey])
     } else if (book && user) {
       detectBookSeries({ title: book.title, author: book.author, userId: user.id })
         .then(info => setSeriesInfo(info))
@@ -365,51 +365,60 @@ export default function BookDetailScreen() {
         </div>
 
         {/* Library status / add buttons */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 22, flexWrap: 'wrap' }}>
-          {statusLabel ? (
-            <div style={{ padding: '8px 14px', background: theme.bgSecondary, borderRadius: 10, fontSize: 13, color: theme.fg, fontWeight: 500 }}>{statusLabel}</div>
-          ) : null}
-          {/* Only show add-to-library buttons when book is NOT already in library */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 22 }}>
+          {/* Not in library yet */}
           {!userBook && (
-            <>
-              <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '10px 18px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 600, flex: 1 }}>
                 {addingToLib ? '…' : 'Start Reading'}
               </button>
-              <button onClick={() => addToLibrary('want_to_read')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
+              <button onClick={() => addToLibrary('want_to_read')} disabled={addingToLib} style={{ padding: '10px 14px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
                 Want to Read
               </button>
+            </div>
+          )}
+
+          {/* Currently reading — primary action first, then secondary row */}
+          {userBook?.status === 'reading' && (
+            <>
+              <button
+                onClick={() => epubPath ? setShowModeModal(true) : navigate('/session', { state: { book: userBook } })}
+                style={{ width: '100%', padding: '12px 18px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <svg width="11" height="13" viewBox="0 0 10 12" fill="none"><path d="M1 1l8 5.5L1 12V1z" fill="currentColor"/></svg>
+                Start Session
+              </button>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ padding: '6px 12px', background: theme.bgSecondary, borderRadius: 8, fontSize: 12, color: theme.muted, fontWeight: 500 }}>Reading</div>
+                <label style={{ padding: '6px 12px', background: theme.bgSecondary, color: epubPath ? theme.fg : theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5 5h4M5 7.5h4M5 10h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                  {epubUploading ? 'Uploading…' : epubPath ? 'ePub ✓' : 'Upload ePub'}
+                  <input type="file" accept=".epub,application/epub+zip" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadEpub(f) }} disabled={epubUploading} />
+                </label>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                  <button onClick={() => addToLibrary('finished')} disabled={addingToLib} style={{ padding: '6px 12px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>
+                    {addingToLib ? '…' : 'Finished'}
+                  </button>
+                  <button onClick={() => addToLibrary('dropped')} disabled={addingToLib} style={{ padding: '6px 12px', background: theme.bgSecondary, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>
+                    {addingToLib ? '…' : 'Drop'}
+                  </button>
+                </div>
+              </div>
             </>
           )}
-          {/* Book is in library — show contextual actions */}
-          {userBook?.status === 'reading' && (
-            <button
-              onClick={() => epubPath ? setShowModeModal(true) : navigate('/session', { state: { book: userBook } })}
-              style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
-              <svg width="10" height="12" viewBox="0 0 10 12" fill="none"><path d="M1 1l8 5.5L1 12V1z" fill="currentColor"/></svg>
-              Start Session
-            </button>
-          )}
-          {userBook?.status === 'reading' && (
-            <label style={{ padding: '8px 14px', background: theme.bgSecondary, color: epubPath ? '#22C55E' : theme.muted, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5 5h4M5 7.5h4M5 10h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-              {epubUploading ? 'Uploading…' : epubPath ? 'ePub loaded' : 'Upload ePub'}
-              <input type="file" accept=".epub,application/epub+zip" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadEpub(f) }} disabled={epubUploading} />
-            </label>
-          )}
+
+          {/* Want to read or dropped — show status + re-start option */}
           {(userBook?.status === 'want_to_read' || userBook?.status === 'dropped') && (
-            <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500 }}>
-              {addingToLib ? '…' : 'Start Reading'}
-            </button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ padding: '6px 12px', background: theme.bgSecondary, borderRadius: 8, fontSize: 12, color: theme.muted, fontWeight: 500 }}>{statusLabel}</div>
+              <button onClick={() => addToLibrary('reading')} disabled={addingToLib} style={{ padding: '8px 16px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600 }}>
+                {addingToLib ? '…' : 'Start Reading'}
+              </button>
+            </div>
           )}
-          {userBook?.status === 'reading' && (
-            <button onClick={() => addToLibrary('finished')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
-              {addingToLib ? '…' : 'Mark Finished'}
-            </button>
-          )}
-          {userBook?.status === 'reading' && (
-            <button onClick={() => addToLibrary('dropped')} disabled={addingToLib} style={{ padding: '8px 14px', background: theme.bgSecondary, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13 }}>
-              {addingToLib ? '…' : 'Drop'}
-            </button>
+
+          {/* Finished */}
+          {userBook?.status === 'finished' && (
+            <div style={{ padding: '6px 12px', background: theme.bgSecondary, borderRadius: 8, fontSize: 12, color: theme.muted, fontWeight: 500, display: 'inline-block' }}>Finished</div>
           )}
         </div>
 
@@ -553,6 +562,15 @@ export default function BookDetailScreen() {
                         if (summaryStorageKey) {
                           localStorage.setItem(summaryStorageKey, s)
                           localStorage.setItem(`${summaryStorageKey}_range`, JSON.stringify(range))
+                        }
+                        // Persist to global summaries store when the book is finished
+                        if (userBook?.status === 'finished' && user?.id && bookDbId) {
+                          const sKey = `cc_summaries_${user.id}`
+                          let list: Array<{ bookId: string; bookTitle: string; bookAuthor: string; summary: string; pageRange: typeof range; savedAt: string }> = []
+                          try { list = JSON.parse(localStorage.getItem(sKey) ?? '[]') } catch {}
+                          list = list.filter(x => x.bookId !== bookDbId)
+                          list.unshift({ bookId: bookDbId, bookTitle: book?.title ?? '', bookAuthor: book?.author ?? '', summary: s, pageRange: range, savedAt: new Date().toISOString() })
+                          localStorage.setItem(sKey, JSON.stringify(list.slice(0, 50)))
                         }
                       } catch { setSummaryError(true) }
                       setSummarizing(false)
