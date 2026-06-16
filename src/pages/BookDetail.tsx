@@ -92,8 +92,8 @@ export default function BookDetailScreen() {
 
   const SECKRY_BY_TITLE: Record<string, import('../services/gemini').SeriesInfo> = {
     'seckry sevenstars': { seriesName: 'Seckry Sevenstars', position: 1, totalBooks: 3, nextTitle: 'Seckry Sevenstars and the Trinity Awakening', nextAuthor: 'Joseph Evans' },
-    'seckry sevenstars and the trinity awakening': { seriesName: 'Seckry Sevenstars', position: 2, totalBooks: 3, nextTitle: 'Seckry Sevenstars and the Fate of the Fractured Part One', nextAuthor: 'Joseph Evans' },
-    'seckry sevenstars and the fate of the fractured part one': { seriesName: 'Seckry Sevenstars', position: 3, totalBooks: 3, nextTitle: '', nextAuthor: 'Joseph Evans' },
+    'seckry sevenstars and the trinity awakening': { seriesName: 'Seckry Sevenstars', position: 2, totalBooks: 3, prevTitle: 'Seckry Sevenstars', nextTitle: 'Seckry Sevenstars and the Fate of the Fractured Part One', nextAuthor: 'Joseph Evans' },
+    'seckry sevenstars and the fate of the fractured part one': { seriesName: 'Seckry Sevenstars', position: 3, totalBooks: 3, prevTitle: 'Seckry Sevenstars and the Trinity Awakening', nextTitle: '', nextAuthor: 'Joseph Evans' },
   }
 
   useEffect(() => {
@@ -532,6 +532,22 @@ export default function BookDetailScreen() {
         {/* Notes tab */}
         {activeTab === 'notes' && (
           <div style={{ paddingBottom: 40 }}>
+            {/* Previous book in series summary context */}
+            {seriesInfo && seriesInfo.position > 1 && seriesInfo.prevTitle && user?.id && (() => {
+              const prevTitle = seriesInfo.prevTitle!.toLowerCase()
+              let allSummaries: Array<{ bookTitle: string; summary: string; savedAt: string }> = []
+              try { allSummaries = JSON.parse(localStorage.getItem(`cc_summaries_${user.id}`) ?? '[]') } catch {}
+              const prevSummary = allSummaries.find(s => s.bookTitle.toLowerCase() === prevTitle)
+              if (!prevSummary) return null
+              return (
+                <div style={{ marginBottom: 20, padding: 14, background: theme.bgSecondary, borderRadius: 14, border: `1px solid ${theme.border}` }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 6 }}>
+                    Book {seriesInfo.position - 1} recap · {seriesInfo.prevTitle}
+                  </div>
+                  <div style={{ fontSize: 13, color: theme.fgDim, lineHeight: 1.7 }}>{prevSummary.summary}</div>
+                </div>
+              )
+            })()}
             {/* Add note */}
             <div style={{ background: theme.bgSecondary, borderRadius: 14, padding: 16, marginBottom: 20 }}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>

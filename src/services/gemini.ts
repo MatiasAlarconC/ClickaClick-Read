@@ -136,7 +136,7 @@ export async function summarizeNotes(params: {
 
 export interface SeriesInfo {
   seriesName: string; position: number; totalBooks: number
-  nextTitle: string; nextAuthor: string
+  nextTitle: string; nextAuthor: string; prevTitle?: string
 }
 
 export async function detectBookSeries(params: {

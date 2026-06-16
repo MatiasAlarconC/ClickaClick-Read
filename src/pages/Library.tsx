@@ -134,6 +134,13 @@ export default function LibraryScreen() {
   const fetchBooks = async () => {
     if (!user) return
     setLoading(true)
+    // Show cached books instantly for perceived speed
+    const cacheKey = `cc_library_cache_${user.id}`
+    try {
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) { setBooks(JSON.parse(cached)); setLoading(false) }
+    } catch { /* ignore */ }
+
     const { data } = await supabase.from('user_books').select('*, book:books(*)').eq('user_id', user.id).order('added_at', { ascending: false })
     if (data) {
       const grouped: Record<BookTab, UserBook[]> = { reading: [], finished: [], want_to_read: [], dropped: [] }
@@ -141,26 +148,33 @@ export default function LibraryScreen() {
         if (b.status in grouped) grouped[b.status as BookTab].push(b)
       }
       setBooks(grouped)
-      // Load recent sessions for reading books (used for finish prediction)
+      setLoading(false)
+      // Cache fresh data for next visit
+      try { localStorage.setItem(cacheKey, JSON.stringify(grouped)) } catch { /* ignore */ }
+
+      // Load sessions in background — doesn't block book display
       const readingIds = grouped.reading.map(b => b.book_id)
       if (readingIds.length > 0) {
         const cutoff = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString()
-        const { data: sess } = await supabase
+        supabase
           .from('reading_sessions')
           .select('book_id, pages_read, started_at')
           .in('book_id', readingIds)
           .gte('started_at', cutoff)
           .neq('is_manual', true)
           .gt('pages_read', 0)
-        const byBook: Record<string, SessionItem[]> = {}
-        for (const s of (sess ?? []) as SessionItem[]) {
-          if (!byBook[s.book_id]) byBook[s.book_id] = []
-          byBook[s.book_id].push(s)
-        }
-        setSessionsByBook(byBook)
+          .then(({ data: sess }) => {
+            const byBook: Record<string, SessionItem[]> = {}
+            for (const s of (sess ?? []) as SessionItem[]) {
+              if (!byBook[s.book_id]) byBook[s.book_id] = []
+              byBook[s.book_id].push(s)
+            }
+            setSessionsByBook(byBook)
+          })
       }
+    } else {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   const totalBooks = books.reading.length + books.finished.length + books.want_to_read.length
