@@ -6,7 +6,7 @@ import { useTheme, useAuth } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { CHARACTERS } from '../components/AvatarCharacter'
 import Character3D from '../components/Character3D'
-import { ACHIEVEMENTS, TIER_COLORS, getUnlockedCharacters } from '../data/achievements'
+import { ACHIEVEMENTS, getUnlockedCharacters } from '../data/achievements'
 import type { AchievementStats } from '../data/achievements'
 import type { AvatarConfig } from '../types'
 
@@ -171,7 +171,7 @@ export default function PublicProfileScreen() {
         {/* Stat chips */}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 14, zIndex: 1 }}>
           {statChips.map(s => (
-            <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', background: theme.bgSecondary, borderRadius: 999, border: `1px solid ${primaryColor}30` }}>
+            <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '7px 13px', background: theme.bgSecondary, borderRadius: 999, border: `1px solid ${theme.border}` }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: theme.fg }}>{s.value}</span>
               <span style={{ fontSize: 11, color: theme.muted }}>{s.label}</span>
             </div>
@@ -196,7 +196,7 @@ export default function PublicProfileScreen() {
                     {b.book?.pages_default && b.current_page ? (
                       <>
                         <div style={{ height: 3, borderRadius: 2, background: theme.border, overflow: 'hidden', marginTop: 4 }}>
-                          <div style={{ height: '100%', borderRadius: 2, background: primaryColor, width: `${Math.min(100, Math.round((b.current_page / b.book.pages_default) * 100))}%` }}/>
+                          <div style={{ height: '100%', borderRadius: 2, background: theme.fg, width: `${Math.min(100, Math.round((b.current_page / b.book.pages_default) * 100))}%` }}/>
                         </div>
                         <div style={{ fontSize: 11, color: theme.muted }}>p. {b.current_page} / {b.book.pages_default} — {Math.min(100, Math.round((b.current_page / b.book.pages_default) * 100))}%</div>
                       </>
@@ -214,7 +214,7 @@ export default function PublicProfileScreen() {
             <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 12 }}>Achievements ({earnedAchs.length})</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {earnedAchs.map(a => (
-                <div key={a.id} title={a.description} style={{ padding: '6px 12px', background: theme.bgSecondary, border: `1px solid ${TIER_COLORS[a.tier]}40`, borderRadius: 999, fontSize: 12, color: TIER_COLORS[a.tier], fontWeight: 500 }}>
+                <div key={a.id} title={a.description} style={{ padding: '6px 12px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 999, fontSize: 12, color: theme.fg, fontWeight: 500 }}>
                   {a.name}
                 </div>
               ))}
