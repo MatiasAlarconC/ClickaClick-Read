@@ -1,16 +1,16 @@
 import React, { useRef, useEffect, Suspense, useState, useMemo } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
-import { OrbitControls } from '@react-three/drei'
+import { OrbitControls, MeshReflectorMaterial, ContactShadows, Environment } from '@react-three/drei'
 import * as THREE from 'three'
 import type { Theme } from '../types'
 
-// Subtle floating dust motes — white, low opacity
-function Particles({ count = 28 }: { count?: number }) {
+// Subtle atmospheric dust
+function Particles({ count = 18 }: { count?: number }) {
   const ref = useRef<THREE.Points>(null)
   const positions = useMemo(() => {
     const arr = new Float32Array(count * 3)
     for (let i = 0; i < count; i++) {
-      const r = 1.7 + Math.random() * 0.9
+      const r = 1.8 + Math.random() * 1.0
       const theta = Math.random() * Math.PI * 2
       const phi = Math.acos(2 * Math.random() - 1)
       arr[i * 3]     = r * Math.sin(phi) * Math.cos(theta)
@@ -22,7 +22,8 @@ function Particles({ count = 28 }: { count?: number }) {
 
   useFrame(({ clock }) => {
     if (!ref.current) return
-    ref.current.rotation.y = clock.getElapsedTime() * 0.04
+    ref.current.rotation.y = clock.getElapsedTime() * 0.03
+    ref.current.rotation.x = Math.sin(clock.getElapsedTime() * 0.04) * 0.1
   })
 
   return (
@@ -30,40 +31,14 @@ function Particles({ count = 28 }: { count?: number }) {
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
-      <pointsMaterial size={0.018} color="#ffffff" transparent opacity={0.25} sizeAttenuation depthWrite={false} />
+      <pointsMaterial size={0.016} color="#ffffff" transparent opacity={0.22} sizeAttenuation depthWrite={false} />
     </points>
-  )
-}
-
-// Neutral ground halo
-function GroundHalo() {
-  const ref = useRef<THREE.Mesh>(null)
-  useFrame(({ clock }) => {
-    if (!ref.current) return
-    const mat = ref.current.material as THREE.MeshBasicMaterial
-    mat.opacity = 0.04 + Math.abs(Math.sin(clock.getElapsedTime() * 0.5)) * 0.05
-  })
-  return (
-    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.12, 0]}>
-      <ringGeometry args={[0.5, 1.2, 64]} />
-      <meshBasicMaterial color="#cccccc" transparent opacity={0.06} side={THREE.DoubleSide} depthWrite={false} />
-    </mesh>
-  )
-}
-
-function ShadowPlane() {
-  return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.16, 0]} receiveShadow>
-      <planeGeometry args={[8, 8]} />
-      <shadowMaterial transparent opacity={0.38} />
-    </mesh>
   )
 }
 
 function BookMesh({ coverUrl }: { coverUrl: string | null }) {
   const groupRef = useRef<THREE.Group>(null)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
-
   const scaleRef = useRef(0)
   const velRef = useRef(0)
 
@@ -81,31 +56,28 @@ function BookMesh({ coverUrl }: { coverUrl: string | null }) {
 
   useFrame(({ clock }, delta) => {
     if (!groupRef.current) return
-
-    // Smooth spring entry
-    const stiffness = 7, damping = 0.72
-    velRef.current += (1 - scaleRef.current) * stiffness * delta
-    velRef.current *= damping
+    // Spring entry
+    velRef.current += (1 - scaleRef.current) * 7 * delta
+    velRef.current *= 0.72
     scaleRef.current = Math.min(1.01, scaleRef.current + velRef.current * delta * 60)
     groupRef.current.scale.setScalar(scaleRef.current)
 
-    // Slow, graceful showcase rotation
+    // Graceful showcase rotation
     const t = clock.getElapsedTime()
     groupRef.current.rotation.y = t * 0.2 + Math.sin(t * 0.15) * 0.18
     groupRef.current.rotation.x = Math.sin(t * 0.28) * 0.035
-    groupRef.current.rotation.z = Math.sin(t * 0.38) * 0.018
+    groupRef.current.rotation.z = Math.sin(t * 0.38) * 0.016
     groupRef.current.position.y = Math.sin(t * 0.45) * 0.09 + Math.sin(t * 1.05) * 0.02
   })
 
-  // BoxGeometry face order: +x (right), -x (left), +y (top), -y (bottom), +z (front), -z (back)
+  // BoxGeometry faces: +x=pages edge, -x=spine, +y=top, -y=bottom, +z=front cover, -z=back
   const materials = useMemo(() => {
     const coverMat = texture
-      ? new THREE.MeshStandardMaterial({ map: texture, roughness: 0.28, metalness: 0.04 })
-      : new THREE.MeshStandardMaterial({ color: '#1a1a1a', roughness: 0.5, metalness: 0.08 })
-    const spineMat = new THREE.MeshStandardMaterial({ color: '#0c0c0c', roughness: 0.82 })
-    const pageMat  = new THREE.MeshStandardMaterial({ color: '#EDE8DC', roughness: 0.96 })
-    const backMat  = new THREE.MeshStandardMaterial({ color: '#111111', roughness: 0.78 })
-    // right=pages edge, left=spine, top/bottom=page edges, front=cover, back=back cover
+      ? new THREE.MeshStandardMaterial({ map: texture, roughness: 0.22, metalness: 0.06, envMapIntensity: 1.2 })
+      : new THREE.MeshStandardMaterial({ color: '#1a1a1a', roughness: 0.5, metalness: 0.1 })
+    const spineMat = new THREE.MeshStandardMaterial({ color: '#090909', roughness: 0.85, metalness: 0.05 })
+    const pageMat  = new THREE.MeshStandardMaterial({ color: '#EDE8DC', roughness: 0.95, metalness: 0.0 })
+    const backMat  = new THREE.MeshStandardMaterial({ color: '#101010', roughness: 0.80, metalness: 0.05 })
     return [pageMat, spineMat, pageMat, pageMat, coverMat, backMat]
   }, [texture])
 
@@ -113,7 +85,7 @@ function BookMesh({ coverUrl }: { coverUrl: string | null }) {
 
   return (
     <group ref={groupRef}>
-      <mesh geometry={geo} material={materials} castShadow receiveShadow />
+      <mesh geometry={geo} material={materials} castShadow />
     </group>
   )
 }
@@ -122,30 +94,51 @@ export default function Book3D({ coverUrl, theme: _theme }: { coverUrl: string |
   return (
     <div style={{ width: '100%', height: 300, borderRadius: 20, overflow: 'hidden' }}>
       <Canvas
-        camera={{ position: [0.25, 0.35, 3.7], fov: 35 }}
+        camera={{ position: [0.3, 0.4, 3.6], fov: 34 }}
         style={{ background: 'transparent' }}
         gl={{ alpha: true, antialias: true }}
         shadows
       >
-        {/* Dramatic top-right key light + soft fill */}
-        <ambientLight intensity={0.32} />
-        <directionalLight
-          position={[3.5, 7, 5]}
-          intensity={2.2}
-          castShadow
-          shadow-mapSize={[2048, 2048]}
-          shadow-camera-near={0.5}
-          shadow-camera-far={20}
-        />
-        <directionalLight position={[-4, 1.5, 3]} intensity={0.3} />
-        <pointLight position={[0, 4, 2]} intensity={0.35} />
-        <hemisphereLight args={['#d8d4cc', '#060606', 0.18]} />
+        {/* HDR environment for realistic cover reflections */}
+        <Environment preset="city" background={false} />
+
+        {/* Key light from top-right + subtle fill + rim from behind */}
+        <ambientLight intensity={0.28} />
+        <directionalLight position={[3, 7, 4]} intensity={2.4} castShadow shadow-mapSize={[2048, 2048]} />
+        <directionalLight position={[-3, 1, 3]} intensity={0.25} />
+        <pointLight position={[0, -1, -3]} intensity={0.5} color="#ffffff" />
 
         <Suspense fallback={null}>
           <BookMesh coverUrl={coverUrl} />
           <Particles />
-          <GroundHalo />
-          <ShadowPlane />
+
+          {/* Soft contact shadow blob */}
+          <ContactShadows
+            position={[0, -1.14, 0]}
+            opacity={0.65}
+            scale={3.5}
+            blur={2.2}
+            far={1.6}
+            color="#000000"
+          />
+
+          {/* Glossy reflective floor */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.15, 0]}>
+            <planeGeometry args={[12, 12]} />
+            <MeshReflectorMaterial
+              blur={[300, 100]}
+              resolution={512}
+              mixBlur={1}
+              mixStrength={0.55}
+              roughness={1}
+              depthScale={1.2}
+              minDepthThreshold={0.4}
+              maxDepthThreshold={1.4}
+              color="#060606"
+              metalness={0.6}
+              mirror={0}
+            />
+          </mesh>
         </Suspense>
 
         <OrbitControls

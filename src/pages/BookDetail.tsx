@@ -101,6 +101,8 @@ export default function BookDetailScreen() {
 
     const externalId = book.google_books_id ?? book.id
 
+    const titleKey = book.title.toLowerCase().trim()
+
     // First find the book's UUID in the DB, then load user data
     supabase.from('books').select('id, synopsis, series_data')
       .eq('google_books_id', externalId)
@@ -109,20 +111,27 @@ export default function BookDetailScreen() {
         // Update synopsis from DB book record if available
         if (bookRow?.synopsis) setSynopsis(bookRow.synopsis)
 
-        if (!bookRow) return
+        if (!bookRow) {
+          // Book not in DB yet (just browsing) — detect via localStorage/Gemini without DB save
+          if (!SECKRY_BY_TITLE[titleKey]) {
+            detectBookSeries({ title: book.title, author: book.author, userId: user.id, bookId: null })
+              .then(info => setSeriesInfo(info)).catch(() => setSeriesInfo(null))
+          }
+          return
+        }
+
         const dbId = bookRow.id
         setBookDbId(dbId)
 
         // Read series_data from DB (shared cache across all users)
-        // null = not yet detected; {} = detected as standalone; { seriesName } = in a series
+        // null col = not yet detected; {} = detected standalone; { seriesName } = in a series
         const sd = bookRow.series_data as Record<string, unknown> | null | undefined
-        const titleKey = book.title.toLowerCase().trim()
         if (SECKRY_BY_TITLE[titleKey]) {
           setSeriesInfo(SECKRY_BY_TITLE[titleKey])
         } else if (sd !== null && sd !== undefined) {
           setSeriesInfo(sd.seriesName ? (sd as unknown as import('../services/gemini').SeriesInfo) : null)
         } else {
-          // First visitor for this book — call Gemini and save to DB for everyone
+          // First visitor for this book — call Gemini and persist to DB for everyone
           detectBookSeries({ title: book.title, author: book.author, userId: user.id, bookId: dbId })
             .then(info => setSeriesInfo(info))
             .catch(() => setSeriesInfo(null))
