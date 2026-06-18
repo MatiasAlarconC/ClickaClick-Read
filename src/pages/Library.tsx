@@ -290,8 +290,9 @@ export default function LibraryScreen() {
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.muted }}>Nothing here yet</div>
               <button onClick={() => navigate('/search')} style={{ marginTop: 16, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 500 }}>Find books</button>
             </div>
-          ) : (
-            books[tab as BookTab].map((book, i) => (
+          ) : tab === 'finished'
+            ? renderFinishedGrouped(books.finished, theme, navigate, sessionsByBook, user?.id ?? '', setBooks, supabase)
+            : books[tab as BookTab].map((book, i) => (
               <SwipeableBookRow key={book.id} book={book} index={i} total={books[tab as BookTab].length} tab={tab as BookTab} theme={theme} userId={user?.id ?? ''}
                 sessions={sessionsByBook[book.book_id] ?? []}
                 onPress={() => navigate('/detail', { state: { book: book.book } })}
@@ -311,7 +312,7 @@ export default function LibraryScreen() {
                 }}
               />
             ))
-          )}
+          }
         </div>
         )}
       </div>
@@ -319,6 +320,79 @@ export default function LibraryScreen() {
       <TabBar activeTab="library" onTabChange={t => navigate(`/${t === 'home' ? 'home' : t}`)} theme={theme} />
     </div>
   )
+}
+
+// Extract series grouping key from a book title ("X and the Y" → "x")
+function seriesKeyOf(title: string, author: string): string | null {
+  const m = title.match(/^(.+?)\s+and\s+the\s+/i)
+  if (m) return `${author.toLowerCase().trim()}::${m[1].toLowerCase().trim()}`
+  return null
+}
+
+function seriesLabelFrom(title: string): string {
+  return title.match(/^(.+?)\s+and\s+the\s+/i)?.[1] ?? title
+}
+
+function renderFinishedGrouped(
+  finishedBooks: UserBook[],
+  theme: import('../types').Theme,
+  navigate: ReturnType<typeof import('react-router-dom').useNavigate>,
+  sessionsByBook: Record<string, { book_id: string; pages_read: number | null; started_at: string }[]>,
+  userId: string,
+  setBooks: React.Dispatch<React.SetStateAction<Record<BookTab, UserBook[]>>>,
+  sb: typeof import('../lib/supabase').supabase,
+) {
+  // Group books by series key, preserving first-appearance order
+  const groupMap = new Map<string, UserBook[]>()
+  const order: string[] = []
+
+  for (const b of finishedBooks) {
+    const key = seriesKeyOf(b.book?.title ?? '', b.book?.author ?? '') ?? `__solo__${b.id}`
+    if (!groupMap.has(key)) { groupMap.set(key, []); order.push(key) }
+    groupMap.get(key)!.push(b)
+  }
+
+  const elements: React.ReactNode[] = []
+
+  for (const key of order) {
+    const group = groupMap.get(key)!
+    if (group.length < 2 || key.startsWith('__solo__')) {
+      // Standalone book
+      const b = group[0]
+      const idx = finishedBooks.indexOf(b)
+      elements.push(
+        <SwipeableBookRow key={b.id} book={b} index={idx} total={finishedBooks.length} tab="finished" theme={theme} userId={userId}
+          sessions={sessionsByBook[b.book_id] ?? []}
+          onPress={() => navigate('/detail', { state: { book: b.book } })}
+          onDelete={() => { setBooks(prev => ({ ...prev, finished: prev.finished.filter(x => x.id !== b.id) })); sb.from('user_books').delete().eq('id', b.id) }}
+          onFinish={() => {}}
+        />
+      )
+    } else {
+      // Series group card
+      const label = seriesLabelFrom(group[0].book?.title ?? '')
+      elements.push(
+        <div key={key} style={{ marginBottom: 14, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ padding: '11px 14px 10px', background: theme.bgSecondary, borderBottom: `1px solid ${theme.border}` }}>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 2 }}>Series</div>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 15, color: theme.fg }}>{label} <span style={{ fontSize: 12, color: theme.muted, fontFamily: 'inherit', fontWeight: 400 }}>· {group.length} books</span></div>
+          </div>
+          {group.map((b, i) => (
+            <div key={b.id} style={{ background: theme.bg }}>
+              <SwipeableBookRow book={b} index={i} total={group.length} tab="finished" theme={theme} userId={userId}
+                sessions={sessionsByBook[b.book_id] ?? []}
+                onPress={() => navigate('/detail', { state: { book: b.book } })}
+                onDelete={() => { setBooks(prev => ({ ...prev, finished: prev.finished.filter(x => x.id !== b.id) })); sb.from('user_books').delete().eq('id', b.id) }}
+                onFinish={() => {}}
+              />
+            </div>
+          ))}
+        </div>
+      )
+    }
+  }
+
+  return <>{elements}</>
 }
 
 function computePrediction(sessions: { book_id: string; pages_read: number | null; started_at: string }[], currentPage: number, totalPages: number): { label: string } | null {

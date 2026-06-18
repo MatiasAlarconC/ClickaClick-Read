@@ -137,6 +137,7 @@ export async function summarizeNotes(params: {
 export interface SeriesInfo {
   seriesName: string; position: number; totalBooks: number
   nextTitle: string; nextAuthor: string; prevTitle?: string
+  parentSagaName?: string; parentSagaTotalBooks?: number
 }
 
 export async function detectBookSeries(params: {
@@ -147,8 +148,11 @@ export async function detectBookSeries(params: {
 
   const prompt = `Is "${params.title}" by ${params.author} part of a numbered book series with sequels?
 Reply ONLY with valid JSON, no markdown, no explanation.
-If yes: {"inSeries":true,"seriesName":"...","position":1,"totalBooks":3,"nextTitle":"...","nextAuthor":"..."}
-If no or unsure: {"inSeries":false}`
+If yes: {"inSeries":true,"seriesName":"...","position":1,"totalBooks":3,"nextTitle":"...","nextAuthor":"...","parentSagaName":"...","parentSagaTotalBooks":0}
+If no or unsure: {"inSeries":false}
+
+parentSagaName: fill only when this sub-series belongs to a larger connected universe/saga (e.g. "Farseer Trilogy" belongs to "Realm of the Elderlings"). Use "" if no parent saga exists.
+parentSagaTotalBooks: total books across all sub-series in the parent saga (0 if no parent saga).`
 
   try {
     const { text, tokens } = await callGemini(prompt, cfg.model, true)
@@ -156,7 +160,14 @@ If no or unsure: {"inSeries":false}`
     const stripped = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
     const json = JSON.parse(stripped)
     if (!json.inSeries) return null
-    return { seriesName: json.seriesName, position: json.position, totalBooks: json.totalBooks, nextTitle: json.nextTitle, nextAuthor: json.nextAuthor }
+    return {
+      seriesName: json.seriesName,
+      position: json.position,
+      totalBooks: json.totalBooks,
+      nextTitle: json.nextTitle,
+      nextAuthor: json.nextAuthor,
+      ...(json.parentSagaName ? { parentSagaName: json.parentSagaName, parentSagaTotalBooks: json.parentSagaTotalBooks ?? 0 } : {}),
+    }
   } catch {
     return null
   }

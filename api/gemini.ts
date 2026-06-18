@@ -38,6 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               maxOutputTokens: jsonMode ? 4096 : 2048,
               temperature: 0.7,
               ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+              thinkingConfig: { thinkingBudget: 0 },
             },
           }),
         })

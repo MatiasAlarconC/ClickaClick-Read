@@ -478,6 +478,12 @@ export default function BookDetailScreen() {
               <div style={{ marginBottom: 28 }}>
                 <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 12 }}>Part of a Series</div>
                 <div style={{ padding: 16, background: theme.bgSecondary, borderRadius: 14, border: `1px solid ${theme.border}` }}>
+                  {seriesInfo.parentSagaName && (
+                    <div style={{ fontSize: 11, color: theme.muted, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ opacity: 0.5 }}>↳</span>
+                      <span>{seriesInfo.parentSagaName}{seriesInfo.parentSagaTotalBooks ? ` · ${seriesInfo.parentSagaTotalBooks} books` : ''}</span>
+                    </div>
+                  )}
                   <div style={{ fontSize: 14, fontWeight: 600, color: theme.fg, marginBottom: 3 }}>{seriesInfo.seriesName}</div>
                   <div style={{ fontSize: 12, color: theme.muted, marginBottom: seriesInfo.nextTitle && seriesInfo.position < seriesInfo.totalBooks ? 14 : 0 }}>
                     Book {seriesInfo.position} of {seriesInfo.totalBooks}
