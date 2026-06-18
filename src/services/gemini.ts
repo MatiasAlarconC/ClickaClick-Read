@@ -141,18 +141,33 @@ export interface SeriesInfo {
 }
 
 export async function detectBookSeries(params: {
-  title: string; author: string; userId: string | null
+  title: string; author: string; userId: string | null; bookId?: string | null
 }): Promise<SeriesInfo | null> {
   const cfg = await getConfig()
   if (!cfg.enabled) return null
 
-  // Cache indefinitely — series membership never changes
-  const cacheKey = `cc_series_${params.title.toLowerCase().replace(/\W+/g, '_')}_${params.author.toLowerCase().replace(/\W+/g, '_')}`
+  const lsKey = `cc_series_${params.title.toLowerCase().replace(/\W+/g, '_')}_${params.author.toLowerCase().replace(/\W+/g, '_')}`
+
+  // 1. Shared DB cache — computed once, reused by every user
+  if (params.bookId) {
+    try {
+      const { data } = await supabase.from('books').select('series_data').eq('id', params.bookId).maybeSingle()
+      if (data && data.series_data !== null && data.series_data !== undefined) {
+        const sd = data.series_data as Record<string, unknown>
+        const result = sd.seriesName ? (sd as unknown as SeriesInfo) : null
+        try { localStorage.setItem(lsKey, result ? JSON.stringify(result) : 'null') } catch { /* ignore */ }
+        return result
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 2. localStorage fallback (browsing a book not yet in DB)
   try {
-    const cached = localStorage.getItem(cacheKey)
-    if (cached !== null) return cached === 'null' ? null : JSON.parse(cached)
+    const cached = localStorage.getItem(lsKey)
+    if (cached !== null) return cached === 'null' ? null : (JSON.parse(cached) as SeriesInfo)
   } catch { /* ignore */ }
 
+  // 3. Call Gemini (first time this book has been visited by any user)
   const prompt = `Is "${params.title}" by ${params.author} part of a numbered book series with sequels?
 Reply ONLY with valid JSON, no markdown, no explanation.
 If yes: {"inSeries":true,"seriesName":"...","position":1,"totalBooks":3,"nextTitle":"...","nextAuthor":"...","parentSagaName":"...","parentSagaTotalBooks":0}
@@ -166,19 +181,24 @@ parentSagaTotalBooks: total books across all sub-series in the parent saga (0 if
     await logUsage('series_detection', tokens, cfg.model, params.userId)
     const stripped = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
     const json = JSON.parse(stripped)
-    if (!json.inSeries) {
-      try { localStorage.setItem(cacheKey, 'null') } catch { /* ignore */ }
-      return null
+
+    let result: SeriesInfo | null = null
+    if (json.inSeries) {
+      result = {
+        seriesName: json.seriesName,
+        position: json.position,
+        totalBooks: json.totalBooks,
+        nextTitle: json.nextTitle,
+        nextAuthor: json.nextAuthor,
+        ...(json.parentSagaName ? { parentSagaName: json.parentSagaName, parentSagaTotalBooks: json.parentSagaTotalBooks ?? 0 } : {}),
+      }
     }
-    const result: SeriesInfo = {
-      seriesName: json.seriesName,
-      position: json.position,
-      totalBooks: json.totalBooks,
-      nextTitle: json.nextTitle,
-      nextAuthor: json.nextAuthor,
-      ...(json.parentSagaName ? { parentSagaName: json.parentSagaName, parentSagaTotalBooks: json.parentSagaTotalBooks ?? 0 } : {}),
+
+    // Persist to shared DB so no other user ever hits Gemini for this book again
+    if (params.bookId) {
+      try { await supabase.from('books').update({ series_data: result ?? {} }).eq('id', params.bookId) } catch { /* ignore */ }
     }
-    try { localStorage.setItem(cacheKey, JSON.stringify(result)) } catch { /* ignore */ }
+    try { localStorage.setItem(lsKey, result ? JSON.stringify(result) : 'null') } catch { /* ignore */ }
     return result
   } catch {
     return null

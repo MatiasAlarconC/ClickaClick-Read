@@ -102,7 +102,7 @@ export default function BookDetailScreen() {
     const externalId = book.google_books_id ?? book.id
 
     // First find the book's UUID in the DB, then load user data
-    supabase.from('books').select('id, synopsis')
+    supabase.from('books').select('id, synopsis, series_data')
       .eq('google_books_id', externalId)
       .maybeSingle()
       .then(({ data: bookRow }) => {
@@ -112,6 +112,21 @@ export default function BookDetailScreen() {
         if (!bookRow) return
         const dbId = bookRow.id
         setBookDbId(dbId)
+
+        // Read series_data from DB (shared cache across all users)
+        // null = not yet detected; {} = detected as standalone; { seriesName } = in a series
+        const sd = bookRow.series_data as Record<string, unknown> | null | undefined
+        const titleKey = book.title.toLowerCase().trim()
+        if (SECKRY_BY_TITLE[titleKey]) {
+          setSeriesInfo(SECKRY_BY_TITLE[titleKey])
+        } else if (sd !== null && sd !== undefined) {
+          setSeriesInfo(sd.seriesName ? (sd as unknown as import('../services/gemini').SeriesInfo) : null)
+        } else {
+          // First visitor for this book — call Gemini and save to DB for everyone
+          detectBookSeries({ title: book.title, author: book.author, userId: user.id, bookId: dbId })
+            .then(info => setSeriesInfo(info))
+            .catch(() => setSeriesInfo(null))
+        }
 
         // Check if book is in user's library (with book join so Session gets cover/title)
         supabase.from('user_books').select('*, book:books(*)')
@@ -143,16 +158,6 @@ export default function BookDetailScreen() {
           .order('started_at', { ascending: false })
           .then(({ data }) => { if (data) setSessions(data as ReadingSession[]) })
       })
-
-    // Detect series in background (non-blocking)
-    const titleKey = book.title.toLowerCase().trim()
-    if (SECKRY_BY_TITLE[titleKey]) {
-      setSeriesInfo(SECKRY_BY_TITLE[titleKey])
-    } else if (book && user) {
-      detectBookSeries({ title: book.title, author: book.author, userId: user.id })
-        .then(info => setSeriesInfo(info))
-        .catch(() => setSeriesInfo(null))
-    }
 
     // Fetch synopsis from Google Books or Open Library if not already available
     const googleId = book.google_books_id ?? book.id
