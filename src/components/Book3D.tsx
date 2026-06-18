@@ -36,6 +36,12 @@ function Particles({ count = 18 }: { count?: number }) {
   )
 }
 
+function proxyCoverUrl(url: string | null): string | null {
+  if (!url) return null
+  // Proxy through server to avoid CORS issues with Google Books / Amazon CDNs
+  return `/api/cover?url=${encodeURIComponent(url)}`
+}
+
 function BookMesh({ coverUrl }: { coverUrl: string | null }) {
   const groupRef = useRef<THREE.Group>(null)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
@@ -45,9 +51,8 @@ function BookMesh({ coverUrl }: { coverUrl: string | null }) {
   useEffect(() => {
     if (!coverUrl) { setTexture(null); return }
     const loader = new THREE.TextureLoader()
-    loader.setCrossOrigin('anonymous')
     loader.load(
-      coverUrl,
+      proxyCoverUrl(coverUrl)!,
       (tex) => { tex.colorSpace = THREE.SRGBColorSpace; setTexture(tex) },
       undefined,
       () => setTexture(null),
