@@ -112,11 +112,28 @@ export default function BookDetailScreen() {
         if (bookRow?.synopsis) setSynopsis(bookRow.synopsis)
 
         if (!bookRow) {
-          // Book not in DB yet (just browsing) — detect via localStorage/Gemini without DB save
-          if (!SECKRY_BY_TITLE[titleKey]) {
-            detectBookSeries({ title: book.title, author: book.author, userId: user.id, bookId: null })
-              .then(info => setSeriesInfo(info)).catch(() => setSeriesInfo(null))
-          }
+          // Book not in DB yet — upsert it so series_data gets shared across all users
+          supabase.from('books').upsert({
+            google_books_id: externalId,
+            title: book.title,
+            author: book.author,
+            cover_url: book.cover_url ?? null,
+            synopsis: book.synopsis ?? null,
+            pages_default: book.pages ?? null,
+            genres: book.genres ?? [],
+            published_year: book.published_year ?? null,
+            isbn: book.isbn ?? null,
+          }, { onConflict: 'google_books_id', ignoreDuplicates: false })
+            .select('id')
+            .maybeSingle()
+            .then(({ data: newRow }) => {
+              const newId = newRow?.id ?? null
+              if (newId) setBookDbId(newId)
+              if (!SECKRY_BY_TITLE[titleKey]) {
+                detectBookSeries({ title: book.title, author: book.author, userId: user.id, bookId: newId })
+                  .then(info => setSeriesInfo(info)).catch(() => setSeriesInfo(null))
+              }
+            })
           return
         }
 
