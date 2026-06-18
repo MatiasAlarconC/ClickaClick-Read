@@ -120,7 +120,11 @@ async function searchGoogleBooks(query: string, startIndex = 0, language?: strin
   if (GOOGLE_API_KEY) url.searchParams.set('key', GOOGLE_API_KEY)
 
   const res = await fetch(url.toString())
-  if (!res.ok) throw new Error(`Google Books ${res.status}`)
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    console.error('[Books] Google 400 detail:', body.slice(0, 300))
+    throw new Error(`Google Books ${res.status}`)
+  }
   const data = await res.json()
   const totalItems: number = data.totalItems ?? 0
 
