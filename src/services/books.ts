@@ -1,6 +1,6 @@
 import type { SearchResult } from '../types'
 
-const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_BOOKS_API_KEY as string | undefined
+// Google Books calls go through /api/books — key never exposed to client
 
 // ─── Hardcoded Seckry Sevenstars trilogy by Joseph Evans ─────────────────────
 const SECKRY_BOOKS: SearchResult[] = [
@@ -111,20 +111,11 @@ const LANG_TO_MARC: Record<string, string> = {
 }
 
 async function searchGoogleBooks(query: string, startIndex = 0, language?: string): Promise<{ results: SearchResult[]; totalItems: number }> {
-  const url = new URL('https://www.googleapis.com/books/v1/volumes')
-  url.searchParams.set('q', query)
-  url.searchParams.set('maxResults', '25')
-  url.searchParams.set('startIndex', String(startIndex))
-  url.searchParams.set('printType', 'books')
-  if (language) url.searchParams.set('langRestrict', language)
-  if (GOOGLE_API_KEY) url.searchParams.set('key', GOOGLE_API_KEY)
+  const params = new URLSearchParams({ q: query, startIndex: String(startIndex) })
+  if (language) params.set('language', language)
 
-  const res = await fetch(url.toString())
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    console.error('[Books] Google 400 detail:', body.slice(0, 300))
-    throw new Error(`Google Books ${res.status}`)
-  }
+  const res = await fetch(`/api/books?${params}`)
+  if (!res.ok) throw new Error(`Google Books ${res.status}`)
   const data = await res.json()
   const totalItems: number = data.totalItems ?? 0
 
