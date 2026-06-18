@@ -146,6 +146,13 @@ export async function detectBookSeries(params: {
   const cfg = await getConfig()
   if (!cfg.enabled) return null
 
+  // Cache indefinitely — series membership never changes
+  const cacheKey = `cc_series_${params.title.toLowerCase().replace(/\W+/g, '_')}_${params.author.toLowerCase().replace(/\W+/g, '_')}`
+  try {
+    const cached = localStorage.getItem(cacheKey)
+    if (cached !== null) return cached === 'null' ? null : JSON.parse(cached)
+  } catch { /* ignore */ }
+
   const prompt = `Is "${params.title}" by ${params.author} part of a numbered book series with sequels?
 Reply ONLY with valid JSON, no markdown, no explanation.
 If yes: {"inSeries":true,"seriesName":"...","position":1,"totalBooks":3,"nextTitle":"...","nextAuthor":"...","parentSagaName":"...","parentSagaTotalBooks":0}
@@ -159,8 +166,11 @@ parentSagaTotalBooks: total books across all sub-series in the parent saga (0 if
     await logUsage('series_detection', tokens, cfg.model, params.userId)
     const stripped = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
     const json = JSON.parse(stripped)
-    if (!json.inSeries) return null
-    return {
+    if (!json.inSeries) {
+      try { localStorage.setItem(cacheKey, 'null') } catch { /* ignore */ }
+      return null
+    }
+    const result: SeriesInfo = {
       seriesName: json.seriesName,
       position: json.position,
       totalBooks: json.totalBooks,
@@ -168,6 +178,8 @@ parentSagaTotalBooks: total books across all sub-series in the parent saga (0 if
       nextAuthor: json.nextAuthor,
       ...(json.parentSagaName ? { parentSagaName: json.parentSagaName, parentSagaTotalBooks: json.parentSagaTotalBooks ?? 0 } : {}),
     }
+    try { localStorage.setItem(cacheKey, JSON.stringify(result)) } catch { /* ignore */ }
+    return result
   } catch {
     return null
   }
