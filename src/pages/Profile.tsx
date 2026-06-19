@@ -489,7 +489,8 @@ export default function ProfileScreen() {
           <AvatarCreator onClose={() => setShowCreator(false)} onSave={handleSaveAvatar}
             initialCharacter={char} initialPrimary={primaryColor} initialSecondary={secondaryColor}
             initialUseTexture={useTexture} theme={theme}
-            unlockedCharacters={unlockedCharacters} dbCharacters={dbCharacters}/>
+            unlockedCharacters={unlockedCharacters} dbCharacters={dbCharacters}
+            dbAchievements={dbAchievements} achievementStats={achievementStats}/>
         )}
       </AnimatePresence>
 

@@ -3,7 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CHARACTERS, type CharacterId } from './AvatarCharacter'
 import Character3D from './Character3D'
 import type { Theme } from '../types'
-import type { DBCharacter } from '../lib/achievementEvaluator'
+import type { DBCharacter, DBAchievement } from '../lib/achievementEvaluator'
+import { getConditionProgress } from '../lib/achievementEvaluator'
+import type { AchievementStats } from '../data/achievements'
 
 // ─── Color palettes per character class ───────────────────────────────────────
 const PALETTES: Record<string, Array<[string, string]>> = {
@@ -56,9 +58,11 @@ interface AvatarCreatorProps {
   theme: Theme
   unlockedCharacters?: Set<string>
   dbCharacters?: DBCharacter[]
+  dbAchievements?: DBAchievement[]
+  achievementStats?: AchievementStats | null
 }
 
-export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lion', initialPrimary, initialSecondary, initialUseTexture, theme, unlockedCharacters, dbCharacters }: AvatarCreatorProps) {
+export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lion', initialPrimary, initialSecondary, initialUseTexture, theme, unlockedCharacters, dbCharacters, dbAchievements, achievementStats }: AvatarCreatorProps) {
   const [selected, setSelected] = useState<string>(initialCharacter)
 
   const builtinDef = CHARACTERS.find(c => c.id === selected)
@@ -99,7 +103,18 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
     }
     return { label: 'Custom', color: '#C8A96E' }
   })()
-  const unlockHint = (UNLOCK_HINT as Record<string, { name: string; hint: string } | undefined>)[selected]
+  // Find achievement for locked DB character
+  const dbUnlockAch = (() => {
+    if (!dbAchievements || builtinDef) return null
+    return dbAchievements.find(a => a.reward_type === 'character' && a.reward_value === selected)
+  })()
+  const dbUnlockProgress = (() => {
+    if (!dbUnlockAch || !achievementStats) return null
+    return getConditionProgress(dbUnlockAch.condition, achievementStats)
+  })()
+
+  const unlockHint = (UNLOCK_HINT as Record<string, { name: string; hint: string } | undefined>)[selected] ??
+    (dbUnlockAch ? { name: dbUnlockAch.name, hint: dbUnlockAch.description } : null)
   const isCustom  = !builtinDef && !!customDef
   const hasColorPalette = !!PALETTES[selected]
 
@@ -164,7 +179,15 @@ export default function AvatarCreator({ onClose, onSave, initialCharacter = 'lio
                   Unlock via achievement
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 600, color: theme.fg, marginBottom: 2 }}>{unlockHint.name}</div>
-                <div style={{ fontSize: 11, color: theme.muted }}>{unlockHint.hint}</div>
+                <div style={{ fontSize: 11, color: theme.muted, marginBottom: dbUnlockProgress ? 8 : 0 }}>{unlockHint.hint}</div>
+                {dbUnlockProgress && (
+                  <div style={{ marginTop: 6 }}>
+                    <div style={{ fontSize: 10, color: theme.muted, marginBottom: 4 }}>{dbUnlockProgress.current} / {dbUnlockProgress.target}</div>
+                    <div style={{ height: 6, background: `${rarity.color}20`, borderRadius: 3, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', background: rarity.color, width: `${Math.min(100, (dbUnlockProgress.current / dbUnlockProgress.target) * 100)}%`, transition: 'width 0.3s' }} />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {selectedLocked && !unlockHint && (
