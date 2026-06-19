@@ -239,7 +239,7 @@ export default function ProfileScreen() {
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, position: 'relative' }}>
 
       {/* ── Hero ─────────────────────────────────────────────────────────────── */}
-      <div style={{ position: 'relative', overflow: 'hidden', paddingTop: 56, paddingBottom: 24, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ position: 'relative', overflow: 'hidden', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 56px)', paddingBottom: 24, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
         <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse at 50% 80%, ${primaryColor}20 0%, transparent 70%)`, pointerEvents: 'none' }}/>
 
         <div style={{ textAlign: 'center', marginBottom: 8, zIndex: 1 }}>

@@ -154,7 +154,7 @@ export function HomeScreen() {
         </button>
       </div>
 
-      <div style={{ flex: 1, padding: '64px 22px 0' }}>
+      <div style={{ flex: 1, padding: '22px 22px 0', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)' }}>
 
         {/* Greeting */}
         <div style={{ marginBottom: 28 }}>

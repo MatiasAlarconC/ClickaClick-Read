@@ -189,7 +189,7 @@ export default function AchievementsScreen() {
   return (
     <div style={{ minHeight: '100%', background: theme.bg }}>
       {/* Header */}
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: theme.bg, borderBottom: `1px solid ${theme.border}`, padding: '56px 22px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: theme.bg, borderBottom: `1px solid ${theme.border}`, padding: '16px 22px 16px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 56px)', display: 'flex', alignItems: 'center', gap: 14 }}>
         <button onClick={() => navigate(-1)} style={{ width: 34, height: 34, borderRadius: '50%', background: theme.bgSecondary, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M6 1L1 6L6 11" stroke={theme.fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>

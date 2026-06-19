@@ -213,7 +213,7 @@ export default function StatsScreen() {
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
-      <div style={{ flex: 1, padding: '64px 22px 0' }}>
+      <div style={{ flex: 1, padding: '22px 22px 0', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)' }}>
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 400, color: theme.fg, letterSpacing: -1, lineHeight: 1.15 }}>Your Reading<br />Life</div>
         </div>
@@ -290,8 +290,10 @@ export default function StatsScreen() {
                       ))}
                     </div>
                     <div style={{ display: 'flex', gap: HGAP }}>
-                      {[...Array(WEEKS)].map((_, week) => (
-                        <div key={week} style={{ display: 'flex', flexDirection: 'column', gap: HGAP }}>
+                      {(() => {
+                        const monthStartCols = new Set(heatmapMonthLabels.map(l => l.col))
+                        return [...Array(WEEKS)].map((_, week) => (
+                        <div key={week} style={{ display: 'flex', flexDirection: 'column', gap: HGAP, marginLeft: week > 0 && monthStartCols.has(week) ? 5 : 0 }}>
                           {[...Array(7)].map((_, day) => {
                             const cell = heatmap[week * 7 + day]
                             const isFuture = cell?.date && cell.date > new Date()
@@ -307,7 +309,8 @@ export default function StatsScreen() {
                             )
                           })}
                         </div>
-                      ))}
+                      ))
+                      })()}
                     </div>
                   </div>
                 </div>
