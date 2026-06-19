@@ -372,12 +372,12 @@ export default function BookDetailScreen() {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ minHeight: '100%', background: theme.bg, position: 'relative' }}>
       {/* Back */}
-      <button onClick={() => navigate(-1)} style={{ position: 'absolute', top: 16, left: 16, zIndex: 20, width: 36, height: 36, borderRadius: '50%', background: theme.bgElevated, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
+      <button onClick={() => navigate(-1)} style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 16px)', left: 16, zIndex: 20, width: 36, height: 36, borderRadius: '50%', background: theme.bgElevated, border: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}>
         <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M6 1L1 6L6 11" stroke={theme.fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
       </button>
 
       {/* 3D cover hero */}
-      <div style={{ background: theme.bgSecondary, paddingTop: 56, paddingBottom: 16 }}>
+      <div style={{ background: theme.bgSecondary, paddingTop: 'calc(env(safe-area-inset-top, 0px) + 56px)', paddingBottom: 16 }}>
         <ErrorBoundary fallback={null}>
           <Suspense fallback={<div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner color={theme.muted} /></div>}>
             <Book3D coverUrl={book.cover_url} theme={theme} />

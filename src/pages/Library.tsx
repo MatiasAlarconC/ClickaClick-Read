@@ -186,7 +186,7 @@ export default function LibraryScreen() {
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, position: 'relative', paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
-      <div style={{ flex: 1, padding: '64px 22px 0' }}>
+      <div style={{ flex: 1, padding: '22px 22px 0', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20 }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 400, color: theme.fg, letterSpacing: -1 }}>Library</div>
           <div style={{ fontSize: 12, color: theme.muted, paddingBottom: 4 }}>{totalBooks} books</div>
@@ -359,14 +359,15 @@ function renderFinishedGrouped(
     if (group.length < 2 || key.startsWith('__solo__')) {
       // Standalone book
       const b = group[0]
-      const idx = finishedBooks.indexOf(b)
       elements.push(
-        <SwipeableBookRow key={b.id} book={b} index={idx} total={finishedBooks.length} tab="finished" theme={theme} userId={userId}
-          sessions={sessionsByBook[b.book_id] ?? []}
-          onPress={() => navigate('/detail', { state: { book: b.book } })}
-          onDelete={() => { setBooks(prev => ({ ...prev, finished: prev.finished.filter(x => x.id !== b.id) })); sb.from('user_books').delete().eq('id', b.id) }}
-          onFinish={() => {}}
-        />
+        <div key={b.id} style={{ marginBottom: 14, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
+          <SwipeableBookRow book={b} index={0} total={1} tab="finished" theme={theme} userId={userId}
+            sessions={sessionsByBook[b.book_id] ?? []}
+            onPress={() => navigate('/detail', { state: { book: b.book } })}
+            onDelete={() => { setBooks(prev => ({ ...prev, finished: prev.finished.filter(x => x.id !== b.id) })); sb.from('user_books').delete().eq('id', b.id) }}
+            onFinish={() => {}}
+          />
+        </div>
       )
     } else {
       // Series group card
