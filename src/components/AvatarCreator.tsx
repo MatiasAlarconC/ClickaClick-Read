@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { CHARACTERS, type CharacterId } from './AvatarCharacter'
 import Character3D from './Character3D'
 import type { Theme } from '../types'
-import type { DBCharacter, DBAchievement, AchievementStats } from '../lib/achievementEvaluator'
+import type { DBCharacter, DBAchievement } from '../lib/achievementEvaluator'
 import { getConditionProgress } from '../lib/achievementEvaluator'
+import type { AchievementStats } from '../data/achievements'
 
 // ─── Color palettes per character class ───────────────────────────────────────
 const PALETTES: Record<string, Array<[string, string]>> = {

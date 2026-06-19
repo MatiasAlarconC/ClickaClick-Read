@@ -183,22 +183,26 @@ export default function LibraryScreen() {
 
   useEffect(() => {
     if (!user?.id) return
-    supabase.from('user_books')
-      .select('book_id, note_summary, note_summary_range, book:books(title, author)')
-      .eq('user_id', user.id)
-      .not('note_summary', 'is', null)
-      .then(({ data }) => {
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('user_books')
+          .select('book_id, note_summary, note_summary_range, book:books(title, author)')
+          .eq('user_id', user.id)
+          .not('note_summary', 'is', null)
         if (!data) return
-        const list: SavedSummary[] = data.map(row => ({
+        const list: SavedSummary[] = data.map((row: any) => ({
           bookId: row.book_id,
-          bookTitle: (row.book as any)?.title ?? 'Unknown',
-          bookAuthor: (row.book as any)?.author ?? 'Unknown',
+          bookTitle: row.book?.title ?? 'Unknown',
+          bookAuthor: row.book?.author ?? 'Unknown',
           summary: row.note_summary,
-          pageRange: (row.note_summary_range as any) ?? { from: null, to: null },
+          pageRange: row.note_summary_range ?? { from: null, to: null },
           savedAt: new Date().toISOString(),
         }))
         setDbSummaries(list)
-      }).catch(() => setDbSummaries([]))
+      } catch {
+        setDbSummaries([])
+      }
+    })()
   }, [user?.id])
 
   const localSummaries: SavedSummary[] = (() => {
