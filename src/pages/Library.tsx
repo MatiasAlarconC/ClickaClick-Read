@@ -47,10 +47,47 @@ export default function LibraryScreen() {
 
   const recCacheKey = `clickaclick_recs_v1_${user?.id ?? ''}`
 
+  const saveRecsCache = (data: BookRecommendation[]) => {
+    const ts = Date.now()
+    try { localStorage.setItem(recCacheKey, JSON.stringify({ ts, data })) } catch { /* ignore */ }
+    if (user) {
+      supabase.from('user_recs_cache').upsert(
+        { user_id: user.id, recs: data, generated_at: new Date(ts).toISOString() },
+        { onConflict: 'user_id' }
+      ).then(() => {})
+    }
+  }
+
+  // Silently pre-loads recs from localStorage or Supabase cache (no Gemini call).
+  // Called in background after books load so the For You tab is ready instantly.
+  const preloadRecsFromCache = async () => {
+    if (!user || recs.length > 0) return
+    // localStorage first (fastest)
+    try {
+      const raw = localStorage.getItem(recCacheKey)
+      if (raw) {
+        const { ts, data } = JSON.parse(raw)
+        if (Date.now() - ts < REC_CACHE_TTL && data?.length > 0) { setRecs(data); return }
+      }
+    } catch { /* ignore */ }
+    // Supabase cache (cross-device sync)
+    try {
+      const { data: cached } = await supabase
+        .from('user_recs_cache').select('recs, generated_at').eq('user_id', user.id).single()
+      if (cached?.recs && Array.isArray(cached.recs) && cached.recs.length > 0) {
+        const genMs = new Date(cached.generated_at).getTime()
+        if (Date.now() - genMs < REC_CACHE_TTL) {
+          setRecs(cached.recs as BookRecommendation[])
+          try { localStorage.setItem(recCacheKey, JSON.stringify({ ts: genMs, data: cached.recs })) } catch { /* ignore */ }
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
   const loadDiscover = async (force = false) => {
     if (!user) return
     setRecError(false); setNoBooksForRecs(false)
-    // Check localStorage cache
+    // 1. Check localStorage
     if (!force) {
       try {
         const raw = localStorage.getItem(recCacheKey)
@@ -60,10 +97,25 @@ export default function LibraryScreen() {
         }
       } catch { /* ignore */ }
     }
+    // 2. Check Supabase cache (cross-device sync)
+    if (!force) {
+      try {
+        const { data: cached } = await supabase
+          .from('user_recs_cache').select('recs, generated_at').eq('user_id', user.id).single()
+        if (cached?.recs && Array.isArray(cached.recs) && cached.recs.length > 0) {
+          const genMs = new Date(cached.generated_at).getTime()
+          if (Date.now() - genMs < REC_CACHE_TTL) {
+            setRecs(cached.recs as BookRecommendation[])
+            try { localStorage.setItem(recCacheKey, JSON.stringify({ ts: genMs, data: cached.recs })) } catch { /* ignore */ }
+            return
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    // 3. Generate via Gemini
     if (!isGeminiConfigured()) {
       setRecError(true)
       setRecErrorMsg('No API key configured. Add VITE_GEMINI_API_KEY in Vercel.')
-      setRecLoading(false)
       return
     }
     setRecLoading(true)
@@ -82,7 +134,7 @@ export default function LibraryScreen() {
       const results = await getRecommendations({ finishedBooks: bookList, userId: user.id, count: 10 })
       const enriched = await enrichRecs(results)
       setRecs(enriched)
-      try { localStorage.setItem(recCacheKey, JSON.stringify({ ts: Date.now(), data: enriched })) } catch { /* ignore */ }
+      saveRecsCache(enriched)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       setRecError(true)
@@ -108,7 +160,9 @@ export default function LibraryScreen() {
     const results = await getRecommendations({ finishedBooks: bookList, userId: user.id, count: 10, exclude })
     if (!results.length) { setRecLoadingMore(false); return }
     const enriched = await enrichRecs(results)
-    setRecs(prev => [...prev, ...enriched])
+    const merged = [...recs, ...enriched]
+    setRecs(merged)
+    saveRecsCache(merged)
     setRecLoadingMore(false)
   }
 
@@ -151,6 +205,9 @@ export default function LibraryScreen() {
       setLoading(false)
       // Cache fresh data for next visit
       try { localStorage.setItem(cacheKey, JSON.stringify(grouped)) } catch { /* ignore */ }
+
+      // Pre-load recommendations from cache (localStorage or Supabase) in background
+      preloadRecsFromCache()
 
       // Load sessions in background — doesn't block book display
       const readingIds = grouped.reading.map(b => b.book_id)
@@ -220,10 +277,18 @@ export default function LibraryScreen() {
           <div style={{ fontSize: 12, color: theme.muted, paddingBottom: 4 }}>{totalBooks} books</div>
         </div>
 
-        {/* Tabs */}
-        <div style={{ display: 'flex', gap: 7, marginBottom: 22, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          {(Object.keys(TAB_LABELS) as LibTab[]).map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ padding: '7px 14px', borderRadius: 999, flexShrink: 0, background: tab === t ? theme.accent : theme.bgSecondary, color: tab === t ? theme.accentFg : theme.muted, border: 'none', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500 }}>
+        {/* Tabs — row 1: book status */}
+        <div style={{ display: 'flex', gap: 7, marginBottom: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+          {(['reading', 'finished', 'want_to_read', 'dropped'] as LibTab[]).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ padding: '6px 13px', borderRadius: 999, flexShrink: 0, background: tab === t ? theme.accent : theme.bgSecondary, color: tab === t ? theme.accentFg : theme.muted, border: 'none', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500 }}>
+              {TAB_LABELS[t]}
+            </button>
+          ))}
+        </div>
+        {/* Tabs — row 2: features */}
+        <div style={{ display: 'flex', gap: 7, marginBottom: 22 }}>
+          {(['summaries', 'discover'] as LibTab[]).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ padding: '6px 13px', borderRadius: 999, flexShrink: 0, background: tab === t ? theme.fg : theme.bgSecondary, color: tab === t ? theme.bg : theme.fgDim, border: 'none', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 500 }}>
               {TAB_LABELS[t]}
             </button>
           ))}
@@ -508,7 +573,7 @@ function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onD
         </motion.div>
       </div>
 
-      <motion.button drag="x" dragConstraints={{ left: 0, right: 0 }} style={{ x, display: 'flex', gap: 14, padding: '14px 0', background: theme.bg, border: 'none', textAlign: 'left', borderBottom: index < total - 1 ? `1px solid ${theme.border}` : 'none', cursor: 'pointer', width: '100%', position: 'relative', zIndex: 1 }}
+      <motion.button drag="x" dragConstraints={{ left: 0, right: 0 }} style={{ x, display: 'flex', gap: 14, padding: '14px 16px', background: theme.bg, border: 'none', textAlign: 'left', borderBottom: index < total - 1 ? `1px solid ${theme.border}` : 'none', cursor: 'pointer', width: '100%', position: 'relative', zIndex: 1 }}
         onDragEnd={(_, info) => {
           if (info.offset.x < -80) onDelete()
           if (info.offset.x > 80 && tab === 'reading') onFinish()
