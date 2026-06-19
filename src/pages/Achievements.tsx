@@ -249,35 +249,26 @@ export default function AchievementsScreen() {
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 14 }}>Unlocked Characters</div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {/* Built-in characters: 3D when unlocked, SVG when locked (saves WebGL contexts) */}
+              {/* Built-in characters: 3D for both locked and unlocked */}
               {CHARACTERS.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
                     <div style={{ width: 72, height: 72, background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.defaultPrimary + '80' : theme.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: unlocked ? 'none' : 'grayscale(0.7)' }}>
-                      {unlocked ? (
-                        <Character3D character={c.id} size={72} interactive={false} locked={false} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} />
-                      ) : (
-                        <AvatarCharacter character={c.id} primaryColor='#666' secondaryColor='#333' size={56} />
-                      )}
+                      <Character3D character={c.id} size={72} interactive={false} locked={!unlocked} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} />
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{c.name}</div>
                     {!unlocked && <div style={{ fontSize: 10, color: theme.muted }}>locked</div>}
                   </div>
                 )
               })}
-              {/* DB characters: 3D when unlocked, initial letter when locked */}
+              {/* DB characters: show 3D model for both locked and unlocked */}
               {dbCharacters.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
-                const initial = c.name.charAt(0).toUpperCase()
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
                     <div style={{ width: 72, height: 72, background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.default_primary + '80' : theme.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: unlocked ? 'none' : 'grayscale(0.7)' }}>
-                      {unlocked ? (
-                        <Character3D character={c.id} size={72} interactive={false} locked={false} primaryColor={c.default_primary} secondaryColor={c.default_secondary} glbUrl={c.glb_url} modelScale={c.zoom_scale} offsetX={c.offset_x} offsetY={c.offset_y} textureUrl={c.texture_url} textureRoughnessUrl={c.texture_roughness_url} />
-                      ) : (
-                        <span style={{ fontSize: 26, fontWeight: 700, color: 'rgba(255,255,255,0.5)', fontFamily: 'Georgia, serif' }}>{initial}</span>
-                      )}
+                      <Character3D character={c.id} size={72} interactive={false} locked={!unlocked} primaryColor={c.default_primary} secondaryColor={c.default_secondary} glbUrl={c.glb_url} modelScale={c.zoom_scale} offsetX={c.offset_x} offsetY={c.offset_y} textureUrl={c.texture_url} textureRoughnessUrl={c.texture_roughness_url} />
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{c.name}</div>
                     {!unlocked && <div style={{ fontSize: 10, color: theme.muted }}>locked</div>}
