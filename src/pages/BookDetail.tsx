@@ -50,6 +50,31 @@ const Book3D = React.lazy(() => import('../components/Book3D'))
 
 type DetailTab = 'overview' | 'details' | 'notes' | 'sessions'
 
+// Loads and displays the summary for the previous book in a series from Supabase
+function PrevSeriesSummary({ userId, prevTitle, position, theme }: {
+  userId: string; prevTitle: string; position: number; theme: import('../types').Theme
+}) {
+  const [summary, setSummary] = useState<string | null>(null)
+  useEffect(() => {
+    supabase.from('books').select('id').ilike('title', prevTitle).maybeSingle()
+      .then(({ data: b }) => {
+        if (!b?.id) return
+        supabase.from('user_books').select('note_summary')
+          .eq('user_id', userId).eq('book_id', b.id).maybeSingle()
+          .then(({ data: ub }) => { if (ub?.note_summary) setSummary(ub.note_summary as string) })
+      })
+  }, [userId, prevTitle])
+  if (!summary) return null
+  return (
+    <div style={{ marginBottom: 20, padding: 14, background: theme.bgSecondary, borderRadius: 14, border: `1px solid ${theme.border}` }}>
+      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 6 }}>
+        Book {position - 1} recap · {prevTitle}
+      </div>
+      <div style={{ fontSize: 13, color: theme.fgDim, lineHeight: 1.7 }}>{summary}</div>
+    </div>
+  )
+}
+
 export default function BookDetailScreen() {
   const { theme } = useTheme()
   const { user } = useAuth()
@@ -65,16 +90,8 @@ export default function BookDetailScreen() {
   const [newNote, setNewNote] = useState('')
   const [newNotePage, setNewNotePage] = useState('')
   const [addingToLib, setAddingToLib] = useState(false)
-  const summaryStorageKey = book?.id ? `notes_summary_${book.id}` : null
-  const [notesSummary, setNotesSummary] = useState<string | null>(() => {
-    try { return summaryStorageKey ? localStorage.getItem(summaryStorageKey) : null } catch { return null }
-  })
-  const [summaryPageRange, setSummaryPageRange] = useState<{ from: number | null; to: number | null } | null>(() => {
-    try {
-      const raw = summaryStorageKey ? localStorage.getItem(`${summaryStorageKey}_range`) : null
-      return raw ? JSON.parse(raw) : null
-    } catch { return null }
-  })
+  const [notesSummary, setNotesSummary] = useState<string | null>(null)
+  const [summaryPageRange, setSummaryPageRange] = useState<{ from: number | null; to: number | null } | null>(null)
   const [summarizing, setSummarizing] = useState(false)
   const [summaryError, setSummaryError] = useState(false)
   const [customPages, setCustomPages] = useState<string>('')
@@ -155,7 +172,7 @@ export default function BookDetailScreen() {
         }
 
         // Check if book is in user's library (with book join so Session gets cover/title)
-        supabase.from('user_books').select('*, book:books(*)')
+        supabase.from('user_books').select('*, book:books(*), note_summary, note_summary_range')
           .eq('user_id', user.id)
           .eq('book_id', dbId)
           .maybeSingle()
@@ -165,8 +182,12 @@ export default function BookDetailScreen() {
               setRating(data.user_rating ?? 0)
               setCustomPages(String(data.custom_pages ?? book.pages ?? ''))
               setEpubPath(data.epub_storage_path ?? null)
-              // Update synopsis from DB if the nav state didn't have one
               if (!synopsis && data.book?.synopsis) setSynopsis(data.book.synopsis)
+              // Load note summary from DB (cross-device)
+              if (data.note_summary) {
+                setNotesSummary(data.note_summary as string)
+                setSummaryPageRange(data.note_summary_range as { from: number | null; to: number | null } ?? null)
+              }
             }
           })
 
@@ -455,7 +476,7 @@ export default function BookDetailScreen() {
 
         {/* Tabs */}
         <div style={{ display: 'flex', borderBottom: `1px solid ${theme.border}`, marginBottom: 22 }}>
-          {(['overview','details','notes','sessions'] as DetailTab[]).map(tab => {
+          {(['overview','details', ...(userBook ? ['notes','sessions'] : [])] as DetailTab[]).map(tab => {
             const isActive = tab === activeTab
             return (
               <button key={tab} onClick={() => setActiveTab(tab)} style={{ flex: 1, padding: '10px 0', background: 'none', border: 'none', borderBottom: isActive ? `2px solid ${theme.fg}` : '2px solid transparent', marginBottom: -1, fontSize: 13.5, color: isActive ? theme.fg : theme.muted, fontWeight: isActive ? 600 : 400, textTransform: 'capitalize' }}>{tab}</button>
@@ -569,22 +590,15 @@ export default function BookDetailScreen() {
         {/* Notes tab */}
         {activeTab === 'notes' && (
           <div style={{ paddingBottom: 40 }}>
-            {/* Previous book in series summary context */}
-            {seriesInfo && seriesInfo.position > 1 && seriesInfo.prevTitle && user?.id && (() => {
-              const prevTitle = seriesInfo.prevTitle!.toLowerCase()
-              let allSummaries: Array<{ bookTitle: string; summary: string; savedAt: string }> = []
-              try { allSummaries = JSON.parse(localStorage.getItem(`cc_summaries_${user.id}`) ?? '[]') } catch {}
-              const prevSummary = allSummaries.find(s => s.bookTitle.toLowerCase() === prevTitle)
-              if (!prevSummary) return null
-              return (
-                <div style={{ marginBottom: 20, padding: 14, background: theme.bgSecondary, borderRadius: 14, border: `1px solid ${theme.border}` }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 6 }}>
-                    Book {seriesInfo.position - 1} recap · {seriesInfo.prevTitle}
-                  </div>
-                  <div style={{ fontSize: 13, color: theme.fgDim, lineHeight: 1.7 }}>{prevSummary.summary}</div>
-                </div>
-              )
-            })()}
+            {/* Previous book in series summary context — loaded from Supabase */}
+            {seriesInfo && seriesInfo.position > 1 && seriesInfo.prevTitle && user?.id && bookDbId && (
+              <PrevSeriesSummary
+                userId={user.id}
+                prevTitle={seriesInfo.prevTitle}
+                position={seriesInfo.position}
+                theme={theme}
+              />
+            )}
             {/* Add note */}
             <div style={{ background: theme.bgSecondary, borderRadius: 14, padding: 16, marginBottom: 20 }}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
@@ -609,21 +623,30 @@ export default function BookDetailScreen() {
                         const range = pages.length > 0
                           ? { from: Math.min(...pages), to: Math.max(...pages) }
                           : { from: null, to: null }
-                        const s = await summarizeNotes({ notes, bookTitle: book?.title ?? 'this book', userId: user?.id ?? null })
+                        // Fetch previous book summary for series context
+                        let prevSummary: string | null = null
+                        if (seriesInfo && seriesInfo.position > 1 && seriesInfo.prevTitle && user?.id) {
+                          const { data: prevBook } = await supabase
+                            .from('books').select('id').ilike('title', seriesInfo.prevTitle).maybeSingle()
+                          if (prevBook?.id) {
+                            const { data: prevUB } = await supabase
+                              .from('user_books').select('note_summary')
+                              .eq('user_id', user.id).eq('book_id', prevBook.id).maybeSingle()
+                            prevSummary = prevUB?.note_summary ?? null
+                          }
+                        }
+                        const s = await summarizeNotes({
+                          notes, bookTitle: book?.title ?? 'this book',
+                          userId: user?.id ?? null,
+                          previousBookSummary: prevSummary,
+                        })
                         setNotesSummary(s)
                         setSummaryPageRange(range)
-                        if (summaryStorageKey) {
-                          localStorage.setItem(summaryStorageKey, s)
-                          localStorage.setItem(`${summaryStorageKey}_range`, JSON.stringify(range))
-                        }
-                        // Persist to global summaries store when the book is finished
-                        if (userBook?.status === 'finished' && user?.id && bookDbId) {
-                          const sKey = `cc_summaries_${user.id}`
-                          let list: Array<{ bookId: string; bookTitle: string; bookAuthor: string; summary: string; pageRange: typeof range; savedAt: string }> = []
-                          try { list = JSON.parse(localStorage.getItem(sKey) ?? '[]') } catch {}
-                          list = list.filter(x => x.bookId !== bookDbId)
-                          list.unshift({ bookId: bookDbId, bookTitle: book?.title ?? '', bookAuthor: book?.author ?? '', summary: s, pageRange: range, savedAt: new Date().toISOString() })
-                          localStorage.setItem(sKey, JSON.stringify(list.slice(0, 50)))
+                        // Save to Supabase (cross-device sync)
+                        if (userBook?.id) {
+                          await supabase.from('user_books')
+                            .update({ note_summary: s, note_summary_range: range })
+                            .eq('id', userBook.id)
                         }
                       } catch { setSummaryError(true) }
                       setSummarizing(false)

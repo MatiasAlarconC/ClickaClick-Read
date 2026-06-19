@@ -292,8 +292,9 @@ export default function LibraryScreen() {
             </div>
           ) : tab === 'finished'
             ? renderFinishedGrouped(books.finished, theme, navigate, sessionsByBook, user?.id ?? '', setBooks, supabase)
-            : books[tab as BookTab].map((book, i) => (
-              <SwipeableBookRow key={book.id} book={book} index={i} total={books[tab as BookTab].length} tab={tab as BookTab} theme={theme} userId={user?.id ?? ''}
+            : books[tab as BookTab].map((book) => (
+              <div key={book.id} style={{ marginBottom: 14, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
+              <SwipeableBookRow book={book} index={0} total={1} tab={tab as BookTab} theme={theme} userId={user?.id ?? ''}
                 sessions={sessionsByBook[book.book_id] ?? []}
                 onPress={() => navigate('/detail', { state: { book: book.book } })}
                 onDelete={() => {
@@ -311,6 +312,7 @@ export default function LibraryScreen() {
                   }
                 }}
               />
+              </div>
             ))
           }
         </div>
