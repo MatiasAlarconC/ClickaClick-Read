@@ -258,7 +258,7 @@ export default function SearchScreen() {
         {searched && !loading && (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
             <div style={{ fontSize: 12, color: theme.muted }}>
-              {totalItems > 0 ? `${totalItems.toLocaleString()} books found` : `${filtered.length} ${filtered.length === 1 ? 'book' : 'books'}`}
+              {filtered.length > 0 ? `Top ${filtered.length} results` : 'No books found'}
             </div>
             {totalPages > 1 && (
               <div style={{ fontSize: 12, color: theme.muted }}>

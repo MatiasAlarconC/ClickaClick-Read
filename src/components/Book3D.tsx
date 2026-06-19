@@ -4,47 +4,24 @@ import { OrbitControls, MeshReflectorMaterial, ContactShadows, Environment } fro
 import * as THREE from 'three'
 import type { Theme } from '../types'
 
-// Canvas texture with horizontal page lines for the book edges
-function makePageEdgeTexture(): THREE.CanvasTexture {
-  const W = 64, H = 512
-  const canvas = document.createElement('canvas')
-  canvas.width = W; canvas.height = H
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#EDE8DC'
-  ctx.fillRect(0, 0, W, H)
-  // Subtle gradient from left (slightly shadowed spine side) to right
-  const grad = ctx.createLinearGradient(0, 0, W, 0)
-  grad.addColorStop(0, 'rgba(0,0,0,0.12)')
-  grad.addColorStop(1, 'rgba(0,0,0,0)')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, W, H)
-  // Page line marks — thin dark lines every ~2px
-  for (let y = 0; y < H; y += 2) {
-    const alpha = y % 8 === 0 ? 0.18 : 0.06
-    ctx.fillStyle = `rgba(80,60,40,${alpha})`
-    ctx.fillRect(0, y, W, 1)
+// 1×64 DataTexture: alternating cream/dark rows → crisp page lines when repeated
+function makePageLineTex(): THREE.DataTexture {
+  const H = 64
+  const data = new Uint8Array(H * 4)
+  for (let y = 0; y < H; y++) {
+    const i = y * 4
+    const dark = y % 6 < 1   // one dark row every 6 rows
+    data[i]   = dark ? 170 : 237
+    data[i+1] = dark ? 162 : 232
+    data[i+2] = dark ? 145 : 220
+    data[i+3] = 255
   }
-  const tex = new THREE.CanvasTexture(canvas)
-  tex.wrapS = THREE.RepeatWrapping
-  tex.wrapT = THREE.ClampToEdgeWrapping
-  return tex
-}
-
-// Spine texture with faint vertical grain
-function makeSpineTexture(): THREE.CanvasTexture {
-  const W = 32, H = 512
-  const canvas = document.createElement('canvas')
-  canvas.width = W; canvas.height = H
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#0a0a0a'
-  ctx.fillRect(0, 0, W, H)
-  // Subtle vertical grain
-  for (let x = 0; x < W; x += 3) {
-    const alpha = Math.random() * 0.05
-    ctx.fillStyle = `rgba(255,255,255,${alpha})`
-    ctx.fillRect(x, 0, 1, H)
-  }
-  const tex = new THREE.CanvasTexture(canvas)
+  const tex = new THREE.DataTexture(data, 1, H, THREE.RGBAFormat)
+  tex.magFilter = THREE.NearestFilter
+  tex.minFilter = THREE.NearestFilter
+  tex.wrapS = THREE.ClampToEdgeWrapping
+  tex.wrapT = THREE.RepeatWrapping
+  tex.needsUpdate = true
   return tex
 }
 
@@ -53,8 +30,12 @@ function proxyCoverUrl(url: string | null): string | null {
   return `/api/cover?url=${encodeURIComponent(url)}`
 }
 
+const PAGE_LINES = 22
+const BOOK_W = 1.32, BOOK_H = 1.9, BOOK_D = 0.24
+
 function BookMesh({ coverUrl }: { coverUrl: string | null }) {
   const groupRef = useRef<THREE.Group>(null)
+  const linesRef = useRef<THREE.InstancedMesh>(null)
   const [texture, setTexture] = useState<THREE.Texture | null>(null)
   const scaleRef = useRef(0)
   const velRef = useRef(0)
@@ -70,6 +51,19 @@ function BookMesh({ coverUrl }: { coverUrl: string | null }) {
     )
   }, [coverUrl])
 
+  // Place page-line strips on right edge via instanced mesh
+  useEffect(() => {
+    const mesh = linesRef.current
+    if (!mesh) return
+    const m = new THREE.Matrix4()
+    for (let i = 0; i < PAGE_LINES; i++) {
+      const y = -BOOK_H / 2 + BOOK_H * (i + 0.5) / PAGE_LINES
+      m.setPosition(BOOK_W / 2 + 0.0015, y, 0)
+      mesh.setMatrixAt(i, m)
+    }
+    mesh.instanceMatrix.needsUpdate = true
+  }, [])
+
   useFrame(({ clock }, delta) => {
     if (!groupRef.current) return
     // Spring entry
@@ -78,7 +72,6 @@ function BookMesh({ coverUrl }: { coverUrl: string | null }) {
     scaleRef.current = Math.min(1.01, scaleRef.current + velRef.current * delta * 60)
     groupRef.current.scale.setScalar(scaleRef.current)
 
-    // Graceful showcase rotation
     const t = clock.getElapsedTime()
     groupRef.current.rotation.y = t * 0.2 + Math.sin(t * 0.15) * 0.18
     groupRef.current.rotation.x = Math.sin(t * 0.28) * 0.035
@@ -86,58 +79,40 @@ function BookMesh({ coverUrl }: { coverUrl: string | null }) {
     groupRef.current.position.y = Math.sin(t * 0.45) * 0.09 + Math.sin(t * 1.05) * 0.02
   })
 
-  // Book dimensions
-  const W = 1.32, H = 1.9, D = 0.24
-
-  // BoxGeometry face order: +x=pages edge, -x=spine, +y=top, -y=bottom, +z=front cover, -z=back
+  // BoxGeometry faces: +x=pages edge, -x=spine, +y=top, -y=bottom, +z=front cover, -z=back
   const materials = useMemo(() => {
-    const pageEdgeTex = makePageEdgeTexture()
-    const spineTex = makeSpineTexture()
+    const pageTex = makePageLineTex()
+    pageTex.repeat.set(1, 10)   // 10 repeats → ~166 visible page lines
 
     const coverMat = texture
       ? new THREE.MeshStandardMaterial({ map: texture, roughness: 0.18, metalness: 0.05, envMapIntensity: 1.4 })
       : new THREE.MeshStandardMaterial({ color: '#1a1a1a', roughness: 0.5, metalness: 0.1 })
 
     const pageEdgeMat = new THREE.MeshStandardMaterial({
-      map: pageEdgeTex,
-      roughness: 0.88,
-      metalness: 0.0,
-      envMapIntensity: 0.3,
+      map: pageTex, roughness: 0.9, metalness: 0.0, envMapIntensity: 0.2,
     })
     const pageTopMat = new THREE.MeshStandardMaterial({
-      map: pageEdgeTex,
-      roughness: 0.9,
-      metalness: 0.0,
+      map: pageTex, roughness: 0.9, metalness: 0.0,
     })
-    const spineMat = new THREE.MeshStandardMaterial({
-      map: spineTex,
-      color: '#0f0f0f',
-      roughness: 0.88,
-      metalness: 0.04,
-    })
-    const backMat = new THREE.MeshStandardMaterial({ color: '#101010', roughness: 0.82, metalness: 0.05 })
+    const spineMat = new THREE.MeshStandardMaterial({ color: '#0d0d0d', roughness: 0.88, metalness: 0.04 })
+    const backMat  = new THREE.MeshStandardMaterial({ color: '#101010', roughness: 0.82, metalness: 0.05 })
 
     return [pageEdgeMat, spineMat, pageTopMat, pageTopMat, coverMat, backMat]
   }, [texture])
 
-  const geo = useMemo(() => new THREE.BoxGeometry(W, H, D, 1, 1, 1), [])
-
-  // Cover-edge bevel strip geometry (thin strip along front edges for thickness)
-  const coverEdgeGeo = useMemo(() => new THREE.BoxGeometry(0.012, H - 0.04, D + 0.002), [])
-  const coverEdgeMat = useMemo(() => new THREE.MeshStandardMaterial({ color: '#080808', roughness: 0.7, metalness: 0.08 }), [])
+  const lineGeo  = useMemo(() => new THREE.BoxGeometry(0.003, BOOK_H / (PAGE_LINES * 2.5), BOOK_D - 0.02), [])
+  const lineMat  = useMemo(() => new THREE.MeshBasicMaterial({ color: '#9a9080' }), [])
+  const bookGeo  = useMemo(() => new THREE.BoxGeometry(BOOK_W, BOOK_H, BOOK_D, 1, 1, 1), [])
 
   return (
     <group ref={groupRef}>
-      <mesh geometry={geo} material={materials} castShadow receiveShadow />
-      {/* Thin dark edge strip on cover-left (near spine) for visual depth */}
-      <mesh geometry={coverEdgeGeo} material={coverEdgeMat} position={[-W / 2 + 0.006, 0, 0]} castShadow />
-      {/* Thin edge on page side */}
-      <mesh geometry={coverEdgeGeo} material={coverEdgeMat} position={[W / 2 - 0.006, 0, 0]} castShadow />
+      <mesh geometry={bookGeo} material={materials} castShadow receiveShadow />
+      {/* Instanced page-separator lines on the right (pages) edge */}
+      <instancedMesh ref={linesRef} args={[lineGeo, lineMat, PAGE_LINES]} castShadow />
     </group>
   )
 }
 
-// Subtle atmospheric dust
 function Particles({ count = 18 }: { count?: number }) {
   const ref = useRef<THREE.Points>(null)
   const positions = useMemo(() => {
@@ -178,15 +153,11 @@ export default function Book3D({ coverUrl, theme: _theme }: { coverUrl: string |
         gl={{ alpha: true, antialias: true }}
         shadows
       >
-        {/* HDR environment for realistic cover reflections */}
         <Environment preset="city" background={false} />
-
-        {/* Warm key from top-right + cool fill from left + rim from behind */}
         <ambientLight intensity={0.3} />
         <directionalLight position={[3, 7, 4]} intensity={2.6} castShadow shadow-mapSize={[2048, 2048]} color="#fff8f0" />
         <directionalLight position={[-4, 2, 3]} intensity={0.35} color="#d0e8ff" />
         <pointLight position={[0, -0.5, -2.5]} intensity={0.4} color="#ffffff" />
-        {/* Subtle rim light to pop edges */}
         <pointLight position={[2, 3, -3]} intensity={0.6} color="#ffffff" />
 
         <Suspense fallback={null}>
@@ -202,7 +173,6 @@ export default function Book3D({ coverUrl, theme: _theme }: { coverUrl: string |
             color="#000000"
           />
 
-          {/* Glossy reflective floor */}
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.15, 0]}>
             <planeGeometry args={[12, 12]} />
             <MeshReflectorMaterial

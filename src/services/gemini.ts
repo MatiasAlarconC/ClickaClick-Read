@@ -122,12 +122,16 @@ export async function summarizeNotes(params: {
   notes: Array<{ page_number: number | null; content: string }>
   bookTitle: string
   userId: string | null
+  previousBookSummary?: string | null
 }): Promise<string> {
   const cfg = await getConfig()
   if (!cfg.enabled || !cfg.summary_enabled) throw new Error('AI summaries are disabled')
 
   const notesText = params.notes.map(n => `[p.${n.page_number ?? '?'}] ${n.content}`).join('\n')
-  const prompt = `I'm reading "${params.bookTitle}". Here are my reading notes:\n\n${notesText}\n\nWrite a concise 3-5 sentence summary of my reading progress and key insights based on these notes. Focus on themes, questions, and ideas I seem to be tracking. Write in second person ("You've been following...").`
+  const prevCtx = params.previousBookSummary
+    ? `\n\nFor context, here is what the reader noted about the previous book in this series:\n${params.previousBookSummary}\n`
+    : ''
+  const prompt = `I'm reading "${params.bookTitle}".${prevCtx}\n\nMy notes:\n${notesText}\n\nWrite a concise 3-5 sentence summary of my reading progress and key insights. Focus on themes, questions, and ideas I seem to be tracking. Write in second person ("You've been following...").`
 
   const { text, tokens } = await callGemini(prompt, cfg.model)
   await logUsage('notes_summary', tokens, cfg.model, params.userId)
