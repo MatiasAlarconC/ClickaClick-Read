@@ -249,13 +249,13 @@ export default function AchievementsScreen() {
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 14 }}>Unlocked Characters</div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {/* Built-in characters: 3D for both locked and unlocked */}
+              {/* Built-in characters: SVG avatars (no WebGL, no context limit issues) */}
               {CHARACTERS.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
-                    <div style={{ width: 72, height: 72, background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.defaultPrimary + '80' : theme.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: unlocked ? 'none' : 'grayscale(0.7)' }}>
-                      <Character3D character={c.id} size={72} interactive={false} locked={!unlocked} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} />
+                    <div style={{ width: 72, height: 72, background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.defaultPrimary + '80' : theme.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: unlocked ? 'none' : 'grayscale(0.85)' }}>
+                      <AvatarCharacter character={c.id} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} size={55} />
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{c.name}</div>
                     {!unlocked && <div style={{ fontSize: 10, color: theme.muted }}>locked</div>}
@@ -306,21 +306,22 @@ export default function AchievementsScreen() {
                         opacity: unlocked ? 1 : 0.55,
                       }}
                     >
-                      {/* Left icon: mini 3D character if this achievement unlocks one, else SVG medal */}
+                      {/* Left icon: SVG avatar for built-in chars, 3D for custom, medal for others */}
                       {ach.reward.type === 'character' ? (() => {
                         const charId = (ach.reward as { type: 'character'; characterId: string }).characterId
                         const dynChar = dbCharacters.find(c => c.id === charId)
+                        const builtinChar = CHARACTERS.find(c => c.id === charId)
                         return (
-                          <div style={{ flexShrink: 0, borderRadius: 12, overflow: 'hidden',
+                          <div style={{ flexShrink: 0, width: 72, height: 72, borderRadius: 12, overflow: 'hidden',
                             border: `2px solid ${unlocked ? TIER_COLORS[ach.tier] + '60' : theme.border}`,
-                            background: theme.bg }}>
-                            <Character3D
-                              character={charId}
-                              locked={!unlocked}
-                              size={72}
-                              interactive={false}
-                              glbUrl={dynChar?.glb_url}
-                            />
+                            background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            {builtinChar ? (
+                              <div style={{ filter: unlocked ? 'none' : 'grayscale(1)', opacity: unlocked ? 1 : 0.5 }}>
+                                <AvatarCharacter character={builtinChar.id} primaryColor={builtinChar.defaultPrimary} secondaryColor={builtinChar.defaultSecondary} size={55} />
+                              </div>
+                            ) : (
+                              <Character3D character={charId} locked={!unlocked} size={72} interactive={false} glbUrl={dynChar?.glb_url} />
+                            )}
                           </div>
                         )
                       })() : (
