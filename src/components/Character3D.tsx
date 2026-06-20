@@ -8,7 +8,7 @@
  * • Graceful SVG-ball fallback when the GLB is missing
  */
 
-import { Suspense, useRef, useEffect, useMemo, Component, type ReactNode } from 'react'
+import { Suspense, useRef, useEffect, useMemo, useState, useCallback, Component, type ReactNode } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useTexture, Environment, ContactShadows, OrbitControls, useAnimations } from '@react-three/drei'
 import * as THREE from 'three'
@@ -369,6 +369,98 @@ export default function Character3D({
         style={{ width: '100%', height: '100%' }}
       >
         <CharacterScene id={id} locked={locked} interactive={isInteractive} primaryColor={primaryColor} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} textureUrl={textureUrl} textureRoughnessUrl={textureRoughnessUrl} />
+      </Canvas>
+    </div>
+  )
+}
+
+// ─── Snapshot batch renderer ──────────────────────────────────────────────────
+// Renders built-in characters sequentially in ONE hidden Canvas and captures
+// static PNGs. Eliminates the need for multiple WebGL contexts in grid views.
+
+function SnapshotScene({ id, primaryColor, locked, glbUrl, onCapture }: {
+  id: string; primaryColor?: string; locked?: boolean; glbUrl?: string
+  onCapture: (dataUrl: string) => void
+}) {
+  const { gl, scene, camera } = useThree()
+  const frameRef = useRef(0)
+  const doneRef = useRef(false)
+
+  useFrame(() => {
+    if (doneRef.current) return
+    frameRef.current++
+    if (frameRef.current >= 24) {
+      doneRef.current = true
+      gl.render(scene, camera)
+      onCapture(gl.domElement.toDataURL('image/png'))
+    }
+  })
+
+  return (
+    <>
+      <ambientLight intensity={0.65} />
+      <directionalLight position={[2, 4, 3]} intensity={1.6} color="#fff8f0" />
+      <directionalLight position={[-2, 1, -1]} intensity={0.45} color="#c0d8ff" />
+      <ModelErrorBoundary id={id} locked={locked}>
+        <Suspense fallback={null}>
+          <CharacterModel id={id} primaryColor={primaryColor} locked={locked} glbUrl={glbUrl} />
+        </Suspense>
+      </ModelErrorBoundary>
+    </>
+  )
+}
+
+export interface SnapshotCharacter {
+  id: string
+  primaryColor?: string
+  locked?: boolean
+  glbUrl?: string
+}
+
+// Renders each character in the list one at a time, calls onSnapshots when done.
+// Results are keyed by character id.
+export function CharacterSnapshotBatch({
+  characters, onSnapshots, size = 72,
+}: {
+  characters: SnapshotCharacter[]
+  onSnapshots: (snapshots: Record<string, string>) => void
+  size?: number
+}) {
+  const [currentIdx, setCurrentIdx] = useState(0)
+  const collected = useRef<Record<string, string>>({})
+  const [active, setActive] = useState(true)
+
+  const handleCapture = useCallback((url: string) => {
+    const char = characters[currentIdx]
+    collected.current[char.id] = url
+    if (currentIdx + 1 >= characters.length) {
+      onSnapshots({ ...collected.current })
+      setActive(false)
+    } else {
+      setCurrentIdx(i => i + 1)
+    }
+  }, [currentIdx, characters, onSnapshots])
+
+  if (!active || characters.length === 0) return null
+
+  const char = characters[currentIdx]
+  return (
+    // Opacity 0.001: nearly invisible but GPU still renders (unlike display:none)
+    <div style={{ position: 'fixed', top: 0, left: 0, width: size, height: size, opacity: 0.001, pointerEvents: 'none', zIndex: -9999 }}>
+      <Canvas
+        gl={{ antialias: false, alpha: true, preserveDrawingBuffer: true, outputColorSpace: THREE.SRGBColorSpace }}
+        camera={{ position: [0, 0.1, 3.2], fov: 42 }}
+        style={{ width: size, height: size }}
+        shadows={false}
+      >
+        <SnapshotScene
+          key={`${char.id}-${currentIdx}`}
+          id={char.id}
+          primaryColor={char.primaryColor}
+          locked={char.locked}
+          glbUrl={char.glbUrl}
+          onCapture={handleCapture}
+        />
       </Canvas>
     </div>
   )

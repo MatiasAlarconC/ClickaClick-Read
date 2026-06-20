@@ -17,6 +17,7 @@ export function HomeScreen() {
   const [yearlyCount, setYearlyCount] = useState(0)
   const [yearlyGoal, setYearlyGoal] = useState(12)
   const [weekDays, setWeekDays] = useState<boolean[]>([false,false,false,false,false,false,false])
+  const [weekFuture, setWeekFuture] = useState<boolean[]>([false,false,false,false,false,false,false])
   const [showModeModal, setShowModeModal] = useState(false)
   const [modeBook, setModeBook] = useState<UserBook | null>(null)
 
@@ -49,13 +50,22 @@ export function HomeScreen() {
         const sessionDates = new Set(data.map((s: { started_at: string }) => new Date(s.started_at).toDateString()))
 
         // Week heat (Mon-Sun for current week)
+        // todayMon: 0=Mon, 1=Tue, ..., 6=Sun
         const week: boolean[] = Array(7).fill(false)
+        const future: boolean[] = Array(7).fill(false)
         const today = new Date()
+        const todayMon = (today.getDay() + 6) % 7
         for (let i = 0; i < 7; i++) {
-          const d = new Date(today); d.setDate(today.getDate() - (today.getDay() - 1 + 7 - i) % 7)
-          week[i] = sessionDates.has(d.toDateString())
+          if (i > todayMon) {
+            future[i] = true
+          } else {
+            const d = new Date(today)
+            d.setDate(today.getDate() - (todayMon - i))
+            week[i] = sessionDates.has(d.toDateString())
+          }
         }
         setWeekDays(week)
+        setWeekFuture(future)
 
         // Streak (counts consecutive days ending today or yesterday)
         let s = 0; const now = new Date()
@@ -232,7 +242,7 @@ export function HomeScreen() {
           </div>
           <div style={{ display: 'flex', gap: 5 }}>
             {dayLetters.map((day, i) => (
-              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+              <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: weekFuture[i] ? 0.2 : 1 }}>
                 <div style={{ width: '100%', aspectRatio: '1', borderRadius: 4, background: weekDays[i] ? theme.accent : theme.border }} />
                 <span style={{ fontSize: 9, color: theme.muted }}>{day}</span>
               </div>

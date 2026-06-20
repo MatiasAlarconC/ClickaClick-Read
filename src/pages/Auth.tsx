@@ -106,6 +106,10 @@ export function SignInScreen() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showForgotPw, setShowForgotPw] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotDone, setForgotDone] = useState(false)
 
   const handleSubmit = async () => {
     if (!email || !password) { setError('All fields required'); return }
@@ -114,6 +118,17 @@ export function SignInScreen() {
     setLoading(false)
     if (err) { setError(err); return }
     navigate('/home')
+  }
+
+  const handleForgotPw = async () => {
+    if (!forgotEmail) return
+    setForgotLoading(true)
+    const { supabase } = await import('../lib/supabase')
+    await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setForgotLoading(false)
+    setForgotDone(true)
   }
 
   return (
@@ -126,23 +141,58 @@ export function SignInScreen() {
         <div style={{ fontFamily: 'Georgia, serif', fontSize: 38, fontWeight: 400, color: theme.fg, lineHeight: 1.0, letterSpacing: -1.5, marginBottom: 8 }}>Welcome<br />back</div>
         <div style={{ fontSize: 14, color: theme.muted, marginBottom: 44 }}>Sign in to continue reading</div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
-          <FormInput label="Email" type="email" value={email} onChange={setEmail} placeholder="matias@example.com" theme={theme} autoComplete="username" />
-          <FormInput label="Password" type="password" value={password} onChange={setPassword} placeholder="Your password" theme={theme} autoComplete="current-password" />
-        </div>
+        {!showForgotPw ? (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+              <FormInput label="Email" type="email" value={email} onChange={setEmail} placeholder="matias@example.com" theme={theme} autoComplete="username" />
+              <FormInput label="Password" type="password" value={password} onChange={setPassword} placeholder="Your password" theme={theme} autoComplete="current-password" />
+            </div>
 
-        <div style={{ textAlign: 'right', marginTop: 14 }}>
-          <span style={{ fontSize: 13, color: theme.muted }}>Forgot password?</span>
-        </div>
+            <div style={{ textAlign: 'right', marginTop: 14 }}>
+              <span onClick={() => { setShowForgotPw(true); setForgotEmail(email) }} style={{ fontSize: 13, color: theme.accent, cursor: 'pointer' }}>Forgot password?</span>
+            </div>
 
-        {error && <div style={{ marginTop: 16, padding: '10px 14px', background: '#ff4444' + '20', borderRadius: 10, fontSize: 13, color: '#ff4444' }}>{error}</div>}
+            {error && <div style={{ marginTop: 16, padding: '10px 14px', background: '#ff4444' + '20', borderRadius: 10, fontSize: 13, color: '#ff4444' }}>{error}</div>}
 
-        <PrimaryButton label={loading ? 'Signing in…' : 'Sign In'} onPress={handleSubmit} disabled={loading} theme={theme} style={{ marginTop: 36 }} />
+            <PrimaryButton label={loading ? 'Signing in…' : 'Sign In'} onPress={handleSubmit} disabled={loading} theme={theme} style={{ marginTop: 36 }} />
 
-        <p style={{ textAlign: 'center', marginTop: 24, fontSize: 14, color: theme.muted }}>
-          Don't have an account?{' '}
-          <span onClick={() => navigate('/signup')} style={{ color: theme.fg, cursor: 'pointer', fontWeight: 500 }}>Sign up</span>
-        </p>
+            <p style={{ textAlign: 'center', marginTop: 24, fontSize: 14, color: theme.muted }}>
+              Don't have an account?{' '}
+              <span onClick={() => navigate('/signup')} style={{ color: theme.fg, cursor: 'pointer', fontWeight: 500 }}>Sign up</span>
+            </p>
+          </>
+        ) : (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            {!forgotDone ? (
+              <>
+                <div style={{ fontSize: 14, color: theme.muted, marginBottom: 28 }}>
+                  Enter your email and we'll send you a link to reset your password.
+                </div>
+                <FormInput label="Email" type="email" value={forgotEmail} onChange={setForgotEmail} placeholder="matias@example.com" theme={theme} autoComplete="email" />
+                <PrimaryButton
+                  label={forgotLoading ? 'Sending…' : 'Send reset link'}
+                  onPress={handleForgotPw}
+                  disabled={forgotLoading || !forgotEmail}
+                  theme={theme}
+                  style={{ marginTop: 28 }}
+                />
+              </>
+            ) : (
+              <div style={{ padding: '24px 0', textAlign: 'center' }}>
+                <div style={{ fontSize: 40, marginBottom: 16 }}>✉️</div>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, marginBottom: 8 }}>Check your inbox</div>
+                <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.6 }}>
+                  If an account exists for <strong style={{ color: theme.fg }}>{forgotEmail}</strong>, you'll receive a password reset link shortly.
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => { setShowForgotPw(false); setForgotDone(false) }}
+              style={{ marginTop: 20, background: 'none', border: 'none', color: theme.muted, fontSize: 14, cursor: 'pointer', padding: '8px 0' }}>
+              ← Back to sign in
+            </button>
+          </motion.div>
+        )}
       </div>
     </motion.div>
   )

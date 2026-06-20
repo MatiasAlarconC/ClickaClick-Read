@@ -74,8 +74,8 @@ export function BookCover({ index = 0, width = 80, height = 120, coverUrl, title
 
   if (coverUrl) {
     return (
-      <div style={{ width: w, height: h, borderRadius: 6, overflow: 'hidden', flexShrink: 0, boxShadow: '0 6px 20px rgba(0,0,0,0.35)', ...style }}>
-        <img src={coverUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <div style={{ width: w, height: h, borderRadius: 6, overflow: 'hidden', flexShrink: 0, boxShadow: '0 6px 20px rgba(0,0,0,0.35)', background: '#1a1a1a', ...style }}>
+        <img src={coverUrl} alt="" loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity 0.25s ease', opacity: 1 }} />
       </div>
     )
   }
