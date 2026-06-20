@@ -70,6 +70,7 @@ export function SignUpScreen() {
 
   return (
     <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} style={{ minHeight: '100%', background: theme.bg, position: 'relative', overflow: 'hidden' }}>
+      <style>{`input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus,input:-webkit-autofill:active{-webkit-box-shadow:0 0 0px 1000px ${theme.bg} inset !important;-webkit-text-fill-color:${theme.fg} !important;caret-color:${theme.fg};transition:background-color 5000s ease-in-out 0s;}`}</style>
       <div style={{ position: 'absolute', top: -20, right: -50, width: 180, height: 180, pointerEvents: 'none' }}>
         <BlobShape size="medium" fill={theme.blobFill} opacity={0.35} style={{ width: '100%', height: '100%' }} />
       </div>
@@ -133,6 +134,7 @@ export function SignInScreen() {
 
   return (
     <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} style={{ minHeight: '100%', background: theme.bg, position: 'relative', overflow: 'hidden' }}>
+      <style>{`input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus,input:-webkit-autofill:active{-webkit-box-shadow:0 0 0px 1000px ${theme.bg} inset !important;-webkit-text-fill-color:${theme.fg} !important;caret-color:${theme.fg};transition:background-color 5000s ease-in-out 0s;}`}</style>
       <div style={{ position: 'absolute', bottom: 200, left: -70, width: 200, height: 200, pointerEvents: 'none' }}>
         <BlobShape size="medium" fill={theme.blobFill} opacity={0.3} style={{ width: '100%', height: '100%' }} />
       </div>
