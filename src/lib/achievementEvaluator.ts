@@ -79,5 +79,6 @@ export interface DBCharacter {
   offset_y?: number
   texture_url?: string
   texture_roughness_url?: string
+  snapshot_url?: string
   enabled: boolean
 }

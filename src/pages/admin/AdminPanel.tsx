@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth, useTheme } from '../../context/AppContext'
 import { supabase } from '../../lib/supabase'
@@ -133,6 +133,7 @@ interface CharacterForm {
   textureRoughnessFile: File | null
   existingTextureUrl: string
   existingTextureRoughnessUrl: string
+  snapshotUrl: string
 }
 
 const CHAR_RARITIES = ['common', 'uncommon', 'rare', 'legendary', 'mythic'] as const
@@ -144,6 +145,7 @@ const EMPTY_CHARACTER_FORM: CharacterForm = {
   glbFile: null, existingGlbUrl: '',
   textureFile: null, textureRoughnessFile: null,
   existingTextureUrl: '', existingTextureRoughnessUrl: '',
+  snapshotUrl: '',
 }
 
 export default function AdminPanel() {
@@ -180,6 +182,8 @@ export default function AdminPanel() {
   const [charError, setCharError] = useState('')
   const [editingCharId, setEditingCharId] = useState<string | null>(null)
   const [editingAchId, setEditingAchId] = useState<string | null>(null)
+  const charCaptureRef = useRef<(() => string | null) | null>(null)
+  const [charSnapshotSaving, setCharSnapshotSaving] = useState(false)
 
   const bg = theme.bg
   const fg = theme.fg
@@ -364,6 +368,7 @@ export default function AdminPanel() {
       glb_url: glbUrl,
       texture_url: textureUrl,
       texture_roughness_url: textureRoughnessUrl,
+      snapshot_url: charForm.snapshotUrl || null,
       enabled: true,
     }, { onConflict: 'id' })
 
@@ -376,7 +381,7 @@ export default function AdminPanel() {
   }
 
   const startEditCharacter = (c: DBCharacter) => {
-    setCharForm({ id: c.id, name: c.name, description: c.description, rarity: c.rarity ?? 'rare', defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, zoomScale: c.zoom_scale ?? 1.0, offsetX: c.offset_x ?? 0, offsetY: c.offset_y ?? 0, glbFile: null, existingGlbUrl: c.glb_url, textureFile: null, textureRoughnessFile: null, existingTextureUrl: c.texture_url ?? '', existingTextureRoughnessUrl: c.texture_roughness_url ?? '' })
+    setCharForm({ id: c.id, name: c.name, description: c.description, rarity: c.rarity ?? 'rare', defaultPrimary: c.default_primary, defaultSecondary: c.default_secondary, zoomScale: c.zoom_scale ?? 1.0, offsetX: c.offset_x ?? 0, offsetY: c.offset_y ?? 0, glbFile: null, existingGlbUrl: c.glb_url, textureFile: null, textureRoughnessFile: null, existingTextureUrl: c.texture_url ?? '', existingTextureRoughnessUrl: c.texture_roughness_url ?? '', snapshotUrl: c.snapshot_url ?? '' })
     setEditingCharId(c.id)
     setCharError('')
     setShowCharForm(false)
@@ -400,6 +405,7 @@ export default function AdminPanel() {
       textureFile: null, textureRoughnessFile: null,
       existingTextureUrl: override?.texture_url ?? '',
       existingTextureRoughnessUrl: override?.texture_roughness_url ?? '',
+      snapshotUrl: override?.snapshot_url ?? '',
     })
     setEditingCharId(c.id)
     setCharError('')
@@ -458,6 +464,29 @@ export default function AdminPanel() {
     await supabase.storage.from('character-models').remove([`${id}.glb`])
     await supabase.from('characters_config').delete().eq('id', id)
     loadCharacters()
+  }
+
+  const takeCharSnapshot = async () => {
+    const dataUrl = charCaptureRef.current?.()
+    if (!dataUrl) return
+    setCharSnapshotSaving(true)
+    try {
+      const res = await fetch(dataUrl)
+      const blob = await res.blob()
+      const filePath = `snapshots/${charForm.id}.png`
+      const { error: uploadErr } = await supabase.storage
+        .from('character-models')
+        .upload(filePath, blob, { upsert: true, contentType: 'image/png' })
+      if (uploadErr) { setCharSnapshotSaving(false); return }
+      const { data: urlData } = supabase.storage.from('character-models').getPublicUrl(filePath)
+      const snapshotUrl = urlData.publicUrl
+      setCharForm(f => ({ ...f, snapshotUrl }))
+      if (editingCharId) {
+        await supabase.from('characters_config').update({ snapshot_url: snapshotUrl }).eq('id', charForm.id)
+      }
+    } finally {
+      setCharSnapshotSaving(false)
+    }
   }
 
   // ── Shared styles ──────────────────────────────────────────────────────────
@@ -657,7 +686,21 @@ export default function AdminPanel() {
         <div style={{ marginBottom: 16 }}>
           <span style={label}>Preview & position</span>
           <div style={{ background: bg, borderRadius: 12, padding: '12px 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-            <Character3D character={charForm.id} glbUrl={charForm.existingGlbUrl} primaryColor={charForm.defaultPrimary} size={160} modelScale={charForm.zoomScale} offsetX={charForm.offsetX} offsetY={charForm.offsetY} />
+            <Character3D character={charForm.id} glbUrl={charForm.existingGlbUrl} primaryColor={charForm.defaultPrimary} size={160} modelScale={charForm.zoomScale} offsetX={charForm.offsetX} offsetY={charForm.offsetY} capturable captureRef={charCaptureRef} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px', width: '100%' }}>
+              <button
+                onClick={takeCharSnapshot}
+                disabled={charSnapshotSaving || !charForm.id}
+                style={{ padding: '8px 16px', background: charSnapshotSaving ? secondary : theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500, cursor: charSnapshotSaving || !charForm.id ? 'default' : 'pointer', opacity: charSnapshotSaving || !charForm.id ? 0.5 : 1 }}>
+                {charSnapshotSaving ? 'Saving…' : '📸 Take Snapshot'}
+              </button>
+              {charForm.snapshotUrl && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <img src={charForm.snapshotUrl} alt="snapshot" style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'cover', border: `1px solid ${border}` }} />
+                  <div style={{ fontSize: 11, color: muted }}>Saved snapshot</div>
+                </div>
+              )}
+            </div>
             <div style={{ width: '100%', padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
