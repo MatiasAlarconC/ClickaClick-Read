@@ -236,6 +236,7 @@ export default function LibraryScreen() {
 
   const totalBooks = books.reading.length + books.finished.length + books.want_to_read.length
   const isBookTab = tab !== 'discover' && tab !== 'summaries'
+  const [finishedSearch, setFinishedSearch] = useState('')
   const [dbSummaries, setDbSummaries] = useState<SavedSummary[]>([])
 
   useEffect(() => {
@@ -375,6 +376,25 @@ export default function LibraryScreen() {
         {/* Book list */}
         {isBookTab && (
         <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: 100 }}>
+          {/* Search bar for finished books */}
+          {tab === 'finished' && !loading && books.finished.length > 0 && (
+            <div style={{ position: 'relative', marginBottom: 16 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                <circle cx="11" cy="11" r="8" stroke={theme.muted} strokeWidth="2"/>
+                <path d="M21 21l-4.35-4.35" stroke={theme.muted} strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+              <input
+                type="text"
+                value={finishedSearch}
+                onChange={e => setFinishedSearch(e.target.value)}
+                placeholder="Search finished books…"
+                style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px 9px 34px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13, color: theme.fg, outline: 'none' }}
+              />
+              {finishedSearch && (
+                <button onClick={() => setFinishedSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2 }}>×</button>
+              )}
+            </div>
+          )}
           {loading ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: theme.muted }}>Loading…</div>
           ) : books[tab as BookTab].length === 0 ? (
@@ -384,7 +404,14 @@ export default function LibraryScreen() {
               <button onClick={() => navigate('/search')} style={{ marginTop: 16, padding: '10px 20px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 14, fontWeight: 500 }}>Find books</button>
             </div>
           ) : tab === 'finished'
-            ? renderFinishedGrouped(books.finished, theme, navigate, sessionsByBook, user?.id ?? '', setBooks, supabase)
+            ? renderFinishedGrouped(
+                books.finished.filter(b => {
+                  if (!finishedSearch) return true
+                  const q = finishedSearch.toLowerCase()
+                  return (b.book?.title ?? '').toLowerCase().includes(q) || (b.book?.author ?? '').toLowerCase().includes(q)
+                }),
+                theme, navigate, sessionsByBook, user?.id ?? '', setBooks, supabase,
+              )
             : books[tab as BookTab].map((book) => (
               <div key={book.id} style={{ marginBottom: 14, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
               <SwipeableBookRow book={book} index={0} total={1} tab={tab as BookTab} theme={theme} userId={user?.id ?? ''}

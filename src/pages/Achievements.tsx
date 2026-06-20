@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useAuth, useTheme } from '../context/AppContext'
@@ -10,7 +10,7 @@ import {
 import { CHARACTERS, AvatarCharacter, type CharacterId } from '../components/AvatarCharacter'
 import Medal3D from '../components/Medal3D'
 import MedalIcon from '../components/MedalIcon'
-import Character3D from '../components/Character3D'
+import Character3D, { CharacterSnapshotBatch, type SnapshotCharacter } from '../components/Character3D'
 import {
   evaluateCondition, getConditionProgress,
   type DBAchievement, type DBCharacter, type AchievementCondition,
@@ -51,10 +51,31 @@ export default function AchievementsScreen() {
   const [showTitlePicker, setShowTitlePicker] = useState(false)
   const [dbAchievements, setDbAchievements] = useState<DBAchievement[]>([])
   const [dbCharacters, setDbCharacters] = useState<DBCharacter[]>([])
+  const [dbAchievementsLoaded, setDbAchievementsLoaded] = useState(false)
+  const notifyCheckedRef = useRef(false)
+
+  // Static PNG snapshots of built-in 3D models — avoids multiple WebGL contexts
+  const SNAPSHOT_CACHE_KEY = 'char_snapshots_v1'
+  const [charSnapshots, setCharSnapshots] = useState<Record<string, string>>(() => {
+    try { return JSON.parse(sessionStorage.getItem(SNAPSHOT_CACHE_KEY) ?? '{}') } catch { return {} }
+  })
+  const snapshotsReady = Object.keys(charSnapshots).length >= CHARACTERS.length
+
+  const snapshotChars = useMemo<SnapshotCharacter[]>(
+    () => CHARACTERS.map(c => ({ id: c.id, primaryColor: c.defaultPrimary })),
+    []
+  )
+  const handleSnapshots = useCallback((snaps: Record<string, string>) => {
+    setCharSnapshots(snaps)
+    try { sessionStorage.setItem(SNAPSHOT_CACHE_KEY, JSON.stringify(snaps)) } catch { /* ignore */ }
+  }, [])
 
   useEffect(() => {
     supabase.from('achievements_config').select('*').eq('enabled', true).order('sort_order')
-      .then(({ data }) => { if (data) setDbAchievements(data as DBAchievement[]) })
+      .then(({ data }) => {
+        if (data) setDbAchievements(data as DBAchievement[])
+        setDbAchievementsLoaded(true)
+      })
     supabase.from('characters_config').select('*').eq('enabled', true)
       .then(({ data }) => { if (data) setDbCharacters(data as DBCharacter[]) })
   }, [])
@@ -95,53 +116,51 @@ export default function AchievementsScreen() {
         genreCounts: countGenres(userBooks),
         sessionCount, notesCount, seriesBooks,
       })
-
-      // Detect newly unlocked achievements and create notifications
-      if (user) {
-        const evalStats = {
-          booksFinished, totalBooks, totalPages,
-          totalHours, streak,
-          genreCounts: countGenres(userBooks),
-          sessionCount, notesCount, seriesBooks,
-        }
-        const dbConverted: UnifiedAchievement[] = dbAchievements.map(a => ({
-          id: a.id, name: a.name, description: a.description,
-          tier: a.tier as AchievementTier,
-          reward: a.reward_type === 'badge'
-            ? { type: 'badge' as const }
-            : a.reward_type === 'title'
-            ? { type: 'title' as const, value: a.reward_value! }
-            : { type: 'character' as const, characterId: a.reward_value! },
-          check: (s: AchievementStats) => evaluateCondition(a.condition, s),
-          condition: a.condition,
-        }))
-        const allAchievements = [...ACHIEVEMENTS, ...dbConverted]
-        const currentUnlocked = allAchievements.filter(a => a.check(evalStats)).map(a => a.id)
-
-        const seenKey = `seen_achievements_${user.id}`
-        const seen: string[] = JSON.parse(localStorage.getItem(seenKey) ?? '[]')
-
-        if (seen.length === 0) {
-          // First visit: seed without notifying
-          localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
-        } else {
-          const newlyUnlocked = currentUnlocked.filter(id => !seen.includes(id))
-          if (newlyUnlocked.length > 0) {
-            localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
-            const achToNotify = allAchievements.filter(a => newlyUnlocked.includes(a.id))
-            const notifRows = achToNotify.map(a => ({
-              user_id: user.id,
-              type: 'achievement',
-              title: 'Achievement unlocked',
-              body: `You unlocked "${a.name}".`,
-              data: { achievement_id: a.id },
-            }))
-            supabase.from('notifications').insert(notifRows).then(r => r)
-          }
-        }
-      }
     })
-  }, [user, dbAchievements])
+  }, [user])
+
+  // Notification check — runs only once per session and only after BOTH stats
+  // and DB achievements are loaded, to avoid false "new unlock" notifications
+  // caused by the double-render (dbAchievements=[] first, then populated).
+  useEffect(() => {
+    if (!user || !stats || !dbAchievementsLoaded || notifyCheckedRef.current) return
+    notifyCheckedRef.current = true
+
+    const dbConverted: UnifiedAchievement[] = dbAchievements.map(a => ({
+      id: a.id, name: a.name, description: a.description,
+      tier: a.tier as AchievementTier,
+      reward: a.reward_type === 'badge'
+        ? { type: 'badge' as const }
+        : a.reward_type === 'title'
+        ? { type: 'title' as const, value: a.reward_value! }
+        : { type: 'character' as const, characterId: a.reward_value! },
+      check: (s: AchievementStats) => evaluateCondition(a.condition, s),
+      condition: a.condition,
+    }))
+    const allAchs = [...ACHIEVEMENTS, ...dbConverted]
+    const currentUnlocked = allAchs.filter(a => a.check(stats)).map(a => a.id)
+
+    const seenKey = `seen_achievements_${user.id}`
+    const seen: string[] = JSON.parse(localStorage.getItem(seenKey) ?? '[]')
+
+    if (seen.length === 0) {
+      localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
+    } else {
+      const newlyUnlocked = currentUnlocked.filter(id => !seen.includes(id))
+      if (newlyUnlocked.length > 0) {
+        localStorage.setItem(seenKey, JSON.stringify(currentUnlocked))
+        const toNotify = allAchs.filter(a => newlyUnlocked.includes(a.id))
+        const notifRows = toNotify.map(a => ({
+          user_id: user.id,
+          type: 'achievement',
+          title: 'Achievement unlocked',
+          body: `You unlocked "${a.name}".`,
+          data: { achievement_id: a.id },
+        }))
+        supabase.from('notifications').insert(notifRows).then(() => {})
+      }
+    }
+  }, [user, stats, dbAchievementsLoaded])
 
   const dbConverted: UnifiedAchievement[] = dbAchievements.map(a => ({
     id: a.id, name: a.name, description: a.description,
@@ -201,6 +220,15 @@ export default function AchievementsScreen() {
         </div>
       </div>
 
+      {/* Sequential snapshot renderer — runs in background, one canvas at a time */}
+      {!snapshotsReady && (
+        <CharacterSnapshotBatch
+          characters={snapshotChars}
+          onSnapshots={handleSnapshots}
+          size={72}
+        />
+      )}
+
       <div style={{ padding: '22px 22px 80px' }}>
         {/* Progress bar */}
         {stats && (
@@ -249,13 +277,17 @@ export default function AchievementsScreen() {
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 14 }}>Unlocked Characters</div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {/* Built-in characters: SVG avatars (no WebGL, no context limit issues) */}
+              {/* Built-in characters: static PNG snapshot (no per-cell WebGL canvas) */}
               {CHARACTERS.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
+                const snap = charSnapshots[c.id]
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
                     <div style={{ width: 72, height: 72, background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.defaultPrimary + '80' : theme.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: unlocked ? 'none' : 'grayscale(0.85)' }}>
-                      <AvatarCharacter character={c.id} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} size={55} />
+                      {snap
+                        ? <img src={snap} alt={c.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : <AvatarCharacter character={c.id} primaryColor={c.defaultPrimary} secondaryColor={c.defaultSecondary} size={55} />
+                      }
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{c.name}</div>
                     {!unlocked && <div style={{ fontSize: 10, color: theme.muted }}>locked</div>}
@@ -316,8 +348,11 @@ export default function AchievementsScreen() {
                             border: `2px solid ${unlocked ? TIER_COLORS[ach.tier] + '60' : theme.border}`,
                             background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             {builtinChar ? (
-                              <div style={{ filter: unlocked ? 'none' : 'grayscale(1)', opacity: unlocked ? 1 : 0.5 }}>
-                                <AvatarCharacter character={builtinChar.id} primaryColor={builtinChar.defaultPrimary} secondaryColor={builtinChar.defaultSecondary} size={55} />
+                              <div style={{ filter: unlocked ? 'none' : 'grayscale(1)', opacity: unlocked ? 1 : 0.5, width: '100%', height: '100%' }}>
+                                {charSnapshots[builtinChar.id]
+                                  ? <img src={charSnapshots[builtinChar.id]} alt={builtinChar.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  : <AvatarCharacter character={builtinChar.id} primaryColor={builtinChar.defaultPrimary} secondaryColor={builtinChar.defaultSecondary} size={55} />
+                                }
                               </div>
                             ) : (
                               <Character3D character={charId} locked={!unlocked} size={72} interactive={false} glbUrl={dynChar?.glb_url} />
