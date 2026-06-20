@@ -8,7 +8,7 @@
  * • Graceful SVG-ball fallback when the GLB is missing
  */
 
-import { Suspense, useRef, useEffect, useMemo, useState, useCallback, Component, type ReactNode } from 'react'
+import { Suspense, useRef, useEffect, useMemo, useState, useCallback, Component, type ReactNode, type MutableRefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useGLTF, useTexture, Environment, ContactShadows, OrbitControls, useAnimations } from '@react-three/drei'
 import * as THREE from 'three'
@@ -329,6 +329,16 @@ function CharacterScene({
   )
 }
 
+// ─── Capture setup — mounts inside Canvas when capturable=true ────────────────
+function CaptureSetup({ captureRef }: { captureRef: MutableRefObject<(() => string | null) | null> }) {
+  const { gl } = useThree()
+  useEffect(() => {
+    captureRef.current = () => gl.domElement.toDataURL('image/png')
+    return () => { captureRef.current = null }
+  }, [gl, captureRef])
+  return null
+}
+
 // ─── Public component ─────────────────────────────────────────────────────────
 interface Character3DProps {
   characterId?: string
@@ -352,10 +362,14 @@ interface Character3DProps {
   textureUrl?: string
   /** Combined roughness+metalness texture URL (optional, paired with textureUrl) */
   textureRoughnessUrl?: string
+  /** Enables preserveDrawingBuffer so the canvas can be read via captureRef */
+  capturable?: boolean
+  /** Ref that receives a () => string capture function when capturable=true */
+  captureRef?: MutableRefObject<(() => string | null) | null>
 }
 
 export default function Character3D({
-  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl, modelScale, offsetX, offsetY, textureUrl, textureRoughnessUrl,
+  characterId, character, locked, size = 160, interactive, primaryColor, glbUrl, modelScale, offsetX, offsetY, textureUrl, textureRoughnessUrl, capturable, captureRef,
 }: Character3DProps) {
   const id: string = characterId ?? character ?? 'lion'
   const isInteractive = interactive ?? size >= 120
@@ -364,10 +378,11 @@ export default function Character3D({
     <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden',
       cursor: isInteractive && !locked ? 'grab' : 'default' }}>
       <Canvas
-        gl={{ antialias: true, alpha: true, outputColorSpace: THREE.SRGBColorSpace }}
+        gl={{ antialias: true, alpha: true, outputColorSpace: THREE.SRGBColorSpace, preserveDrawingBuffer: capturable ?? false }}
         camera={{ position: [0, 0.1, 3.2], fov: 42 }}
         style={{ width: '100%', height: '100%' }}
       >
+        {capturable && captureRef && <CaptureSetup captureRef={captureRef} />}
         <CharacterScene id={id} locked={locked} interactive={isInteractive} primaryColor={primaryColor} glbUrl={glbUrl} modelScale={modelScale} offsetX={offsetX} offsetY={offsetY} textureUrl={textureUrl} textureRoughnessUrl={textureRoughnessUrl} />
       </Canvas>
     </div>

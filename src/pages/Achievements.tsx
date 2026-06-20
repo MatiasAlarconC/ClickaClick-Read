@@ -60,15 +60,26 @@ export default function AchievementsScreen() {
   const [charSnapshots, setCharSnapshots] = useState<Record<string, string>>(() => {
     try { return JSON.parse(sessionStorage.getItem(SNAPSHOT_CACHE_KEY) ?? '{}') } catch { return {} }
   })
-  const snapshotsReady = dbCharactersLoaded && Object.keys(charSnapshots).length >= CHARACTERS.length + dbCharacters.length
-
-  const snapshotChars = useMemo<SnapshotCharacter[]>(
-    () => [
-      ...CHARACTERS.map(c => ({ id: c.id, primaryColor: c.defaultPrimary })),
-      ...dbCharacters.map(c => ({ id: c.id, glbUrl: c.glb_url, primaryColor: c.default_primary })),
-    ],
+  // DB snapshots from admin take priority — no auto-capture needed for these
+  const dbSnapshotMap = useMemo(
+    () => {
+      const m: Record<string, string> = {}
+      for (const c of dbCharacters) { if (c.snapshot_url) m[c.id] = c.snapshot_url }
+      return m
+    },
     [dbCharacters]
   )
+
+  // Only auto-capture chars that don't already have a DB snapshot
+  const snapshotChars = useMemo<SnapshotCharacter[]>(
+    () => [
+      ...CHARACTERS.filter(c => !dbSnapshotMap[c.id]).map(c => ({ id: c.id, primaryColor: c.defaultPrimary })),
+      ...dbCharacters.filter(c => !c.snapshot_url).map(c => ({ id: c.id, glbUrl: c.glb_url, primaryColor: c.default_primary })),
+    ],
+    [dbCharacters, dbSnapshotMap]
+  )
+
+  const snapshotsReady = dbCharactersLoaded && snapshotChars.every(c => charSnapshots[c.id])
   const handleSnapshots = useCallback((snaps: Record<string, string>) => {
     setCharSnapshots(snaps)
     try { sessionStorage.setItem(SNAPSHOT_CACHE_KEY, JSON.stringify(snaps)) } catch { /* ignore */ }
@@ -285,10 +296,10 @@ export default function AchievementsScreen() {
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 14 }}>Unlocked Characters</div>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-              {/* Built-in characters: static PNG snapshot (no per-cell WebGL canvas) */}
+              {/* Built-in characters: DB admin snapshot → auto-batch snapshot → SVG fallback */}
               {CHARACTERS.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
-                const snap = charSnapshots[c.id]
+                const snap = dbSnapshotMap[c.id] || charSnapshots[c.id]
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
                     <div style={{ width: 72, height: 72, background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.defaultPrimary + '80' : theme.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: unlocked ? 'none' : 'grayscale(0.85)' }}>
@@ -302,10 +313,10 @@ export default function AchievementsScreen() {
                   </div>
                 )
               })}
-              {/* DB characters: static PNG snapshot (falls back to 3D while capturing) */}
+              {/* DB characters: DB admin snapshot → auto-batch snapshot → 3D fallback */}
               {dbCharacters.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
-                const snap = charSnapshots[c.id]
+                const snap = dbSnapshotMap[c.id] || charSnapshots[c.id]
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
                     <div style={{ width: 72, height: 72, background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.default_primary + '80' : theme.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: unlocked ? 'none' : 'grayscale(0.7)' }}>
@@ -361,15 +372,15 @@ export default function AchievementsScreen() {
                             background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             {builtinChar ? (
                               <div style={{ filter: unlocked ? 'none' : 'grayscale(1)', opacity: unlocked ? 1 : 0.5, width: '100%', height: '100%' }}>
-                                {charSnapshots[builtinChar.id]
-                                  ? <img src={charSnapshots[builtinChar.id]} alt={builtinChar.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                {(dbSnapshotMap[builtinChar.id] || charSnapshots[builtinChar.id])
+                                  ? <img src={dbSnapshotMap[builtinChar.id] || charSnapshots[builtinChar.id]} alt={builtinChar.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   : <AvatarCharacter character={builtinChar.id} primaryColor={builtinChar.defaultPrimary} secondaryColor={builtinChar.defaultSecondary} size={55} />
                                 }
                               </div>
                             ) : (
                               <div style={{ filter: unlocked ? 'none' : 'grayscale(1)', opacity: unlocked ? 1 : 0.5, width: '100%', height: '100%' }}>
-                                {dynChar && charSnapshots[dynChar.id]
-                                  ? <img src={charSnapshots[dynChar.id]} alt={dynChar.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                {dynChar && (dbSnapshotMap[dynChar.id] || charSnapshots[dynChar.id])
+                                  ? <img src={dbSnapshotMap[dynChar.id] || charSnapshots[dynChar.id]} alt={dynChar.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   : <Character3D character={charId} locked={!unlocked} size={72} interactive={false} glbUrl={dynChar?.glb_url} />
                                 }
                               </div>
