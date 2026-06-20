@@ -52,18 +52,22 @@ export default function AchievementsScreen() {
   const [dbAchievements, setDbAchievements] = useState<DBAchievement[]>([])
   const [dbCharacters, setDbCharacters] = useState<DBCharacter[]>([])
   const [dbAchievementsLoaded, setDbAchievementsLoaded] = useState(false)
+  const [dbCharactersLoaded, setDbCharactersLoaded] = useState(false)
   const notifyCheckedRef = useRef(false)
 
-  // Static PNG snapshots of built-in 3D models — avoids multiple WebGL contexts
+  // Static PNG snapshots of 3D models — avoids multiple WebGL contexts
   const SNAPSHOT_CACHE_KEY = 'char_snapshots_v1'
   const [charSnapshots, setCharSnapshots] = useState<Record<string, string>>(() => {
     try { return JSON.parse(sessionStorage.getItem(SNAPSHOT_CACHE_KEY) ?? '{}') } catch { return {} }
   })
-  const snapshotsReady = Object.keys(charSnapshots).length >= CHARACTERS.length
+  const snapshotsReady = dbCharactersLoaded && Object.keys(charSnapshots).length >= CHARACTERS.length + dbCharacters.length
 
   const snapshotChars = useMemo<SnapshotCharacter[]>(
-    () => CHARACTERS.map(c => ({ id: c.id, primaryColor: c.defaultPrimary })),
-    []
+    () => [
+      ...CHARACTERS.map(c => ({ id: c.id, primaryColor: c.defaultPrimary })),
+      ...dbCharacters.map(c => ({ id: c.id, glbUrl: c.glb_url, primaryColor: c.default_primary })),
+    ],
+    [dbCharacters]
   )
   const handleSnapshots = useCallback((snaps: Record<string, string>) => {
     setCharSnapshots(snaps)
@@ -77,13 +81,16 @@ export default function AchievementsScreen() {
         setDbAchievementsLoaded(true)
       })
     supabase.from('characters_config').select('*').eq('enabled', true)
-      .then(({ data }) => { if (data) setDbCharacters(data as DBCharacter[]) })
+      .then(({ data }) => {
+        if (data) setDbCharacters(data as DBCharacter[])
+        setDbCharactersLoaded(true)
+      })
   }, [])
 
   useEffect(() => {
     if (!user) return
     Promise.all([
-      supabase.from('user_books').select('*, book:books(genres, title)').eq('user_id', user.id),
+      supabase.from('user_books').select('*, book:books(genres, title, series_data)').eq('user_id', user.id),
       supabase.from('reading_sessions').select('pages_read, duration_seconds, started_at, is_manual').eq('user_id', user.id),
       supabase.from('book_notes').select('id').eq('user_id', user.id),
     ]).then(([ubRes, sessRes, notesRes]) => {
@@ -107,8 +114,9 @@ export default function AchievementsScreen() {
         else if (i > 0) break
       }
 
-      // TODO: seriesBooks needs a series_name column on user_books/books to be computed properly
-      const seriesBooks = 0
+      const seriesBooks = userBooks.filter((b: any) =>
+        b.status === 'finished' && (b.book?.series_data as any)?.seriesName
+      ).length
 
       setStats({
         booksFinished, totalBooks, totalPages,
@@ -221,7 +229,7 @@ export default function AchievementsScreen() {
       </div>
 
       {/* Sequential snapshot renderer — runs in background, one canvas at a time */}
-      {!snapshotsReady && (
+      {!snapshotsReady && dbCharactersLoaded && (
         <CharacterSnapshotBatch
           characters={snapshotChars}
           onSnapshots={handleSnapshots}
@@ -294,13 +302,17 @@ export default function AchievementsScreen() {
                   </div>
                 )
               })}
-              {/* DB characters: show 3D model for both locked and unlocked */}
+              {/* DB characters: static PNG snapshot (falls back to 3D while capturing) */}
               {dbCharacters.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
+                const snap = charSnapshots[c.id]
                 return (
                   <div key={c.id} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, opacity: unlocked ? 1 : 0.35 }}>
                     <div style={{ width: 72, height: 72, background: theme.bgSecondary, borderRadius: 16, border: `2px solid ${unlocked ? c.default_primary + '80' : theme.border}`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', filter: unlocked ? 'none' : 'grayscale(0.7)' }}>
-                      <Character3D character={c.id} size={72} interactive={false} locked={!unlocked} primaryColor={c.default_primary} secondaryColor={c.default_secondary} glbUrl={c.glb_url} modelScale={c.zoom_scale} offsetX={c.offset_x} offsetY={c.offset_y} textureUrl={c.texture_url} textureRoughnessUrl={c.texture_roughness_url} />
+                      {snap
+                        ? <img src={snap} alt={c.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : <Character3D character={c.id} size={72} interactive={false} locked={!unlocked} primaryColor={c.default_primary} secondaryColor={c.default_secondary} glbUrl={c.glb_url} modelScale={c.zoom_scale} offsetX={c.offset_x} offsetY={c.offset_y} textureUrl={c.texture_url} textureRoughnessUrl={c.texture_roughness_url} />
+                      }
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 600, color: unlocked ? theme.fg : theme.muted }}>{c.name}</div>
                     {!unlocked && <div style={{ fontSize: 10, color: theme.muted }}>locked</div>}
@@ -355,7 +367,12 @@ export default function AchievementsScreen() {
                                 }
                               </div>
                             ) : (
-                              <Character3D character={charId} locked={!unlocked} size={72} interactive={false} glbUrl={dynChar?.glb_url} />
+                              <div style={{ filter: unlocked ? 'none' : 'grayscale(1)', opacity: unlocked ? 1 : 0.5, width: '100%', height: '100%' }}>
+                                {dynChar && charSnapshots[dynChar.id]
+                                  ? <img src={charSnapshots[dynChar.id]} alt={dynChar.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  : <Character3D character={charId} locked={!unlocked} size={72} interactive={false} glbUrl={dynChar?.glb_url} />
+                                }
+                              </div>
                             )}
                           </div>
                         )

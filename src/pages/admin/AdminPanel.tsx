@@ -471,6 +471,318 @@ export default function AdminPanel() {
     platinum: '#E8E6F0', diamond: '#B9F2FF', obsidian: '#C084FC',
   }
 
+  // ── Inline form elements (rendered after the item being edited) ──────────────
+
+  const achFormEl = !showAchForm ? null : (
+    <div style={{ background: secondary, borderRadius: 16, padding: 20, marginTop: 8, marginBottom: 8 }}>
+      <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: fg, marginBottom: 20 }}>{editingAchId ? 'Edit Achievement' : 'New Achievement'}</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div>
+          <span style={label}>ID (unique, no spaces)</span>
+          <input value={achForm.id} readOnly={!!editingAchId} onChange={e => setAchForm(f => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. speed_reader" style={{ ...input, opacity: editingAchId ? 0.5 : 1 }} />
+        </div>
+        <div>
+          <span style={label}>Tier</span>
+          <select value={achForm.tier} onChange={e => setAchForm(f => ({ ...f, tier: e.target.value }))} style={{ ...input, WebkitAppearance: 'none' }}>
+            {TIERS.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <span style={label}>Name</span>
+        <input value={achForm.name} onChange={e => setAchForm(f => ({ ...f, name: e.target.value }))} placeholder="Achievement name" style={input} />
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <span style={label}>Description</span>
+        <input value={achForm.description} onChange={e => setAchForm(f => ({ ...f, description: e.target.value }))} placeholder="Short description" style={input} />
+      </div>
+
+      <div style={{ marginBottom: 16, padding: '14px', background: theme.bgElevated ?? bg, borderRadius: 10 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: fg, marginBottom: 12 }}>Reward</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          {(['badge', 'title', 'character'] as const).map(r => (
+            <button key={r} onClick={() => setAchForm(f => ({ ...f, rewardType: r }))}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: `1px solid ${achForm.rewardType === r ? theme.accent : border}`, background: achForm.rewardType === r ? theme.accent : 'none', color: achForm.rewardType === r ? theme.accentFg : fg, fontSize: 13, cursor: 'pointer' }}>
+              {r.charAt(0).toUpperCase() + r.slice(1)}
+            </button>
+          ))}
+        </div>
+        {achForm.rewardType === 'title' && (
+          <div>
+            <span style={label}>Title text</span>
+            <input value={achForm.rewardValue} onChange={e => setAchForm(f => ({ ...f, rewardValue: e.target.value }))} placeholder="e.g. The Speed Reader" style={input} />
+          </div>
+        )}
+        {achForm.rewardType === 'character' && (() => {
+          const allChars = [...BUILTIN_CHARACTERS, ...dbCharacters.map(c => ({ id: c.id, name: c.name, primary: c.default_primary }))]
+          const usedIds = new Set<string>([
+            ...ACHIEVEMENTS.filter(a => a.reward.type === 'character').map(a => (a.reward as { type: 'character'; characterId: string }).characterId),
+            ...dbAchievements.filter(a => a.reward_type === 'character' && a.reward_value).map(a => a.reward_value!),
+          ])
+          return (
+            <div>
+              <span style={label}>Select character — create characters first in the Characters tab</span>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                {allChars.map(c => {
+                  const taken = usedIds.has(c.id) && c.id !== achForm.rewardValue
+                  const selected = achForm.rewardValue === c.id
+                  return (
+                    <button key={c.id} disabled={taken} onClick={() => setAchForm(f => ({ ...f, rewardValue: c.id }))}
+                      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '10px 4px', borderRadius: 10, border: `1.5px solid ${selected ? theme.accent : border}`, background: selected ? `${theme.accent}22` : 'none', cursor: taken ? 'default' : 'pointer', opacity: taken ? 0.3 : 1 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: c.primary, flexShrink: 0 }} />
+                      <div style={{ fontSize: 10, color: fg, textAlign: 'center', lineHeight: 1.2 }}>{c.name}</div>
+                      {taken && <div style={{ fontSize: 9, color: muted }}>taken</div>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
+      </div>
+
+      <div style={{ padding: '14px', background: theme.bgElevated ?? bg, borderRadius: 10, marginBottom: 16 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: fg, marginBottom: 12 }}>Condition</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          {(['stat', 'genre', 'genreDiversity', 'genreDepth'] as const).map(t => (
+            <button key={t} onClick={() => setAchForm(f => ({ ...f, conditionType: t }))}
+              style={{ padding: '8px 0', borderRadius: 8, border: `1px solid ${achForm.conditionType === t ? theme.accent : border}`, background: achForm.conditionType === t ? theme.accent : 'none', color: achForm.conditionType === t ? theme.accentFg : fg, fontSize: 12, cursor: 'pointer' }}>
+              {t === 'genreDiversity' ? 'Genre diversity' : t === 'genreDepth' ? 'Genre depth' : t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
+          ))}
+        </div>
+        {achForm.conditionType === 'stat' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <span style={label}>Stat field</span>
+              <select value={achForm.statField} onChange={e => setAchForm(f => ({ ...f, statField: e.target.value }))} style={{ ...input, WebkitAppearance: 'none' }}>
+                {STAT_FIELDS.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </div>
+            <div>
+              <span style={label}>Minimum value</span>
+              <input type="number" value={achForm.statValue} onChange={e => setAchForm(f => ({ ...f, statValue: e.target.value }))} style={input} />
+            </div>
+          </div>
+        )}
+        {achForm.conditionType === 'genre' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+            <div>
+              <span style={label}>Genres (comma-separated)</span>
+              <input value={achForm.genreList} onChange={e => setAchForm(f => ({ ...f, genreList: e.target.value }))} placeholder="fantasy, sci-fi" style={input} />
+            </div>
+            <div>
+              <span style={label}>Min books</span>
+              <input type="number" value={achForm.genreValue} onChange={e => setAchForm(f => ({ ...f, genreValue: e.target.value }))} style={input} />
+            </div>
+          </div>
+        )}
+        {achForm.conditionType === 'genreDiversity' && (
+          <div>
+            <span style={label}>Minimum number of different genres</span>
+            <input type="number" value={achForm.diversityValue} onChange={e => setAchForm(f => ({ ...f, diversityValue: e.target.value }))} style={input} />
+          </div>
+        )}
+        {achForm.conditionType === 'genreDepth' && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <span style={label}>Min books per genre</span>
+              <input type="number" value={achForm.depthMinBooks} onChange={e => setAchForm(f => ({ ...f, depthMinBooks: e.target.value }))} style={input} />
+            </div>
+            <div>
+              <span style={label}>How many genres</span>
+              <input type="number" value={achForm.depthGenreCount} onChange={e => setAchForm(f => ({ ...f, depthGenreCount: e.target.value }))} style={input} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {achError && <div style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{achError}</div>}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={() => { setShowAchForm(false); setEditingAchId(null) }} style={{ flex: 1, padding: 12, background: 'none', border: `1px solid ${border}`, borderRadius: 12, fontSize: 14, color: muted, cursor: 'pointer' }}>Cancel</button>
+        <button onClick={saveAchievement} disabled={achSaving} style={{ flex: 2, padding: 12, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          {achSaving ? 'Saving…' : editingAchId ? 'Update Achievement' : 'Save Achievement'}
+        </button>
+      </div>
+    </div>
+  )
+
+  const charFormEl = !showCharForm ? null : (
+    <div style={{ background: secondary, borderRadius: 16, padding: 20, marginTop: 8, marginBottom: 8 }}>
+      <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: fg, marginBottom: 20 }}>{editingCharId ? 'Edit Character' : 'New Character'}</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div>
+          <span style={label}>ID (unique, no spaces)</span>
+          <input value={charForm.id} readOnly={!!editingCharId} onChange={e => setCharForm(f => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. dragon" style={{ ...input, opacity: editingCharId ? 0.5 : 1 }} />
+        </div>
+        <div>
+          <span style={label}>Name</span>
+          <input value={charForm.name} onChange={e => setCharForm(f => ({ ...f, name: e.target.value }))} placeholder="Display name" style={input} />
+        </div>
+        <div>
+          <span style={label}>Rarity</span>
+          <select value={charForm.rarity} onChange={e => setCharForm(f => ({ ...f, rarity: e.target.value }))} style={{ ...input, WebkitAppearance: 'none' }}>
+            {CHAR_RARITIES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <span style={label}>Description</span>
+        <input value={charForm.description} onChange={e => setCharForm(f => ({ ...f, description: e.target.value }))} placeholder="One-line character tagline" style={input} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+        <div>
+          <span style={label}>Primary color</span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="color" value={charForm.defaultPrimary} onChange={e => setCharForm(f => ({ ...f, defaultPrimary: e.target.value }))} style={{ width: 44, height: 36, border: 'none', borderRadius: 6, cursor: 'pointer', padding: 2 }} />
+            <input value={charForm.defaultPrimary} onChange={e => setCharForm(f => ({ ...f, defaultPrimary: e.target.value }))} style={{ ...input, flex: 1 }} />
+          </div>
+        </div>
+        <div>
+          <span style={label}>Secondary color</span>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="color" value={charForm.defaultSecondary} onChange={e => setCharForm(f => ({ ...f, defaultSecondary: e.target.value }))} style={{ width: 44, height: 36, border: 'none', borderRadius: 6, cursor: 'pointer', padding: 2 }} />
+            <input value={charForm.defaultSecondary} onChange={e => setCharForm(f => ({ ...f, defaultSecondary: e.target.value }))} style={{ ...input, flex: 1 }} />
+          </div>
+        </div>
+      </div>
+
+      {charForm.existingGlbUrl && (
+        <div style={{ marginBottom: 16 }}>
+          <span style={label}>Preview & position</span>
+          <div style={{ background: bg, borderRadius: 12, padding: '12px 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <Character3D character={charForm.id} glbUrl={charForm.existingGlbUrl} primaryColor={charForm.defaultPrimary} size={160} modelScale={charForm.zoomScale} offsetX={charForm.offsetX} offsetY={charForm.offsetY} />
+            <div style={{ width: '100%', padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: muted }}>Scale</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{Math.round(charForm.zoomScale * 100)}%</span>
+                    <button onClick={() => setCharForm(f => ({ ...f, zoomScale: 1.0 }))} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
+                  </div>
+                </div>
+                <input type="range" min="0.01" max="5" step="0.01" value={charForm.zoomScale} onChange={e => setCharForm(f => ({ ...f, zoomScale: parseFloat(e.target.value) }))} style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}><span>1%</span><span>100%</span><span>500%</span></div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: muted }}>Horizontal (X)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{charForm.offsetX.toFixed(2)}</span>
+                    <button onClick={() => setCharForm(f => ({ ...f, offsetX: 0 }))} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
+                  </div>
+                </div>
+                <input type="range" min="-3" max="3" step="0.05" value={charForm.offsetX} onChange={e => setCharForm(f => ({ ...f, offsetX: parseFloat(e.target.value) }))} style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}><span>Left</span><span>Center</span><span>Right</span></div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 12, color: muted }}>Vertical (Y)</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{charForm.offsetY.toFixed(2)}</span>
+                    <button onClick={() => setCharForm(f => ({ ...f, offsetY: 0 }))} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
+                  </div>
+                </div>
+                <input type="range" min="-3" max="3" step="0.05" value={charForm.offsetY} onChange={e => setCharForm(f => ({ ...f, offsetY: parseFloat(e.target.value) }))} style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}><span>Down</span><span>Center</span><span>Up</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+        <div>
+          <span style={label}>Texture — albedo / color map (jpg/png)</span>
+          <div style={{ border: `2px dashed ${border}`, borderRadius: 10, padding: '14px', textAlign: 'center', background: bg }}>
+            {charForm.textureFile ? (
+              <div>
+                <div style={{ fontSize: 12, color: fg, fontWeight: 500 }}>{charForm.textureFile.name}</div>
+                <button onClick={() => setCharForm(f => ({ ...f, textureFile: null }))} style={{ marginTop: 4, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+              </div>
+            ) : charForm.existingTextureUrl ? (
+              <div>
+                <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>Texture uploaded</div>
+                <label style={{ cursor: 'pointer', fontSize: 12, color: fg, textDecoration: 'underline' }}>
+                  Replace<input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureFile: f })) }} />
+                </label>
+                <button onClick={() => setCharForm(f => ({ ...f, existingTextureUrl: '' }))} style={{ marginLeft: 8, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+              </div>
+            ) : (
+              <label style={{ cursor: 'pointer' }}>
+                <div style={{ fontSize: 12, color: muted }}>Upload albedo texture</div>
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureFile: f })) }} />
+              </label>
+            )}
+          </div>
+        </div>
+        <div>
+          <span style={label}>Texture — roughness / metallic map (png)</span>
+          <div style={{ border: `2px dashed ${border}`, borderRadius: 10, padding: '14px', textAlign: 'center', background: bg }}>
+            {charForm.textureRoughnessFile ? (
+              <div>
+                <div style={{ fontSize: 12, color: fg, fontWeight: 500 }}>{charForm.textureRoughnessFile.name}</div>
+                <button onClick={() => setCharForm(f => ({ ...f, textureRoughnessFile: null }))} style={{ marginTop: 4, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+              </div>
+            ) : charForm.existingTextureRoughnessUrl ? (
+              <div>
+                <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>Roughness map uploaded</div>
+                <label style={{ cursor: 'pointer', fontSize: 12, color: fg, textDecoration: 'underline' }}>
+                  Replace<input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureRoughnessFile: f })) }} />
+                </label>
+                <button onClick={() => setCharForm(f => ({ ...f, existingTextureRoughnessUrl: '' }))} style={{ marginLeft: 8, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+              </div>
+            ) : (
+              <label style={{ cursor: 'pointer' }}>
+                <div style={{ fontSize: 12, color: muted }}>Upload roughness map</div>
+                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureRoughnessFile: f })) }} />
+              </label>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <span style={label}>GLB Model File{editingCharId ? ' (leave empty to keep current)' : ''}</span>
+        <div style={{ border: `2px dashed ${border}`, borderRadius: 10, padding: '20px', textAlign: 'center', background: bg }}>
+          {charForm.glbFile ? (
+            <div>
+              <div style={{ fontSize: 14, color: fg, fontWeight: 500 }}>{charForm.glbFile.name}</div>
+              <div style={{ fontSize: 12, color: muted, marginTop: 4 }}>{(charForm.glbFile.size / 1024 / 1024).toFixed(2)} MB</div>
+              <button onClick={() => setCharForm(f => ({ ...f, glbFile: null }))} style={{ marginTop: 8, fontSize: 12, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+            </div>
+          ) : editingCharId && charForm.existingGlbUrl ? (
+            <div>
+              <div style={{ fontSize: 12, color: muted, marginBottom: 6 }}>Current GLB uploaded</div>
+              <label style={{ cursor: 'pointer', fontSize: 13, color: fg, textDecoration: 'underline' }}>
+                Replace with new file<input type="file" accept=".glb" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(prev => ({ ...prev, glbFile: f })) }} />
+              </label>
+            </div>
+          ) : (
+            <label style={{ cursor: 'pointer' }}>
+              <div style={{ fontSize: 14, color: muted }}>Drop a .glb file here or tap to browse</div>
+              <input type="file" accept=".glb" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(prev => ({ ...prev, glbFile: f })) }} />
+            </label>
+          )}
+        </div>
+      </div>
+
+      {charError && <div style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{charError}</div>}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={() => { setShowCharForm(false); setEditingCharId(null) }} style={{ flex: 1, padding: 12, background: 'none', border: `1px solid ${border}`, borderRadius: 12, fontSize: 14, color: muted, cursor: 'pointer' }}>Cancel</button>
+        <button onClick={saveCharacter} disabled={charSaving} style={{ flex: 2, padding: 12, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
+          {charSaving ? 'Saving…' : editingCharId ? 'Update Character' : 'Save Character'}
+        </button>
+      </div>
+    </div>
+  )
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -583,7 +895,7 @@ export default function AdminPanel() {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ fontSize: 13, color: muted }}>{dbAchievements.length} custom achievement{dbAchievements.length !== 1 ? 's' : ''}</div>
-            <button onClick={() => { setAchForm(EMPTY_ACHIEVEMENT_FORM); setAchError(''); setShowAchForm(true) }}
+            <button onClick={() => { setAchForm(EMPTY_ACHIEVEMENT_FORM); setAchError(''); setEditingAchId(null); setShowAchForm(true) }}
               style={{ padding: '8px 16px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 999, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
               + New Achievement
             </button>
@@ -599,24 +911,27 @@ export default function AdminPanel() {
               : a.reward.type === 'title' ? `title — ${(a.reward as { type: 'title'; value: string }).value}`
               : `character — ${(a.reward as { type: 'character'; characterId: string }).characterId}`
             return (
-              <div key={a.id} style={{ ...card, opacity: hasOverride ? 0.45 : 0.75 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: TIER_COLORS[a.tier] ?? '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{a.tier}</span>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{a.name}</span>
-                      {hasOverride && <span style={{ fontSize: 9, fontWeight: 700, color: theme.accent, background: `${theme.accent}22`, padding: '2px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.5 }}>overridden</span>}
+              <div key={a.id}>
+                <div style={{ ...card, opacity: hasOverride ? 0.45 : 0.75 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: TIER_COLORS[a.tier] ?? '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{a.tier}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{a.name}</span>
+                        {hasOverride && <span style={{ fontSize: 9, fontWeight: 700, color: theme.accent, background: `${theme.accent}22`, padding: '2px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.5 }}>overridden</span>}
+                      </div>
+                      <div style={{ fontSize: 11, color: muted }}>{a.description}</div>
+                      <div style={{ fontSize: 11, color: muted, marginTop: 3 }}>
+                        Reward: <span style={{ color: fg }}>{rewardLabel}</span>
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, color: muted }}>{a.description}</div>
-                    <div style={{ fontSize: 11, color: muted, marginTop: 3 }}>
-                      Reward: <span style={{ color: fg }}>{rewardLabel}</span>
-                    </div>
+                    <button onClick={() => startEditBuiltinAchievement(a)}
+                      style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer', flexShrink: 0, marginLeft: 8 }}>
+                      Edit
+                    </button>
                   </div>
-                  <button onClick={() => startEditBuiltinAchievement(a)}
-                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer', flexShrink: 0, marginLeft: 8 }}>
-                    Edit
-                  </button>
                 </div>
+                {editingAchId === a.id && achFormEl}
               </div>
             )
           })}
@@ -628,34 +943,37 @@ export default function AdminPanel() {
             </div>
           )}
           {dbAchievements.map(a => (
-            <div key={a.id} style={{ ...card, opacity: a.enabled ? 1 : 0.5 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: TIER_COLORS[a.tier] ?? '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{a.tier}</span>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: fg }}>{a.name}</span>
+            <div key={a.id}>
+              <div style={{ ...card, opacity: a.enabled ? 1 : 0.5 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: TIER_COLORS[a.tier] ?? '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{a.tier}</span>
+                      <span style={{ fontSize: 14, fontWeight: 600, color: fg }}>{a.name}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: muted, marginBottom: 4 }}>{a.description}</div>
+                    <div style={{ fontSize: 11, color: muted }}>
+                      Reward: <span style={{ color: fg }}>{a.reward_type}{a.reward_value ? ` — ${a.reward_value}` : ''}</span>
+                      {' · '}Condition: <span style={{ color: fg }}>{a.condition.type}</span>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 12, color: muted, marginBottom: 4 }}>{a.description}</div>
-                  <div style={{ fontSize: 11, color: muted }}>
-                    Reward: <span style={{ color: fg }}>{a.reward_type}{a.reward_value ? ` — ${a.reward_value}` : ''}</span>
-                    {' · '}Condition: <span style={{ color: fg }}>{a.condition.type}</span>
+                  <div style={{ display: 'flex', gap: 6, marginLeft: 8, flexShrink: 0 }}>
+                    <button onClick={() => { setShowAchForm(false); setTimeout(() => startEditAchievement(a), 0) }}
+                      style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer' }}>
+                      Edit
+                    </button>
+                    <button onClick={() => toggleAchievement(a.id, !a.enabled)}
+                      style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>
+                      {a.enabled ? 'Disable' : 'Enable'}
+                    </button>
+                    <button onClick={() => deleteAchievement(a.id)}
+                      style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px solid #ef4444', background: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                      Delete
+                    </button>
                   </div>
-                </div>
-                <div style={{ display: 'flex', gap: 6, marginLeft: 8, flexShrink: 0 }}>
-                  <button onClick={() => { setShowAchForm(false); setTimeout(() => startEditAchievement(a), 0) }}
-                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer' }}>
-                    Edit
-                  </button>
-                  <button onClick={() => toggleAchievement(a.id, !a.enabled)}
-                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>
-                    {a.enabled ? 'Disable' : 'Enable'}
-                  </button>
-                  <button onClick={() => deleteAchievement(a.id)}
-                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px solid #ef4444', background: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                    Delete
-                  </button>
                 </div>
               </div>
+              {editingAchId === a.id && achFormEl}
             </div>
           ))}
 
@@ -663,159 +981,8 @@ export default function AdminPanel() {
             <div style={{ textAlign: 'center', padding: '16px 0', color: muted, fontSize: 13 }}>No custom achievements yet.</div>
           )}
 
-          {/* Create achievement form */}
-          {showAchForm && (
-            <div style={{ background: secondary, borderRadius: 16, padding: 20, marginTop: 16 }}>
-              <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: fg, marginBottom: 20 }}>{editingAchId ? 'Edit Achievement' : 'New Achievement'}</div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div>
-                  <span style={label}>ID (unique, no spaces)</span>
-                  <input value={achForm.id} readOnly={!!editingAchId} onChange={e => setAchForm(f => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. speed_reader" style={{ ...input, opacity: editingAchId ? 0.5 : 1 }} />
-                </div>
-                <div>
-                  <span style={label}>Tier</span>
-                  <select value={achForm.tier} onChange={e => setAchForm(f => ({ ...f, tier: e.target.value }))} style={{ ...input, WebkitAppearance: 'none' }}>
-                    {TIERS.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 12 }}>
-                <span style={label}>Name</span>
-                <input value={achForm.name} onChange={e => setAchForm(f => ({ ...f, name: e.target.value }))} placeholder="Achievement name" style={input} />
-              </div>
-
-              <div style={{ marginBottom: 16 }}>
-                <span style={label}>Description</span>
-                <input value={achForm.description} onChange={e => setAchForm(f => ({ ...f, description: e.target.value }))} placeholder="Short description" style={input} />
-              </div>
-
-              {/* Reward */}
-              <div style={{ marginBottom: 16, padding: '14px', background: theme.bgElevated ?? bg, borderRadius: 10 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: fg, marginBottom: 12 }}>Reward</div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                  {(['badge', 'title', 'character'] as const).map(r => (
-                    <button key={r} onClick={() => setAchForm(f => ({ ...f, rewardType: r }))}
-                      style={{ flex: 1, padding: '8px 0', borderRadius: 8, border: `1px solid ${achForm.rewardType === r ? theme.accent : border}`, background: achForm.rewardType === r ? theme.accent : 'none', color: achForm.rewardType === r ? theme.accentFg : fg, fontSize: 13, cursor: 'pointer' }}>
-                      {r.charAt(0).toUpperCase() + r.slice(1)}
-                    </button>
-                  ))}
-                </div>
-
-                {achForm.rewardType === 'title' && (
-                  <div>
-                    <span style={label}>Title text</span>
-                    <input value={achForm.rewardValue} onChange={e => setAchForm(f => ({ ...f, rewardValue: e.target.value }))}
-                      placeholder="e.g. The Speed Reader" style={input} />
-                  </div>
-                )}
-
-                {achForm.rewardType === 'character' && (() => {
-                  const allChars = [
-                    ...BUILTIN_CHARACTERS,
-                    ...dbCharacters.map(c => ({ id: c.id, name: c.name, primary: c.default_primary })),
-                  ]
-                  const usedIds = new Set<string>([
-                    ...ACHIEVEMENTS.filter(a => a.reward.type === 'character').map(a => (a.reward as { type: 'character'; characterId: string }).characterId),
-                    ...dbAchievements.filter(a => a.reward_type === 'character' && a.reward_value).map(a => a.reward_value!),
-                  ])
-                  return (
-                    <div>
-                      <span style={label}>Select character — create characters first in the Characters tab</span>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-                        {allChars.map(c => {
-                          const taken = usedIds.has(c.id) && c.id !== achForm.rewardValue
-                          const selected = achForm.rewardValue === c.id
-                          return (
-                            <button key={c.id} disabled={taken}
-                              onClick={() => setAchForm(f => ({ ...f, rewardValue: c.id }))}
-                              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '10px 4px', borderRadius: 10, border: `1.5px solid ${selected ? theme.accent : border}`, background: selected ? `${theme.accent}22` : 'none', cursor: taken ? 'default' : 'pointer', opacity: taken ? 0.3 : 1, transition: 'opacity 0.15s' }}>
-                              <div style={{ width: 28, height: 28, borderRadius: '50%', background: c.primary, flexShrink: 0 }} />
-                              <div style={{ fontSize: 10, color: fg, textAlign: 'center', lineHeight: 1.2 }}>{c.name}</div>
-                              {taken && <div style={{ fontSize: 9, color: muted }}>taken</div>}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )
-                })()}
-              </div>
-
-              {/* Condition */}
-              <div style={{ padding: '14px', background: theme.bgElevated ?? bg, borderRadius: 10, marginBottom: 16 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: fg, marginBottom: 12 }}>Condition</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-                  {(['stat', 'genre', 'genreDiversity', 'genreDepth'] as const).map(t => (
-                    <button key={t} onClick={() => setAchForm(f => ({ ...f, conditionType: t }))}
-                      style={{ padding: '8px 0', borderRadius: 8, border: `1px solid ${achForm.conditionType === t ? theme.accent : border}`, background: achForm.conditionType === t ? theme.accent : 'none', color: achForm.conditionType === t ? theme.accentFg : fg, fontSize: 12, cursor: 'pointer' }}>
-                      {t === 'genreDiversity' ? 'Genre diversity' : t === 'genreDepth' ? 'Genre depth' : t.charAt(0).toUpperCase() + t.slice(1)}
-                    </button>
-                  ))}
-                </div>
-
-                {achForm.conditionType === 'stat' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div>
-                      <span style={label}>Stat field</span>
-                      <select value={achForm.statField} onChange={e => setAchForm(f => ({ ...f, statField: e.target.value }))} style={{ ...input, WebkitAppearance: 'none' }}>
-                        {STAT_FIELDS.map(f => <option key={f} value={f}>{f}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <span style={label}>Minimum value</span>
-                      <input type="number" value={achForm.statValue} onChange={e => setAchForm(f => ({ ...f, statValue: e.target.value }))} style={input} />
-                    </div>
-                  </div>
-                )}
-
-                {achForm.conditionType === 'genre' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
-                    <div>
-                      <span style={label}>Genres (comma-separated)</span>
-                      <input value={achForm.genreList} onChange={e => setAchForm(f => ({ ...f, genreList: e.target.value }))} placeholder="fantasy, sci-fi" style={input} />
-                    </div>
-                    <div>
-                      <span style={label}>Min books</span>
-                      <input type="number" value={achForm.genreValue} onChange={e => setAchForm(f => ({ ...f, genreValue: e.target.value }))} style={input} />
-                    </div>
-                  </div>
-                )}
-
-                {achForm.conditionType === 'genreDiversity' && (
-                  <div>
-                    <span style={label}>Minimum number of different genres</span>
-                    <input type="number" value={achForm.diversityValue} onChange={e => setAchForm(f => ({ ...f, diversityValue: e.target.value }))} style={input} />
-                  </div>
-                )}
-
-                {achForm.conditionType === 'genreDepth' && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div>
-                      <span style={label}>Min books per genre</span>
-                      <input type="number" value={achForm.depthMinBooks} onChange={e => setAchForm(f => ({ ...f, depthMinBooks: e.target.value }))} style={input} />
-                    </div>
-                    <div>
-                      <span style={label}>How many genres</span>
-                      <input type="number" value={achForm.depthGenreCount} onChange={e => setAchForm(f => ({ ...f, depthGenreCount: e.target.value }))} style={input} />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {achError && <div style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{achError}</div>}
-
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => { setShowAchForm(false); setEditingAchId(null) }} style={{ flex: 1, padding: 12, background: 'none', border: `1px solid ${border}`, borderRadius: 12, fontSize: 14, color: muted, cursor: 'pointer' }}>
-                  Cancel
-                </button>
-                <button onClick={saveAchievement} disabled={achSaving} style={{ flex: 2, padding: 12, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-                  {achSaving ? 'Saving…' : editingAchId ? 'Update Achievement' : 'Save Achievement'}
-                </button>
-              </div>
-            </div>
-          )}
+          {/* New achievement form appears at bottom only when not editing an existing one */}
+          {!editingAchId && achFormEl}
         </div>
       )}
 
@@ -824,7 +991,7 @@ export default function AdminPanel() {
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ fontSize: 13, color: muted }}>{dbCharacters.length} custom character{dbCharacters.length !== 1 ? 's' : ''}</div>
-            <button onClick={() => { setCharForm(EMPTY_CHARACTER_FORM); setCharError(''); setShowCharForm(true) }}
+            <button onClick={() => { setCharForm(EMPTY_CHARACTER_FORM); setCharError(''); setEditingCharId(null); setShowCharForm(true) }}
               style={{ padding: '8px 16px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 999, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
               + New Character
             </button>
@@ -837,23 +1004,26 @@ export default function AdminPanel() {
           {BUILTIN_CHARACTERS.map(c => {
             const hasOverride = dbCharacters.some(d => d.id === c.id)
             return (
-              <div key={c.id} style={{ ...card, opacity: hasOverride ? 0.45 : 0.75 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.primary, flexShrink: 0 }} />
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 14, fontWeight: 600, color: fg }}>{c.name}</span>
-                        {hasOverride && <span style={{ fontSize: 9, fontWeight: 700, color: theme.accent, background: `${theme.accent}22`, padding: '2px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.5 }}>overridden</span>}
+              <div key={c.id}>
+                <div style={{ ...card, opacity: hasOverride ? 0.45 : 0.75 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.primary, flexShrink: 0 }} />
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: fg }}>{c.name}</span>
+                          {hasOverride && <span style={{ fontSize: 9, fontWeight: 700, color: theme.accent, background: `${theme.accent}22`, padding: '2px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.5 }}>overridden</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: muted }}>ID: {c.id} · built-in</div>
                       </div>
-                      <div style={{ fontSize: 11, color: muted }}>ID: {c.id} · built-in</div>
                     </div>
+                    <button onClick={() => startEditBuiltinCharacter(c)}
+                      style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer', flexShrink: 0 }}>
+                      Edit
+                    </button>
                   </div>
-                  <button onClick={() => startEditBuiltinCharacter(c)}
-                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer', flexShrink: 0 }}>
-                    Edit
-                  </button>
                 </div>
+                {editingCharId === c.id && charFormEl}
               </div>
             )
           })}
@@ -865,27 +1035,30 @@ export default function AdminPanel() {
             </div>
           )}
           {dbCharacters.map(c => (
-            <div key={c.id} style={{ ...card, opacity: c.enabled ? 1 : 0.5 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.default_primary, flexShrink: 0 }} />
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: fg }}>{c.name}</div>
-                    <div style={{ fontSize: 12, color: muted }}>{c.description}</div>
-                    <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>ID: {c.id}</div>
+            <div key={c.id}>
+              <div style={{ ...card, opacity: c.enabled ? 1 : 0.5 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.default_primary, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: fg }}>{c.name}</div>
+                      <div style={{ fontSize: 12, color: muted }}>{c.description}</div>
+                      <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>ID: {c.id}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button onClick={() => { setShowCharForm(false); setTimeout(() => startEditCharacter(c), 0) }}
+                      style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer' }}>
+                      Edit
+                    </button>
+                    <button onClick={() => deleteCharacter(c.id)}
+                      style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px solid #ef4444', background: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                      Delete
+                    </button>
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  <button onClick={() => { setShowCharForm(false); setTimeout(() => startEditCharacter(c), 0) }}
-                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer' }}>
-                    Edit
-                  </button>
-                  <button onClick={() => deleteCharacter(c.id)}
-                    style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: '1px solid #ef4444', background: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                    Delete
-                  </button>
-                </div>
               </div>
+              {editingCharId === c.id && charFormEl}
             </div>
           ))}
 
@@ -893,208 +1066,8 @@ export default function AdminPanel() {
             <div style={{ textAlign: 'center', padding: '16px 0', color: muted, fontSize: 13 }}>No custom characters yet.</div>
           )}
 
-          {/* Create character form */}
-          {showCharForm && (
-            <div style={{ background: secondary, borderRadius: 16, padding: 20, marginTop: 16 }}>
-              <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: fg, marginBottom: 20 }}>{editingCharId ? 'Edit Character' : 'New Character'}</div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div>
-                  <span style={label}>ID (unique, no spaces)</span>
-                  <input value={charForm.id} readOnly={!!editingCharId} onChange={e => setCharForm(f => ({ ...f, id: e.target.value.toLowerCase().replace(/\s+/g, '_') }))} placeholder="e.g. dragon" style={{ ...input, opacity: editingCharId ? 0.5 : 1 }} />
-                </div>
-                <div>
-                  <span style={label}>Name</span>
-                  <input value={charForm.name} onChange={e => setCharForm(f => ({ ...f, name: e.target.value }))} placeholder="Display name" style={input} />
-                </div>
-                <div>
-                  <span style={label}>Rarity</span>
-                  <select value={charForm.rarity} onChange={e => setCharForm(f => ({ ...f, rarity: e.target.value }))} style={{ ...input, WebkitAppearance: 'none' }}>
-                    {CHAR_RARITIES.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 12 }}>
-                <span style={label}>Description</span>
-                <input value={charForm.description} onChange={e => setCharForm(f => ({ ...f, description: e.target.value }))} placeholder="One-line character tagline" style={input} />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-                <div>
-                  <span style={label}>Primary color</span>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input type="color" value={charForm.defaultPrimary} onChange={e => setCharForm(f => ({ ...f, defaultPrimary: e.target.value }))}
-                      style={{ width: 44, height: 36, border: 'none', borderRadius: 6, cursor: 'pointer', padding: 2 }} />
-                    <input value={charForm.defaultPrimary} onChange={e => setCharForm(f => ({ ...f, defaultPrimary: e.target.value }))} style={{ ...input, flex: 1 }} />
-                  </div>
-                </div>
-                <div>
-                  <span style={label}>Secondary color</span>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input type="color" value={charForm.defaultSecondary} onChange={e => setCharForm(f => ({ ...f, defaultSecondary: e.target.value }))}
-                      style={{ width: 44, height: 36, border: 'none', borderRadius: 6, cursor: 'pointer', padding: 2 }} />
-                    <input value={charForm.defaultSecondary} onChange={e => setCharForm(f => ({ ...f, defaultSecondary: e.target.value }))} style={{ ...input, flex: 1 }} />
-                  </div>
-                </div>
-              </div>
-
-              {/* Live preview + transform controls — only visible when a GLB is already saved */}
-              {charForm.existingGlbUrl && (
-                <div style={{ marginBottom: 16 }}>
-                  <span style={label}>Preview & position</span>
-                  <div style={{ background: bg, borderRadius: 12, padding: '12px 0 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-                    <Character3D character={charForm.id} glbUrl={charForm.existingGlbUrl} primaryColor={charForm.defaultPrimary} size={160} modelScale={charForm.zoomScale} offsetX={charForm.offsetX} offsetY={charForm.offsetY} />
-                    <div style={{ width: '100%', padding: '0 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-                      {/* Scale */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, color: muted }}>Scale</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{Math.round(charForm.zoomScale * 100)}%</span>
-                            <button onClick={() => setCharForm(f => ({ ...f, zoomScale: 1.0 }))} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
-                          </div>
-                        </div>
-                        <input type="range" min="0.01" max="5" step="0.01" value={charForm.zoomScale}
-                          onChange={e => setCharForm(f => ({ ...f, zoomScale: parseFloat(e.target.value) }))}
-                          style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}><span>1%</span><span>100%</span><span>500%</span></div>
-                      </div>
-
-                      {/* X offset */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, color: muted }}>Horizontal (X)</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{charForm.offsetX.toFixed(2)}</span>
-                            <button onClick={() => setCharForm(f => ({ ...f, offsetX: 0 }))} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
-                          </div>
-                        </div>
-                        <input type="range" min="-3" max="3" step="0.05" value={charForm.offsetX}
-                          onChange={e => setCharForm(f => ({ ...f, offsetX: parseFloat(e.target.value) }))}
-                          style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}><span>Left</span><span>Center</span><span>Right</span></div>
-                      </div>
-
-                      {/* Y offset */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: 12, color: muted }}>Vertical (Y)</span>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: fg }}>{charForm.offsetY.toFixed(2)}</span>
-                            <button onClick={() => setCharForm(f => ({ ...f, offsetY: 0 }))} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: muted, cursor: 'pointer' }}>Reset</button>
-                          </div>
-                        </div>
-                        <input type="range" min="-3" max="3" step="0.05" value={charForm.offsetY}
-                          onChange={e => setCharForm(f => ({ ...f, offsetY: parseFloat(e.target.value) }))}
-                          style={{ width: '100%', accentColor: theme.accent, cursor: 'pointer' }} />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: muted }}><span>Down</span><span>Center</span><span>Up</span></div>
-                      </div>
-
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Texture upload */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-                {/* Albedo texture */}
-                <div>
-                  <span style={label}>Texture — albedo / color map (jpg/png)</span>
-                  <div style={{ border: `2px dashed ${border}`, borderRadius: 10, padding: '14px', textAlign: 'center', background: bg }}>
-                    {charForm.textureFile ? (
-                      <div>
-                        <div style={{ fontSize: 12, color: fg, fontWeight: 500 }}>{charForm.textureFile.name}</div>
-                        <button onClick={() => setCharForm(f => ({ ...f, textureFile: null }))} style={{ marginTop: 4, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
-                      </div>
-                    ) : charForm.existingTextureUrl ? (
-                      <div>
-                        <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>Texture uploaded</div>
-                        <label style={{ cursor: 'pointer', fontSize: 12, color: fg, textDecoration: 'underline' }}>
-                          Replace
-                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureFile: f })) }} />
-                        </label>
-                        <button onClick={() => setCharForm(f => ({ ...f, existingTextureUrl: '' }))} style={{ marginLeft: 8, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
-                      </div>
-                    ) : (
-                      <label style={{ cursor: 'pointer' }}>
-                        <div style={{ fontSize: 12, color: muted }}>Upload albedo texture</div>
-                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureFile: f })) }} />
-                      </label>
-                    )}
-                  </div>
-                </div>
-                {/* Roughness/metallic texture */}
-                <div>
-                  <span style={label}>Texture — roughness / metallic map (png)</span>
-                  <div style={{ border: `2px dashed ${border}`, borderRadius: 10, padding: '14px', textAlign: 'center', background: bg }}>
-                    {charForm.textureRoughnessFile ? (
-                      <div>
-                        <div style={{ fontSize: 12, color: fg, fontWeight: 500 }}>{charForm.textureRoughnessFile.name}</div>
-                        <button onClick={() => setCharForm(f => ({ ...f, textureRoughnessFile: null }))} style={{ marginTop: 4, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
-                      </div>
-                    ) : charForm.existingTextureRoughnessUrl ? (
-                      <div>
-                        <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>Roughness map uploaded</div>
-                        <label style={{ cursor: 'pointer', fontSize: 12, color: fg, textDecoration: 'underline' }}>
-                          Replace
-                          <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureRoughnessFile: f })) }} />
-                        </label>
-                        <button onClick={() => setCharForm(f => ({ ...f, existingTextureRoughnessUrl: '' }))} style={{ marginLeft: 8, fontSize: 11, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
-                      </div>
-                    ) : (
-                      <label style={{ cursor: 'pointer' }}>
-                        <div style={{ fontSize: 12, color: muted }}>Upload roughness map</div>
-                        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(p => ({ ...p, textureRoughnessFile: f })) }} />
-                      </label>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ marginBottom: 20 }}>
-                <span style={label}>GLB Model File{editingCharId ? ' (leave empty to keep current)' : ''}</span>
-                <div style={{ border: `2px dashed ${border}`, borderRadius: 10, padding: '20px', textAlign: 'center', background: bg }}>
-                  {charForm.glbFile ? (
-                    <div>
-                      <div style={{ fontSize: 14, color: fg, fontWeight: 500 }}>{charForm.glbFile.name}</div>
-                      <div style={{ fontSize: 12, color: muted, marginTop: 4 }}>{(charForm.glbFile.size / 1024 / 1024).toFixed(2)} MB</div>
-                      <button onClick={() => setCharForm(f => ({ ...f, glbFile: null }))} style={{ marginTop: 8, fontSize: 12, color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }}>
-                        Remove
-                      </button>
-                    </div>
-                  ) : editingCharId && charForm.existingGlbUrl ? (
-                    <div>
-                      <div style={{ fontSize: 12, color: muted, marginBottom: 6 }}>Current GLB uploaded</div>
-                      <label style={{ cursor: 'pointer', fontSize: 13, color: fg, textDecoration: 'underline' }}>
-                        Replace with new file
-                        <input type="file" accept=".glb" style={{ display: 'none' }}
-                          onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(prev => ({ ...prev, glbFile: f })) }} />
-                      </label>
-                    </div>
-                  ) : (
-                    <label style={{ cursor: 'pointer' }}>
-                      <div style={{ fontSize: 14, color: muted }}>Drop a .glb file here or tap to browse</div>
-                      <input type="file" accept=".glb" style={{ display: 'none' }}
-                        onChange={e => { const f = e.target.files?.[0]; if (f) setCharForm(prev => ({ ...prev, glbFile: f })) }} />
-                    </label>
-                  )}
-                </div>
-              </div>
-
-              {charError && <div style={{ color: '#ef4444', fontSize: 13, marginBottom: 12 }}>{charError}</div>}
-
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => { setShowCharForm(false); setEditingCharId(null) }} style={{ flex: 1, padding: 12, background: 'none', border: `1px solid ${border}`, borderRadius: 12, fontSize: 14, color: muted, cursor: 'pointer' }}>
-                  Cancel
-                </button>
-                <button onClick={saveCharacter} disabled={charSaving} style={{ flex: 2, padding: 12, background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>
-                  {charSaving ? 'Saving…' : editingCharId ? 'Update Character' : 'Save Character'}
-                </button>
-              </div>
-            </div>
-          )}
+          {/* New character form at bottom only */}
+          {!editingCharId && charFormEl}
         </div>
       )}
     </div>
