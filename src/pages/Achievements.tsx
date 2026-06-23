@@ -71,7 +71,7 @@ export default function AchievementsScreen() {
   )
 
   // Custom chars = DB chars that are NOT built-ins (avoids duplicate display in grid)
-  const builtinIdSet = useMemo(() => new Set(CHARACTERS.map(c => c.id)), [])
+  const builtinIdSet = useMemo(() => new Set<string>(CHARACTERS.map(c => c.id)), [])
   const customOnlyDbChars = useMemo(
     () => dbCharacters.filter(c => !builtinIdSet.has(c.id)),
     [dbCharacters, builtinIdSet]
