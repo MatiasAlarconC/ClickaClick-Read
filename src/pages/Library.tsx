@@ -6,10 +6,11 @@ import { useAuth, useTheme } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
 import { getRecommendations, isGeminiConfigured, type BookRecommendation } from '../services/gemini'
 import { searchBooks } from '../services/books'
+import VirtualShelf from '../components/VirtualShelf'
 import type { UserBook } from '../types'
 
 type BookTab = 'reading' | 'finished' | 'want_to_read' | 'dropped'
-type LibTab = BookTab | 'discover' | 'summaries'
+type LibTab = BookTab | 'discover' | 'summaries' | 'shelf'
 
 interface SavedSummary {
   bookId: string; bookTitle: string; bookAuthor: string
@@ -23,6 +24,7 @@ const TAB_LABELS: Record<LibTab, string> = {
   dropped: 'Dropped',
   summaries: 'Summaries',
   discover: '✦ For You',
+  shelf: 'Shelf',
 }
 
 const REC_CACHE_TTL = 24 * 60 * 60 * 1000 // 24h
@@ -235,7 +237,7 @@ export default function LibraryScreen() {
   }
 
   const totalBooks = books.reading.length + books.finished.length + books.want_to_read.length
-  const isBookTab = tab !== 'discover' && tab !== 'summaries'
+  const isBookTab = tab !== 'discover' && tab !== 'summaries' && tab !== 'shelf'
   const [finishedSearch, setFinishedSearch] = useState('')
   const [dbSummaries, setDbSummaries] = useState<SavedSummary[]>([])
 
@@ -272,7 +274,7 @@ export default function LibraryScreen() {
 
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, position: 'relative', paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
-      <div style={{ flex: 1, padding: '22px 22px 0', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)' }}>
+      <div style={{ flex: 1, padding: '22px 22px 0', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20 }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 400, color: theme.fg, letterSpacing: -1 }}>Library</div>
           <div style={{ fontSize: 12, color: theme.muted, paddingBottom: 4 }}>{totalBooks} books</div>
@@ -288,7 +290,7 @@ export default function LibraryScreen() {
         </div>
         {/* Tabs — row 2: features */}
         <div style={{ display: 'flex', gap: 7, marginBottom: 22 }}>
-          {(['summaries', 'discover'] as LibTab[]).map(t => (
+          {(['summaries', 'discover', 'shelf'] as LibTab[]).map(t => (
             <button key={t} onClick={() => setTab(t)} style={{ padding: '6px 13px', borderRadius: 999, flexShrink: 0, background: tab === t ? theme.fg : theme.bgSecondary, color: tab === t ? theme.bg : theme.fgDim, border: 'none', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 500 }}>
               {TAB_LABELS[t]}
             </button>
@@ -370,6 +372,13 @@ export default function LibraryScreen() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Virtual shelf tab — full-bleed, fills remaining height */}
+        {tab === 'shelf' && (
+          <div style={{ flex: 1, margin: '0 -22px', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+            <VirtualShelf />
           </div>
         )}
 

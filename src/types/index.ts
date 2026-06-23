@@ -48,6 +48,8 @@ export interface UserBook {
   epub_storage_path: string | null
   epub_page_ratio: number | null
   progress_pct: number | null
+  spine_url?: string | null
+  shelf_pos?: { x: number; y: number; rotation: number; scale: number } | null
   book?: Book
 }
 
