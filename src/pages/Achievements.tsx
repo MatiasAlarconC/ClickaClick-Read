@@ -60,7 +60,7 @@ export default function AchievementsScreen() {
   const [charSnapshots, setCharSnapshots] = useState<Record<string, string>>(() => {
     try { return JSON.parse(sessionStorage.getItem(SNAPSHOT_CACHE_KEY) ?? '{}') } catch { return {} }
   })
-  // DB snapshots from admin take priority — no auto-capture needed for these
+  // DB snapshots from admin take priority — built-in overrides included for snapshot lookup
   const dbSnapshotMap = useMemo(
     () => {
       const m: Record<string, string> = {}
@@ -70,13 +70,20 @@ export default function AchievementsScreen() {
     [dbCharacters]
   )
 
+  // Custom chars = DB chars that are NOT built-ins (avoids duplicate display in grid)
+  const builtinIdSet = useMemo(() => new Set(CHARACTERS.map(c => c.id)), [])
+  const customOnlyDbChars = useMemo(
+    () => dbCharacters.filter(c => !builtinIdSet.has(c.id)),
+    [dbCharacters, builtinIdSet]
+  )
+
   // Only auto-capture chars that don't already have a DB snapshot
   const snapshotChars = useMemo<SnapshotCharacter[]>(
     () => [
       ...CHARACTERS.filter(c => !dbSnapshotMap[c.id]).map(c => ({ id: c.id, primaryColor: c.defaultPrimary })),
-      ...dbCharacters.filter(c => !c.snapshot_url).map(c => ({ id: c.id, glbUrl: c.glb_url, primaryColor: c.default_primary })),
+      ...customOnlyDbChars.filter(c => !c.snapshot_url).map(c => ({ id: c.id, glbUrl: c.glb_url, primaryColor: c.default_primary })),
     ],
-    [dbCharacters, dbSnapshotMap]
+    [customOnlyDbChars, dbSnapshotMap]
   )
 
   const snapshotsReady = dbCharactersLoaded && snapshotChars.every(c => charSnapshots[c.id])
@@ -313,8 +320,8 @@ export default function AchievementsScreen() {
                   </div>
                 )
               })}
-              {/* DB characters: DB admin snapshot → auto-batch snapshot → 3D fallback */}
-              {dbCharacters.map(c => {
+              {/* Custom DB characters (not built-ins): DB admin snapshot → auto-batch → 3D fallback */}
+              {customOnlyDbChars.map(c => {
                 const unlocked = unlockedCharacters.has(c.id)
                 const snap = dbSnapshotMap[c.id] || charSnapshots[c.id]
                 return (

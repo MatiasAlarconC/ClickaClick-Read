@@ -692,7 +692,7 @@ export default function AdminPanel() {
                 onClick={takeCharSnapshot}
                 disabled={charSnapshotSaving || !charForm.id}
                 style={{ padding: '8px 16px', background: charSnapshotSaving ? secondary : theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 500, cursor: charSnapshotSaving || !charForm.id ? 'default' : 'pointer', opacity: charSnapshotSaving || !charForm.id ? 0.5 : 1 }}>
-                {charSnapshotSaving ? 'Saving…' : '📸 Take Snapshot'}
+                {charSnapshotSaving ? 'Saving…' : 'Take Snapshot'}
               </button>
               {charForm.snapshotUrl && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1030,54 +1030,50 @@ export default function AdminPanel() {
       )}
 
       {/* ── CHARACTERS TAB ────────────────────────────────────────────────── */}
-      {tab === 'characters' && (
+      {tab === 'characters' && (() => {
+        const builtinIds = new Set(BUILTIN_CHARACTERS.map(b => b.id))
+        const customOnlyChars = dbCharacters.filter(c => !builtinIds.has(c.id))
+        const totalCount = BUILTIN_CHARACTERS.length + customOnlyChars.length
+        return (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ fontSize: 13, color: muted }}>{dbCharacters.length} custom character{dbCharacters.length !== 1 ? 's' : ''}</div>
+            <div style={{ fontSize: 13, color: muted }}>{totalCount} character{totalCount !== 1 ? 's' : ''}</div>
             <button onClick={() => { setCharForm(EMPTY_CHARACTER_FORM); setCharError(''); setEditingCharId(null); setShowCharForm(true) }}
               style={{ padding: '8px 16px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 999, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
               + New Character
             </button>
           </div>
 
-          {/* Built-in characters */}
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: muted, marginBottom: 8 }}>
-            Built-in ({BUILTIN_CHARACTERS.length})
-          </div>
-          {BUILTIN_CHARACTERS.map(c => {
-            const hasOverride = dbCharacters.some(d => d.id === c.id)
+          {/* Built-in characters (show override data when available) */}
+          {BUILTIN_CHARACTERS.map(b => {
+            const override = dbCharacters.find(d => d.id === b.id)
+            const displayName = override?.name ?? b.name
+            const displayPrimary = override?.default_primary ?? b.primary
+            const hasSnapshot = !!(override?.snapshot_url)
             return (
-              <div key={c.id}>
-                <div style={{ ...card, opacity: hasOverride ? 0.45 : 0.75 }}>
+              <div key={b.id}>
+                <div style={card}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: c.primary, flexShrink: 0 }} />
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: displayPrimary, flexShrink: 0 }} />
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 14, fontWeight: 600, color: fg }}>{c.name}</span>
-                          {hasOverride && <span style={{ fontSize: 9, fontWeight: 700, color: theme.accent, background: `${theme.accent}22`, padding: '2px 6px', borderRadius: 999, textTransform: 'uppercase', letterSpacing: 0.5 }}>overridden</span>}
-                        </div>
-                        <div style={{ fontSize: 11, color: muted }}>ID: {c.id} · built-in</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: fg }}>{displayName}</div>
+                        <div style={{ fontSize: 11, color: muted }}>ID: {b.id}{hasSnapshot ? ' · snapshot set' : ''}</div>
                       </div>
                     </div>
-                    <button onClick={() => startEditBuiltinCharacter(c)}
+                    <button onClick={() => override ? startEditCharacter(override) : startEditBuiltinCharacter(b)}
                       style={{ fontSize: 11, padding: '4px 10px', borderRadius: 999, border: `1px solid ${border}`, background: 'none', color: fg, cursor: 'pointer', flexShrink: 0 }}>
                       Edit
                     </button>
                   </div>
                 </div>
-                {editingCharId === c.id && charFormEl}
+                {editingCharId === b.id && charFormEl}
               </div>
             )
           })}
 
-          {/* Custom characters */}
-          {dbCharacters.length > 0 && (
-            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.8, textTransform: 'uppercase', color: muted, margin: '16px 0 8px' }}>
-              Custom ({dbCharacters.length})
-            </div>
-          )}
-          {dbCharacters.map(c => (
+          {/* Truly custom characters (not built-ins) */}
+          {customOnlyChars.map(c => (
             <div key={c.id}>
               <div style={{ ...card, opacity: c.enabled ? 1 : 0.5 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1086,7 +1082,7 @@ export default function AdminPanel() {
                     <div>
                       <div style={{ fontSize: 14, fontWeight: 600, color: fg }}>{c.name}</div>
                       <div style={{ fontSize: 12, color: muted }}>{c.description}</div>
-                      <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>ID: {c.id}</div>
+                      <div style={{ fontSize: 11, color: muted, marginTop: 2 }}>ID: {c.id}{c.snapshot_url ? ' · snapshot set' : ''}</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
@@ -1105,14 +1101,15 @@ export default function AdminPanel() {
             </div>
           ))}
 
-          {dbCharacters.length === 0 && !showCharForm && (
+          {customOnlyChars.length === 0 && !showCharForm && (
             <div style={{ textAlign: 'center', padding: '16px 0', color: muted, fontSize: 13 }}>No custom characters yet.</div>
           )}
 
           {/* New character form at bottom only */}
           {!editingCharId && charFormEl}
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }
