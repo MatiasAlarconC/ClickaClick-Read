@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTheme, useAuth } from '../context/AppContext'
 import { supabase } from '../lib/supabase'
-import { searchByISBN } from '../services/books'
-import ISBNScanner from './ISBNScanner'
-import type { SearchResult, Theme } from '../types'
+import SpineCaptureCamera from './SpineCaptureCamera'
+import type { Theme } from '../types'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const BOOK_W = 42
@@ -29,7 +28,12 @@ type Interaction =
   | { type: 'rotate'; id: string; cX: number; cY: number; startAngle: number; origRot: number }
   | { type: 'scale'; id: string; cX: number; cY: number; startDist: number; origScale: number }
 
-interface LibBook { id: string; title: string; author: string; coverUrl: string | null; userBookId: string }
+interface LibBook {
+  userBookId: string
+  title: string
+  author: string
+  coverUrl: string | null
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function spineColor(title: string, dark: boolean): string {
@@ -41,10 +45,10 @@ function spineColor(title: string, dark: boolean): string {
 
 function toCanvasCoords(
   e: { clientX: number; clientY: number },
-  containerEl: HTMLDivElement,
+  el: HTMLDivElement,
 ) {
-  const r = containerEl.getBoundingClientRect()
-  return { cx: e.clientX - r.left, cy: e.clientY - r.top + containerEl.scrollTop }
+  const r = el.getBoundingClientRect()
+  return { cx: e.clientX - r.left, cy: e.clientY - r.top + el.scrollTop }
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -55,11 +59,12 @@ export default function VirtualShelf() {
   const [books, setBooks] = useState<ShelfBook[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [scanning, setScanning] = useState(false)
-  const [foundBook, setFoundBook] = useState<{ result: SearchResult; frameUrl?: string } | null>(null)
-  const [scanLoading, setScanLoading] = useState(false)
-  const [scanError, setScanError] = useState('')
-  const [addingBook, setAddingBook] = useState(false)
+
+  // Spine capture
+  const [spineTarget, setSpineTarget] = useState<{ userBookId: string; title: string } | null>(null)
+  const [spineSaving, setSpineSaving] = useState(false)
+
+  // Add from library sheet
   const [showLibSheet, setShowLibSheet] = useState(false)
   const [libBooks, setLibBooks] = useState<LibBook[]>([])
   const [libLoading, setLibLoading] = useState(false)
@@ -71,25 +76,27 @@ export default function VirtualShelf() {
   // ─── Load shelf books ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return
-    ;(async () => {
-      const { data } = await supabase
-        .from('user_books')
-        .select('id, spine_url, shelf_pos, book:books(title, author, cover_url)')
-        .eq('user_id', user.id)
-        .not('shelf_pos', 'is', null)
-      if (!data) return
-      setBooks(
-        (data as any[]).map(r => ({
-          userBookId: r.id,
-          title: r.book?.title ?? 'Unknown',
-          author: r.book?.author ?? '',
-          coverUrl: r.book?.cover_url ?? null,
-          spineUrl: r.spine_url ?? null,
-          pos: r.shelf_pos,
-        }))
-      )
-    })()
+    loadShelfBooks()
   }, [user])
+
+  const loadShelfBooks = async () => {
+    const { data } = await supabase
+      .from('user_books')
+      .select('id, spine_url, shelf_pos, book:books(title, author, cover_url)')
+      .eq('user_id', user!.id)
+      .not('shelf_pos', 'is', null)
+    if (!data) return
+    setBooks(
+      (data as any[]).map(r => ({
+        userBookId: r.id,
+        title: r.book?.title ?? 'Unknown',
+        author: r.book?.author ?? '',
+        coverUrl: r.book?.cover_url ?? null,
+        spineUrl: r.spine_url ?? null,
+        pos: r.shelf_pos,
+      }))
+    )
+  }
 
   // ─── Position persistence ─────────────────────────────────────────────────
   const scheduleSave = (userBookId: string, pos: ShelfBook['pos']) => {
@@ -110,7 +117,7 @@ export default function VirtualShelf() {
     )
   }
 
-  // ─── Default placement ────────────────────────────────────────────────────
+  // ─── Default placement for new books ─────────────────────────────────────
   const nextSlot = (): ShelfBook['pos'] => {
     const perRow = Math.floor((CANVAS_W - 20) / (BOOK_W + 6))
     const counts: Record<number, number> = {}
@@ -127,7 +134,7 @@ export default function VirtualShelf() {
     return { x: 10, y: 0, rotation: 0, scale: 1 }
   }
 
-  // ─── Overlay pointer handlers (active while dragging) ────────────────────
+  // ─── Overlay pointer handlers ─────────────────────────────────────────────
   const handleOverlayMove = (e: React.PointerEvent) => {
     const st = interactionRef.current
     if (!st || !containerRef.current) return
@@ -153,153 +160,57 @@ export default function VirtualShelf() {
     setDragging(false)
   }
 
-  // ─── Book body drag start ─────────────────────────────────────────────────
+  // ─── Drag / rotate / scale start ─────────────────────────────────────────
   const startMove = (e: React.PointerEvent, book: ShelfBook) => {
     e.stopPropagation()
     if (!containerRef.current) return
     const { cx, cy } = toCanvasCoords(e, containerRef.current)
-    interactionRef.current = {
-      type: 'move',
-      id: book.userBookId,
-      offsetX: cx - book.pos.x,
-      offsetY: cy - book.pos.y,
-    }
+    interactionRef.current = { type: 'move', id: book.userBookId, offsetX: cx - book.pos.x, offsetY: cy - book.pos.y }
     setSelectedId(book.userBookId)
     setDragging(true)
   }
 
-  // ─── Rotate handle drag start ─────────────────────────────────────────────
   const startRotate = (e: React.PointerEvent, book: ShelfBook) => {
     e.stopPropagation()
     if (!containerRef.current) return
     const { cx, cy } = toCanvasCoords(e, containerRef.current)
     const cX = book.pos.x + BOOK_W / 2
     const cY = book.pos.y + BOOK_H / 2
-    interactionRef.current = {
-      type: 'rotate',
-      id: book.userBookId,
-      cX,
-      cY,
-      startAngle: Math.atan2(cy - cY, cx - cX) * 180 / Math.PI,
-      origRot: book.pos.rotation,
-    }
+    interactionRef.current = { type: 'rotate', id: book.userBookId, cX, cY, startAngle: Math.atan2(cy - cY, cx - cX) * 180 / Math.PI, origRot: book.pos.rotation }
     setDragging(true)
   }
 
-  // ─── Scale handle drag start ──────────────────────────────────────────────
   const startScale = (e: React.PointerEvent, book: ShelfBook) => {
     e.stopPropagation()
     if (!containerRef.current) return
     const { cx, cy } = toCanvasCoords(e, containerRef.current)
     const cX = book.pos.x + BOOK_W / 2
     const cY = book.pos.y + BOOK_H / 2
-    interactionRef.current = {
-      type: 'scale',
-      id: book.userBookId,
-      cX,
-      cY,
-      startDist: Math.hypot(cx - cX, cy - cY),
-      origScale: book.pos.scale,
-    }
+    interactionRef.current = { type: 'scale', id: book.userBookId, cX, cY, startDist: Math.hypot(cx - cX, cy - cY), origScale: book.pos.scale }
     setDragging(true)
   }
 
-  // ─── ISBN scan result ─────────────────────────────────────────────────────
-  const handleISBNDetected = async (isbn: string, frameUrl?: string) => {
-    setScanning(false)
-    setScanLoading(true)
-    setScanError('')
-    const result = await searchByISBN(isbn)
-    setScanLoading(false)
-    if (result) {
-      setFoundBook({ result, frameUrl })
-    } else {
-      setScanError('Book not found. Try searching manually in the Search tab.')
-    }
-  }
-
-  // ─── Confirm add book to shelf ────────────────────────────────────────────
-  const handleConfirmAdd = async () => {
-    if (!foundBook || !user) return
-    setAddingBook(true)
+  // ─── Spine capture ────────────────────────────────────────────────────────
+  const handleSpineCaptured = async (dataUrl: string) => {
+    if (!spineTarget || !user) return
+    setSpineTarget(null)
+    setSpineSaving(true)
     try {
-      const { result, frameUrl } = foundBook
-      const externalId = result.google_books_id ?? result.id
-
-      // 1. Ensure book row exists
-      let bookDbId: string | null = null
-      const { data: existing } = await supabase
-        .from('books').select('id').eq('google_books_id', externalId).maybeSingle()
-      if (existing) {
-        bookDbId = existing.id
-      } else {
-        const { data: ins } = await supabase.from('books').insert({
-          google_books_id: externalId,
-          title: result.title, author: result.author,
-          synopsis: result.synopsis ?? null, cover_url: result.cover_url ?? null,
-          pages_default: result.pages ?? null, genres: result.genres ?? [],
-          published_year: result.published_year ?? null, isbn: result.isbn ?? null,
-        }).select('id').single()
-        bookDbId = ins?.id ?? null
-        if (!bookDbId) {
-          const { data: retry } = await supabase.from('books').select('id').eq('google_books_id', externalId).maybeSingle()
-          bookDbId = retry?.id ?? null
-        }
-      }
-      if (!bookDbId) return
-
-      const defaultPos = nextSlot()
-
-      // 2. Check if user already has this book
-      const { data: existingUb } = await supabase
-        .from('user_books').select('id').eq('user_id', user.id).eq('book_id', bookDbId).maybeSingle()
-
-      let userBookId: string | null = null
-      if (existingUb) {
-        await supabase.from('user_books').update({ shelf_pos: defaultPos }).eq('id', existingUb.id)
-        userBookId = existingUb.id
-      } else {
-        const { data: ub } = await supabase.from('user_books').insert({
-          user_id: user.id, book_id: bookDbId,
-          status: 'want_to_read', added_at: new Date().toISOString(),
-          shelf_pos: defaultPos,
-        }).select('id').single()
-        userBookId = ub?.id ?? null
-      }
-      if (!userBookId) return
-
-      // 3. Upload spine frame if captured
-      let spineUrl: string | null = null
-      if (frameUrl) {
-        try {
-          const blob = await (await fetch(frameUrl)).blob()
-          const path = `${user.id}/${userBookId}.jpg`
-          const { error: upErr } = await supabase.storage
-            .from('book-spines').upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
-          if (!upErr) {
-            spineUrl = supabase.storage.from('book-spines').getPublicUrl(path).data.publicUrl
-            await supabase.from('user_books').update({ spine_url: spineUrl }).eq('id', userBookId)
-          }
-        } catch { /* non-fatal */ }
-      }
-
-      // 4. Add to local state
-      setBooks(prev => {
-        const without = prev.filter(b => b.userBookId !== userBookId)
-        return [...without, {
-          userBookId: userBookId!,
-          title: result.title, author: result.author,
-          coverUrl: result.cover_url, spineUrl,
-          pos: defaultPos,
-        }]
-      })
-      setFoundBook(null)
+      const blob = await (await fetch(dataUrl)).blob()
+      const path = `${user.id}/${spineTarget.userBookId}.jpg`
+      const { error } = await supabase.storage
+        .from('book-spines')
+        .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
+      if (error) return
+      const spineUrl = supabase.storage.from('book-spines').getPublicUrl(path).data.publicUrl
+      await supabase.from('user_books').update({ spine_url: spineUrl }).eq('id', spineTarget.userBookId)
+      setBooks(prev => prev.map(b => b.userBookId === spineTarget.userBookId ? { ...b, spineUrl } : b))
     } finally {
-      setAddingBook(false)
+      setSpineSaving(false)
     }
   }
 
-  // ─── Add existing library book to shelf ───────────────────────────────────
+  // ─── Add from library ─────────────────────────────────────────────────────
   const openLibSheet = async () => {
     setShowLibSheet(true)
     setLibLoading(true)
@@ -315,18 +226,29 @@ export default function VirtualShelf() {
       title: r.book?.title ?? 'Unknown',
       author: r.book?.author ?? '',
       coverUrl: r.book?.cover_url ?? null,
-      id: r.id,
     })))
   }
 
   const addLibBookToShelf = async (lb: LibBook) => {
     const pos = nextSlot()
-    await supabase.from('user_books').update({ shelf_pos: pos }).eq('id', lb.userBookId)
-    setBooks(prev => [...prev, { userBookId: lb.userBookId, title: lb.title, author: lb.author, coverUrl: lb.coverUrl, spineUrl: null, pos }])
+    const { data } = await supabase
+      .from('user_books')
+      .update({ shelf_pos: pos })
+      .eq('id', lb.userBookId)
+      .select('spine_url')
+      .single()
+    setBooks(prev => [...prev, {
+      userBookId: lb.userBookId,
+      title: lb.title,
+      author: lb.author,
+      coverUrl: lb.coverUrl,
+      spineUrl: (data as any)?.spine_url ?? null,
+      pos,
+    }])
     setLibBooks(prev => prev.filter(b => b.userBookId !== lb.userBookId))
   }
 
-  // ─── Remove book from shelf (keep in library) ─────────────────────────────
+  // ─── Remove from shelf (keep in library) ─────────────────────────────────
   const removeFromShelf = async (id: string) => {
     await supabase.from('user_books').update({ shelf_pos: null }).eq('id', id)
     setBooks(prev => prev.filter(b => b.userBookId !== id))
@@ -334,15 +256,14 @@ export default function VirtualShelf() {
   }
 
   const canvasH = NUM_SHELVES * SHELF_ROW_H + SHELF_BOARD_H
-
-  const shelfBg = theme.dark ? '#2c1f14' : '#f5ede0'
   const boardColor = theme.dark ? '#4a2f1a' : '#c9a06a'
   const boardEdge = theme.dark ? '#6b3f20' : '#a87840'
+  const shelfBg = theme.dark ? '#1e1610' : '#f5ede0'
 
   return (
     <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      {/* Drag capture overlay — rendered while any interaction is active */}
+      {/* Drag capture overlay */}
       {dragging && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 9998, touchAction: 'none', cursor: 'grabbing' }}
@@ -350,6 +271,13 @@ export default function VirtualShelf() {
           onPointerUp={handleOverlayUp}
           onPointerCancel={handleOverlayUp}
         />
+      )}
+
+      {/* Saving indicator */}
+      {spineSaving && (
+        <div style={{ position: 'absolute', top: 12, left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: theme.fg, color: theme.bg, borderRadius: 999, padding: '6px 16px', fontSize: 12, fontWeight: 500 }}>
+          Saving spine…
+        </div>
       )}
 
       {/* Shelf canvas */}
@@ -382,83 +310,40 @@ export default function VirtualShelf() {
               onStartRotate={startRotate}
               onStartScale={startScale}
               onRemove={removeFromShelf}
+              onCaptureSpine={b => setSpineTarget({ userBookId: b.userBookId, title: b.title })}
             />
           ))}
         </div>
 
-        {books.length === 0 && !scanLoading && (
+        {books.length === 0 && (
           <div style={{ position: 'absolute', top: '35%', left: 0, right: 0, textAlign: 'center', pointerEvents: 'none', padding: '0 32px' }}>
             <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.muted, marginBottom: 8 }}>Your shelf is empty</div>
-            <div style={{ fontSize: 13, color: theme.muted, opacity: 0.7, lineHeight: 1.6 }}>Scan a book barcode to add it, or choose from your library</div>
+            <div style={{ fontSize: 13, color: theme.muted, opacity: 0.7, lineHeight: 1.6 }}>Add books from your library to place them here</div>
           </div>
         )}
       </div>
 
-      {/* Scan error toast */}
-      {scanError && (
-        <div style={{
-          position: 'absolute', bottom: 90, left: 16, right: 16,
-          background: theme.bgElevated, border: `1px solid ${theme.border}`,
-          borderRadius: 12, padding: '12px 16px',
-          fontSize: 13, color: theme.fgDim, lineHeight: 1.5,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10,
-        }}>
-          <span>{scanError}</span>
-          <button onClick={() => setScanError('')} style={{ background: 'none', border: 'none', color: theme.muted, fontSize: 18, cursor: 'pointer', lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
-        </div>
-      )}
-
-      {/* Scan loading overlay */}
-      {scanLoading && (
-        <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
-          <div style={{ background: theme.bg, borderRadius: 16, padding: '20px 28px', fontSize: 14, color: theme.fg }}>Looking up book…</div>
-        </div>
-      )}
-
-      {/* FAB row */}
-      <div style={{ position: 'absolute', bottom: 16, right: 16, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
-        {/* Add from library button */}
+      {/* FAB */}
+      <div style={{ position: 'absolute', bottom: 16, right: 16 }}>
         <button
           onClick={openLibSheet}
           style={{
-            padding: '10px 16px', borderRadius: 999,
-            background: theme.bgElevated, border: `1px solid ${theme.border}`,
-            color: theme.fg, fontSize: 12, fontWeight: 500, cursor: 'pointer',
-            boxShadow: `0 2px 8px ${theme.dark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.1)'}`,
-            whiteSpace: 'nowrap',
-          }}
-        >
-          From Library
-        </button>
-        {/* Scan FAB */}
-        <button
-          onClick={() => { setScanError(''); setScanning(true) }}
-          aria-label="Scan book barcode"
-          style={{
-            width: 56, height: 56, borderRadius: '50%',
-            background: theme.fg, color: theme.bg, border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '12px 20px', borderRadius: 999,
+            background: theme.fg, color: theme.bg,
+            border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer',
             boxShadow: `0 4px 16px ${theme.dark ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.2)'}`,
           }}
         >
-          <ScanIcon />
+          + From Library
         </button>
       </div>
 
-      {/* ISBN Scanner */}
-      {scanning && (
-        <ISBNScanner onDetected={handleISBNDetected} onClose={() => setScanning(false)} />
-      )}
-
-      {/* Book found confirmation */}
-      {foundBook && (
-        <BookFoundSheet
-          result={foundBook.result}
-          frameUrl={foundBook.frameUrl}
-          adding={addingBook}
-          theme={theme}
-          onConfirm={handleConfirmAdd}
-          onDismiss={() => setFoundBook(null)}
+      {/* Spine capture camera */}
+      {spineTarget && (
+        <SpineCaptureCamera
+          bookTitle={spineTarget.title}
+          onCapture={handleSpineCaptured}
+          onClose={() => setSpineTarget(null)}
         />
       )}
 
@@ -469,6 +354,7 @@ export default function VirtualShelf() {
           loading={libLoading}
           theme={theme}
           onAdd={addLibBookToShelf}
+          onCaptureSpine={lb => { setShowLibSheet(false); setSpineTarget({ userBookId: lb.userBookId, title: lb.title }) }}
           onClose={() => setShowLibSheet(false)}
         />
       )}
@@ -477,7 +363,7 @@ export default function VirtualShelf() {
 }
 
 // ─── Book spine ───────────────────────────────────────────────────────────────
-function BookSpine({ book, selected, theme, onStartMove, onStartRotate, onStartScale, onRemove }: {
+function BookSpine({ book, selected, theme, onStartMove, onStartRotate, onStartScale, onRemove, onCaptureSpine }: {
   book: ShelfBook
   selected: boolean
   theme: Theme
@@ -485,6 +371,7 @@ function BookSpine({ book, selected, theme, onStartMove, onStartRotate, onStartS
   onStartRotate: (e: React.PointerEvent, b: ShelfBook) => void
   onStartScale: (e: React.PointerEvent, b: ShelfBook) => void
   onRemove: (id: string) => void
+  onCaptureSpine: (b: ShelfBook) => void
 }) {
   const { pos } = book
   const imgSrc = book.spineUrl ?? book.coverUrl
@@ -492,15 +379,12 @@ function BookSpine({ book, selected, theme, onStartMove, onStartRotate, onStartS
   return (
     <div style={{
       position: 'absolute',
-      left: pos.x,
-      top: pos.y,
-      width: BOOK_W,
-      height: BOOK_H,
+      left: pos.x, top: pos.y,
+      width: BOOK_W, height: BOOK_H,
       transform: `rotate(${pos.rotation}deg) scale(${pos.scale})`,
       transformOrigin: 'center center',
       zIndex: selected ? 20 : 3,
-      touchAction: 'none',
-      userSelect: 'none',
+      touchAction: 'none', userSelect: 'none',
     }}>
       {/* Rotate handle — top center */}
       {selected && (
@@ -523,8 +407,7 @@ function BookSpine({ book, selected, theme, onStartMove, onStartRotate, onStartS
       <div
         onPointerDown={e => { e.stopPropagation(); onStartMove(e, book) }}
         style={{
-          width: '100%', height: '100%',
-          borderRadius: 3, overflow: 'hidden',
+          width: '100%', height: '100%', borderRadius: 3, overflow: 'hidden',
           background: imgSrc ? undefined : spineColor(book.title, theme.dark),
           boxShadow: selected
             ? `0 0 0 2px ${theme.fg}, 4px 4px 10px rgba(0,0,0,0.45)`
@@ -538,11 +421,7 @@ function BookSpine({ book, selected, theme, onStartMove, onStartRotate, onStartS
             style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }}
           />
         ) : (
-          <div style={{
-            width: '100%', height: '100%',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 4,
-          }}>
+          <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4 }}>
             <span style={{
               fontSize: 8, lineHeight: 1.35, textAlign: 'center',
               color: theme.dark ? 'rgba(255,255,255,0.75)' : 'rgba(0,0,0,0.65)',
@@ -571,7 +450,23 @@ function BookSpine({ book, selected, theme, onStartMove, onStartRotate, onStartS
         </div>
       )}
 
-      {/* Remove button — top right */}
+      {/* Camera handle — bottom left (add/update spine) */}
+      {selected && (
+        <button
+          onClick={e => { e.stopPropagation(); onCaptureSpine(book) }}
+          style={{
+            position: 'absolute', left: -HANDLE_R, bottom: -HANDLE_R,
+            width: HANDLE_R * 2, height: HANDLE_R * 2, borderRadius: '50%',
+            background: theme.fg, border: `2px solid ${theme.bg}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', zIndex: 5, padding: 0,
+          }}
+        >
+          <CameraIcon color={theme.bg} />
+        </button>
+      )}
+
+      {/* Remove — top right */}
       {selected && (
         <button
           onClick={e => { e.stopPropagation(); onRemove(book.userBookId) }}
@@ -580,8 +475,8 @@ function BookSpine({ book, selected, theme, onStartMove, onStartRotate, onStartS
             width: HANDLE_R * 2, height: HANDLE_R * 2, borderRadius: '50%',
             background: '#ef4444', border: `2px solid ${theme.bg}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', zIndex: 5, color: '#fff', fontSize: 14,
-            lineHeight: 1, fontWeight: 700, padding: 0,
+            cursor: 'pointer', zIndex: 5, color: '#fff',
+            fontSize: 15, fontWeight: 700, lineHeight: 1, padding: 0,
           }}
         >
           ×
@@ -591,70 +486,36 @@ function BookSpine({ book, selected, theme, onStartMove, onStartRotate, onStartS
   )
 }
 
-// ─── Book found sheet ─────────────────────────────────────────────────────────
-function BookFoundSheet({ result, frameUrl, adding, theme, onConfirm, onDismiss }: {
-  result: SearchResult
-  frameUrl?: string
-  adding: boolean
-  theme: Theme
-  onConfirm: () => void
-  onDismiss: () => void
-}) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 400, display: 'flex', alignItems: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        width: '100%', background: theme.bg,
-        borderRadius: '20px 20px 0 0',
-        padding: '24px 20px calc(24px + env(safe-area-inset-bottom, 0px))',
-      }}>
-        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: theme.muted, marginBottom: 16 }}>Book Found</div>
-        <div style={{ display: 'flex', gap: 14, marginBottom: 22 }}>
-          <div style={{ width: 60, height: 90, borderRadius: 6, overflow: 'hidden', flexShrink: 0, background: theme.bgSecondary }}>
-            {(frameUrl ?? result.cover_url) && (
-              <img src={frameUrl ?? result.cover_url!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            )}
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: 17, color: theme.fg, lineHeight: 1.3, marginBottom: 4 }}>{result.title}</div>
-            <div style={{ fontSize: 13, color: theme.muted, marginBottom: 6 }}>{result.author}</div>
-            {result.pages && <div style={{ fontSize: 11, color: theme.muted }}>{result.pages} pages</div>}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={onDismiss} style={{ flex: 1, padding: '13px 0', background: theme.bgSecondary, border: 'none', borderRadius: 12, fontSize: 15, color: theme.muted, cursor: 'pointer' }}>Cancel</button>
-          <button onClick={onConfirm} disabled={adding} style={{ flex: 2, padding: '13px 0', background: theme.fg, border: 'none', borderRadius: 12, fontSize: 15, color: theme.bg, fontWeight: 600, cursor: adding ? 'default' : 'pointer', opacity: adding ? 0.65 : 1 }}>
-            {adding ? 'Adding…' : 'Add to Shelf'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── Add from library sheet ───────────────────────────────────────────────────
-function AddFromLibSheet({ books, loading, theme, onAdd, onClose }: {
+function AddFromLibSheet({ books, loading, theme, onAdd, onCaptureSpine, onClose }: {
   books: LibBook[]
   loading: boolean
   theme: Theme
   onAdd: (b: LibBook) => void
+  onCaptureSpine: (b: LibBook) => void
   onClose: () => void
 }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 400, display: 'flex', alignItems: 'flex-end' }}>
       <div onClick={e => e.stopPropagation()} style={{
-        width: '100%', background: theme.bg,
-        borderRadius: '20px 20px 0 0',
-        maxHeight: '72vh', display: 'flex', flexDirection: 'column',
+        width: '100%', background: theme.bg, borderRadius: '20px 20px 0 0',
+        maxHeight: '76vh', display: 'flex', flexDirection: 'column',
       }}>
-        <div style={{ padding: '20px 20px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.fg }}>Add from Library</div>
+        <div style={{ padding: '20px 20px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.fg }}>Add to Shelf</div>
+            <div style={{ fontSize: 11, color: theme.muted, marginTop: 2 }}>Books from your library</div>
+          </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: theme.muted, fontSize: 22, cursor: 'pointer', lineHeight: 1, padding: 0 }}>×</button>
         </div>
-        <div style={{ overflowY: 'auto', flex: 1, paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))' }}>
+
+        <div style={{ overflowY: 'auto', flex: 1, paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}>
           {loading ? (
             <div style={{ textAlign: 'center', padding: '32px 0', color: theme.muted, fontSize: 14 }}>Loading…</div>
           ) : books.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '32px 20px', color: theme.muted, fontSize: 14, lineHeight: 1.6 }}>All your library books are already on the shelf.</div>
+            <div style={{ textAlign: 'center', padding: '32px 20px', color: theme.muted, fontSize: 14, lineHeight: 1.6 }}>
+              All your library books are already on the shelf.
+            </div>
           ) : books.map(lb => (
             <div key={lb.userBookId} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 20px', borderTop: `1px solid ${theme.border}` }}>
               <div style={{ width: 36, height: 54, borderRadius: 4, overflow: 'hidden', flexShrink: 0, background: theme.bgSecondary }}>
@@ -664,12 +525,21 @@ function AddFromLibSheet({ books, loading, theme, onAdd, onClose }: {
                 <div style={{ fontSize: 14, color: theme.fg, fontFamily: 'Georgia, serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lb.title}</div>
                 <div style={{ fontSize: 11, color: theme.muted, marginTop: 1 }}>{lb.author}</div>
               </div>
-              <button
-                onClick={() => onAdd(lb)}
-                style={{ padding: '7px 14px', background: theme.fg, color: theme.bg, border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}
-              >
-                Add
-              </button>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                <button
+                  onClick={() => onCaptureSpine(lb)}
+                  style={{ padding: '7px 10px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+                  title="Add spine photo"
+                >
+                  <CameraIcon color={theme.muted} />
+                </button>
+                <button
+                  onClick={() => onAdd(lb)}
+                  style={{ padding: '7px 14px', background: theme.fg, color: theme.bg, border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Place
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -679,24 +549,11 @@ function AddFromLibSheet({ books, loading, theme, onAdd, onClose }: {
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
-function ScanIcon() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-      <rect x="2" y="5" width="2.5" height="14"/>
-      <rect x="6" y="5" width="1.5" height="14"/>
-      <rect x="9.5" y="5" width="2.5" height="14"/>
-      <rect x="13.5" y="5" width="1.5" height="14"/>
-      <rect x="16.5" y="5" width="2.5" height="14"/>
-      <rect x="20.5" y="5" width="1.5" height="14"/>
-    </svg>
-  )
-}
-
 function RotateIcon({ color }: { color: string }) {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-      <path d="M1 4v6h6" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M3.51 15a9 9 0 1 0 .49-3" stroke={color} strokeWidth="2.5" strokeLinecap="round" fill="none"/>
+      <path d="M1 4v6h6" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.51 15a9 9 0 1 0 .49-3" stroke={color} strokeWidth="2.5" strokeLinecap="round" fill="none" />
     </svg>
   )
 }
@@ -704,7 +561,16 @@ function RotateIcon({ color }: { color: string }) {
 function ScaleIcon({ color }: { color: string }) {
   return (
     <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
-      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" stroke={color} strokeWidth="2.5" strokeLinecap="round"/>
+      <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function CameraIcon({ color }: { color: string }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="13" r="4" stroke={color} strokeWidth="2" />
     </svg>
   )
 }

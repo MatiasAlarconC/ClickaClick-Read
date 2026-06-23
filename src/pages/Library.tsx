@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase'
 import { getRecommendations, isGeminiConfigured, type BookRecommendation } from '../services/gemini'
 import { searchBooks } from '../services/books'
 import VirtualShelf from '../components/VirtualShelf'
+import SpineCaptureCamera from '../components/SpineCaptureCamera'
 import type { UserBook } from '../types'
 
 type BookTab = 'reading' | 'finished' | 'want_to_read' | 'dropped'
@@ -36,6 +37,8 @@ export default function LibraryScreen() {
   const [tab, setTab] = useState<LibTab>('reading')
   const [books, setBooks] = useState<Record<BookTab, UserBook[]>>({ reading: [], finished: [], want_to_read: [], dropped: [] })
   const [loading, setLoading] = useState(true)
+  const [spineTarget, setSpineTarget] = useState<{ userBookId: string; title: string } | null>(null)
+  const [spineSaving, setSpineSaving] = useState(false)
   type SessionItem = { book_id: string; pages_read: number | null; started_at: string }
   const [sessionsByBook, setSessionsByBook] = useState<Record<string, SessionItem[]>>({})
 
@@ -272,6 +275,25 @@ export default function LibraryScreen() {
 
   const summaries = dbSummaries.length > 0 ? dbSummaries : localSummaries
 
+  const handleSpineCaptured = async (dataUrl: string) => {
+    if (!spineTarget || !user) return
+    setSpineTarget(null)
+    setSpineSaving(true)
+    try {
+      const blob = await (await fetch(dataUrl)).blob()
+      const path = `${user.id}/${spineTarget.userBookId}.jpg`
+      const { error } = await supabase.storage
+        .from('book-spines')
+        .upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
+      if (!error) {
+        const spineUrl = supabase.storage.from('book-spines').getPublicUrl(path).data.publicUrl
+        await supabase.from('user_books').update({ spine_url: spineUrl }).eq('id', spineTarget.userBookId)
+      }
+    } finally {
+      setSpineSaving(false)
+    }
+  }
+
   return (
     <div style={{ minHeight: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, position: 'relative', paddingBottom: 'calc(68px + env(safe-area-inset-bottom, 0px))' }}>
       <div style={{ flex: 1, padding: '22px 22px 0', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)', display: 'flex', flexDirection: 'column' }}>
@@ -420,6 +442,7 @@ export default function LibraryScreen() {
                   return (b.book?.title ?? '').toLowerCase().includes(q) || (b.book?.author ?? '').toLowerCase().includes(q)
                 }),
                 theme, navigate, sessionsByBook, user?.id ?? '', setBooks, supabase,
+                (userBookId, title) => setSpineTarget({ userBookId, title }),
               )
             : books[tab as BookTab].map((book) => (
               <div key={book.id} style={{ marginBottom: 14, border: `1px solid ${theme.border}`, borderRadius: 16, overflow: 'hidden' }}>
@@ -440,6 +463,7 @@ export default function LibraryScreen() {
                     }))
                   }
                 }}
+                onCaptureSpine={() => setSpineTarget({ userBookId: book.id, title: book.book?.title ?? '' })}
               />
               </div>
             ))
@@ -449,6 +473,22 @@ export default function LibraryScreen() {
       </div>
 
       <TabBar activeTab="library" onTabChange={t => navigate(`/${t === 'home' ? 'home' : t}`)} theme={theme} />
+
+      {/* Spine capture camera */}
+      {spineTarget && (
+        <SpineCaptureCamera
+          bookTitle={spineTarget.title}
+          onCapture={handleSpineCaptured}
+          onClose={() => setSpineTarget(null)}
+        />
+      )}
+
+      {/* Saving toast */}
+      {spineSaving && (
+        <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: theme.fg, color: theme.bg, borderRadius: 999, padding: '8px 20px', fontSize: 13, fontWeight: 500, zIndex: 600, whiteSpace: 'nowrap' }}>
+          Saving spine photo…
+        </div>
+      )}
     </div>
   )
 }
@@ -472,6 +512,7 @@ function renderFinishedGrouped(
   userId: string,
   setBooks: React.Dispatch<React.SetStateAction<Record<BookTab, UserBook[]>>>,
   sb: typeof import('../lib/supabase').supabase,
+  onCaptureSpine?: (userBookId: string, title: string) => void,
 ) {
   // Group books by series key, preserving first-appearance order
   const groupMap = new Map<string, UserBook[]>()
@@ -497,6 +538,7 @@ function renderFinishedGrouped(
             onPress={() => navigate('/detail', { state: { book: b.book } })}
             onDelete={() => { setBooks(prev => ({ ...prev, finished: prev.finished.filter(x => x.id !== b.id) })); sb.from('user_books').delete().eq('id', b.id) }}
             onFinish={() => {}}
+            onCaptureSpine={onCaptureSpine ? () => onCaptureSpine(b.id, b.book?.title ?? '') : undefined}
           />
         </div>
       )
@@ -516,6 +558,7 @@ function renderFinishedGrouped(
                 onPress={() => navigate('/detail', { state: { book: b.book } })}
                 onDelete={() => { setBooks(prev => ({ ...prev, finished: prev.finished.filter(x => x.id !== b.id) })); sb.from('user_books').delete().eq('id', b.id) }}
                 onFinish={() => {}}
+                onCaptureSpine={onCaptureSpine ? () => onCaptureSpine(b.id, b.book?.title ?? '') : undefined}
               />
             </div>
           ))}
@@ -555,9 +598,9 @@ function computePrediction(sessions: { book_id: string; pages_read: number | nul
   return { label }
 }
 
-function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onDelete, onFinish, sessions }: {
+function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onDelete, onFinish, onCaptureSpine, sessions }: {
   book: UserBook; index: number; total: number; tab: LibTab; theme: import('../types').Theme; userId: string
-  onPress: () => void; onDelete: () => void; onFinish: () => void
+  onPress: () => void; onDelete: () => void; onFinish: () => void; onCaptureSpine?: () => void
   sessions?: { book_id: string; pages_read: number | null; started_at: string }[]
 }) {
   const x = useMotionValue(0)
@@ -618,9 +661,23 @@ function SwipeableBookRow({ book, index, total, tab, theme, userId, onPress, onD
         whileTap={{ scale: 0.98 }}>
         <BookCover index={index} width={60} height={90} coverUrl={book.book?.cover_url} title={book.book?.title} author={book.book?.author} />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingTop: 2, paddingBottom: 2 }}>
-          <div>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, color: theme.fg, lineHeight: 1.3, marginBottom: 3 }}>{book.book?.title ?? 'Unknown'}</div>
-            <div style={{ fontSize: 12.5, color: theme.muted }}>{book.book?.author ?? ''}</div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, color: theme.fg, lineHeight: 1.3, marginBottom: 3 }}>{book.book?.title ?? 'Unknown'}</div>
+              <div style={{ fontSize: 12.5, color: theme.muted }}>{book.book?.author ?? ''}</div>
+            </div>
+            {onCaptureSpine && (
+              <button
+                onClick={e => { e.stopPropagation(); onCaptureSpine() }}
+                title="Add spine photo"
+                style={{ flexShrink: 0, background: 'none', border: `1px solid ${theme.border}`, borderRadius: 7, padding: '5px 7px', cursor: 'pointer', display: 'flex', alignItems: 'center', marginTop: 1 }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke={theme.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="12" cy="13" r="4" stroke={theme.muted} strokeWidth="2"/>
+                </svg>
+              </button>
+            )}
           </div>
           {tab === 'reading' && (
             <div>
