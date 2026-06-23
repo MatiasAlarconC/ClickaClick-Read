@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 
 interface Props {
-  onDetected: (isbn: string) => void
+  onDetected: (isbn: string, frameUrl?: string) => void
   onClose: () => void
 }
 
@@ -40,7 +40,18 @@ export default function ISBNScanner({ onDetected, onClose }: Props) {
             if (/^\d{10,13}$/.test(text)) {
               doneRef.current = true
               controls.stop()
-              onDetected(text)
+              let frameUrl: string | undefined
+              try {
+                const vid = videoRef.current
+                if (vid) {
+                  const c = document.createElement('canvas')
+                  c.width = vid.videoWidth || 640
+                  c.height = vid.videoHeight || 480
+                  c.getContext('2d')?.drawImage(vid, 0, 0)
+                  frameUrl = c.toDataURL('image/jpeg', 0.82)
+                }
+              } catch { /* ignore */ }
+              onDetected(text, frameUrl)
             }
           }
         )
