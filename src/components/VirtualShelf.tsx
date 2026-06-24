@@ -233,7 +233,11 @@ export default function VirtualShelf() {
     }
     const pos: ShelfPos = { shelf, left, rot: 0, scale: 1 }
     const { data: existing } = await supabase.from('user_books').select('id, spine_url').eq('id', lb.userBookId).single()
-    await supabase.from('user_books').update({ shelf_pos: pos }).eq('id', lb.userBookId)
+    const { error: updateErr } = await supabase.from('user_books').update({ shelf_pos: pos }).eq('id', lb.userBookId)
+    if (updateErr) {
+      // Column missing — migration not run yet. Still show in local state so UX works.
+      console.warn('shelf_pos column missing — run migration 016_virtual_shelf.sql in Supabase SQL Editor')
+    }
     setBooks(prev => {
       const without = prev.filter(b => b.userBookId !== lb.userBookId)
       return [...without, { ...lb, spineUrl: (existing as any)?.spine_url ?? null, pos }]
@@ -251,9 +255,24 @@ export default function VirtualShelf() {
 
   const openLibSheet = async () => {
     setShowLibSheet(true); setLibLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('user_books').select('id, book:books(title,author,cover_url)')
       .eq('user_id', user!.id).is('shelf_pos', null)
+    if (error) {
+      // shelf_pos column missing (migration not yet run) — fall back to all books
+      const { data: all } = await supabase
+        .from('user_books').select('id, book:books(title,author,cover_url)')
+        .eq('user_id', user!.id)
+      setLibLoading(false)
+      const onShelf = new Set(books.map(b => b.userBookId))
+      setLibBooks(((all as any[]) ?? [])
+        .filter(r => !onShelf.has(r.id))
+        .map(r => ({
+          userBookId: r.id, title: r.book?.title ?? 'Unknown',
+          author: r.book?.author ?? '', coverUrl: r.book?.cover_url ?? null,
+        })))
+      return
+    }
     setLibLoading(false)
     setLibBooks(((data as any[]) ?? []).map(r => ({
       userBookId: r.id, title: r.book?.title ?? 'Unknown',
@@ -270,7 +289,9 @@ export default function VirtualShelf() {
       const blob = await (await fetch(dataUrl)).blob()
       const path = `${user.id}/${target.userBookId}.jpg`
       const { error } = await supabase.storage.from('book-spines').upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
-      if (!error) {
+      if (error) {
+        console.error('Spine upload failed:', error.message, '— make sure migration 016_virtual_shelf.sql has been run in Supabase SQL Editor')
+      } else {
         const spineUrl = supabase.storage.from('book-spines').getPublicUrl(path).data.publicUrl
         await supabase.from('user_books').update({ spine_url: spineUrl }).eq('id', target.userBookId)
         setBooks(prev => prev.map(b => b.userBookId === target.userBookId ? { ...b, spineUrl } : b))
@@ -395,7 +416,7 @@ export default function VirtualShelf() {
               <div style={{ fontSize: 13, color: theme.muted, marginTop: 8, lineHeight: 1.5, maxWidth: 230, fontFamily: '-apple-system,system-ui,sans-serif' }}>
                 Add a book from your library, then capture its real spine with the camera.
               </div>
-              <button onClick={() => setShowLibSheet(true)} style={{
+              <button onClick={openLibSheet} style={{
                 marginTop: 22, padding: '11px 22px', borderRadius: 999,
                 background: theme.fg, color: theme.bg, border: 'none', cursor: 'pointer',
                 fontSize: 14, fontWeight: 500, fontFamily: '-apple-system,system-ui,sans-serif',
@@ -424,7 +445,7 @@ export default function VirtualShelf() {
       {/* ── FABs ── */}
       {!isEmpty && (
         <button
-          onClick={() => setShowLibSheet(true)}
+          onClick={openLibSheet}
           style={{
             position: 'absolute', bottom: 22, left: 20, padding: '10px 16px', borderRadius: 999,
             background: theme.bgElevated, color: theme.fg, border: `1px solid ${theme.border}`,
@@ -438,7 +459,7 @@ export default function VirtualShelf() {
         </button>
       )}
       <button
-        onClick={() => { if (selectedBook) setSpineTarget({ userBookId: selectedBook.userBookId, title: selectedBook.title }); else setShowLibSheet(true) }}
+        onClick={() => { if (selectedBook) setSpineTarget({ userBookId: selectedBook.userBookId, title: selectedBook.title }); else openLibSheet() }}
         style={{
           position: 'absolute', bottom: 22, right: 20, width: 54, height: 54, borderRadius: '50%',
           background: theme.fg, color: theme.bg, border: 'none', cursor: 'pointer',
