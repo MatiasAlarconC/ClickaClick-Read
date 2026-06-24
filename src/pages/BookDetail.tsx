@@ -8,6 +8,7 @@ import { summarizeNotes, detectBookSeries } from '../services/gemini'
 import type { SeriesInfo } from '../services/gemini'
 import { searchBooks } from '../services/books'
 import type { SearchResult, UserBook, BookNote, ReadingSession } from '../types'
+import SpineCaptureCamera from '../components/SpineCaptureCamera'
 
 function computeFinishPrediction(
   sessions: ReadingSession[],
@@ -103,6 +104,8 @@ export default function BookDetailScreen() {
   const [epubUploading, setEpubUploading] = useState(false)
   const [epubPath, setEpubPath] = useState<string | null>(null)
   const [showModeModal, setShowModeModal] = useState(false)
+  const [spineCapturing, setSpineCapturing] = useState(false)
+  const [spineSaving, setSpineSaving] = useState(false)
   // synopsis may come from nav state OR the DB books record — prefer DB
   const [synopsis, setSynopsis] = useState<string | null>(book?.synopsis ?? null)
   const [seriesInfo, setSeriesInfo] = useState<SeriesInfo | null | undefined>(undefined)
@@ -374,6 +377,24 @@ export default function BookDetailScreen() {
     }
   }
 
+  const handleSpineCaptured = async (dataUrl: string) => {
+    if (!user || !userBook) return
+    setSpineCapturing(false)
+    setSpineSaving(true)
+    try {
+      const blob = await (await fetch(dataUrl)).blob()
+      const path = `${user.id}/${userBook.id}.jpg`
+      const { error } = await supabase.storage.from('book-spines').upload(path, blob, { upsert: true, contentType: 'image/jpeg' })
+      if (!error) {
+        const spineUrl = supabase.storage.from('book-spines').getPublicUrl(path).data.publicUrl
+        await supabase.from('user_books').update({ spine_url: spineUrl }).eq('id', userBook.id)
+        setUserBook(prev => prev ? { ...prev, spine_url: spineUrl } : prev)
+      }
+    } finally {
+      setSpineSaving(false)
+    }
+  }
+
   if (!book) {
     return (
       <div style={{ minHeight: '100%', background: theme.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -565,6 +586,37 @@ export default function BookDetailScreen() {
         {/* Details tab */}
         {activeTab === 'details' && (
           <div style={{ paddingBottom: 40 }}>
+            {/* Spine photo — only visible when book is in library */}
+            {userBook && (
+              <div style={{ marginBottom: 24, paddingBottom: 24, borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 14 }}>Book Spine</div>
+                {userBook.spine_url ? (
+                  <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+                    <div style={{ width: 54, height: 160, borderRadius: 6, overflow: 'hidden', border: `1px solid ${theme.border}`, flexShrink: 0, boxShadow: '0 3px 10px rgba(0,0,0,0.18)' }}>
+                      <img src={userBook.spine_url} alt="Book spine" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 4 }}>
+                      <div style={{ fontSize: 13, color: theme.fg }}>Spine photo captured</div>
+                      <div style={{ fontSize: 11.5, color: theme.muted, lineHeight: 1.5 }}>This is how your book will appear on the virtual shelf.</div>
+                      <button onClick={() => setSpineCapturing(true)} style={{ marginTop: 4, padding: '7px 14px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 9, fontSize: 12, color: theme.muted, cursor: 'pointer', alignSelf: 'flex-start' }}>
+                        Retake photo
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => setSpineCapturing(true)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', background: theme.bgSecondary, border: `1px dashed ${theme.border}`, borderRadius: 14, cursor: 'pointer', width: '100%', textAlign: 'left' }}>
+                    <svg width="22" height="22" viewBox="0 0 18 18" fill="none">
+                      <path d="M2 6.2C2 5.5 2.5 5 3.2 5h1.6l.9-1.4C5.9 3.2 6.2 3 6.6 3h4.8c.4 0 .7.2.9.6L13.2 5h1.6c.7 0 1.2.5 1.2 1.2v7.1c0 .7-.5 1.2-1.2 1.2H3.2C2.5 14.5 2 14 2 13.3V6.2Z" stroke={theme.muted} strokeWidth="1.3" strokeLinejoin="round"/>
+                      <circle cx="9" cy="9.6" r="2.7" stroke={theme.muted} strokeWidth="1.3"/>
+                    </svg>
+                    <div>
+                      <div style={{ fontSize: 13.5, color: theme.fg, marginBottom: 2 }}>Capture spine photo</div>
+                      <div style={{ fontSize: 11.5, color: theme.muted }}>Scan the real spine of your physical book</div>
+                    </div>
+                  </button>
+                )}
+              </div>
+            )}
             {[
               { label: 'Pages', value: book.pages?.toString() ?? '—', editable: true },
               { label: 'Language', value: 'English', editable: true },
@@ -781,6 +833,22 @@ export default function BookDetailScreen() {
           </div>
         )}
       </div>
+
+      {/* Spine capture camera */}
+      {spineCapturing && (
+        <SpineCaptureCamera
+          bookTitle={book.title}
+          onCapture={handleSpineCaptured}
+          onClose={() => setSpineCapturing(false)}
+        />
+      )}
+
+      {/* Spine saving toast */}
+      {spineSaving && (
+        <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: theme.fg, color: theme.bg, borderRadius: 999, padding: '8px 20px', fontSize: 13, fontWeight: 500, zIndex: 600, whiteSpace: 'nowrap' }}>
+          Saving spine photo…
+        </div>
+      )}
 
       {/* Mode picker modal — shown when epub is loaded and user taps Start Session */}
       {showModeModal && userBook && (
