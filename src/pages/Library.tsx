@@ -34,7 +34,9 @@ export default function LibraryScreen() {
   const { theme } = useTheme()
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<LibTab>('reading')
+  const [mainSection, setMainSection] = useState<'books' | 'shelf' | 'discover'>('books')
+  const [bookSubTab, setBookSubTab] = useState<'reading' | 'finished' | 'want_to_read' | 'dropped' | 'summaries'>('reading')
+  const tab: LibTab = mainSection === 'shelf' ? 'shelf' : mainSection === 'discover' ? 'discover' : bookSubTab
   const [books, setBooks] = useState<Record<BookTab, UserBook[]>>({ reading: [], finished: [], want_to_read: [], dropped: [] })
   const [loading, setLoading] = useState(true)
   const [spineTarget, setSpineTarget] = useState<{ userBookId: string; title: string } | null>(null)
@@ -240,7 +242,7 @@ export default function LibraryScreen() {
   }
 
   const totalBooks = books.reading.length + books.finished.length + books.want_to_read.length
-  const isBookTab = tab !== 'discover' && tab !== 'summaries' && tab !== 'shelf'
+  const isBookTab = mainSection === 'books' && bookSubTab !== 'summaries'
   const [finishedSearch, setFinishedSearch] = useState('')
   const [dbSummaries, setDbSummaries] = useState<SavedSummary[]>([])
 
@@ -302,25 +304,30 @@ export default function LibraryScreen() {
           <div style={{ fontSize: 12, color: theme.muted, paddingBottom: 4 }}>{totalBooks} books</div>
         </div>
 
-        {/* Tabs — row 1: book status */}
-        <div style={{ display: 'flex', gap: 7, marginBottom: 8, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
-          {(['reading', 'finished', 'want_to_read', 'dropped'] as LibTab[]).map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ padding: '6px 13px', borderRadius: 999, flexShrink: 0, background: tab === t ? theme.accent : theme.bgSecondary, color: tab === t ? theme.accentFg : theme.muted, border: 'none', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500 }}>
-              {TAB_LABELS[t]}
-            </button>
-          ))}
-        </div>
-        {/* Tabs — row 2: features */}
-        <div style={{ display: 'flex', gap: 7, marginBottom: 22 }}>
-          {(['summaries', 'discover', 'shelf'] as LibTab[]).map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{ padding: '6px 13px', borderRadius: 999, flexShrink: 0, background: tab === t ? theme.fg : theme.bgSecondary, color: tab === t ? theme.bg : theme.fgDim, border: 'none', whiteSpace: 'nowrap', fontSize: 12, fontWeight: 500 }}>
-              {TAB_LABELS[t]}
+        {/* Main section selector */}
+        <div style={{ display: 'flex', background: theme.bgSecondary, borderRadius: 12, padding: 3, marginBottom: 14 }}>
+          {([['books', 'My Books'], ['shelf', 'Shelf'], ['discover', '✦ Discover']] as [string, string][]).map(([s, label]) => (
+            <button key={s} onClick={() => setMainSection(s as 'books' | 'shelf' | 'discover')}
+              style={{ flex: 1, padding: '9px 0', borderRadius: 10, background: mainSection === s ? theme.bg : 'none', color: mainSection === s ? theme.fg : theme.muted, border: 'none', fontSize: 13, fontWeight: mainSection === s ? 600 : 400, cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif', whiteSpace: 'nowrap' }}>
+              {label}
             </button>
           ))}
         </div>
 
+        {/* Status chips — only inside My Books */}
+        {mainSection === 'books' && (
+          <div style={{ display: 'flex', gap: 7, marginBottom: 20, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+            {([['reading', 'Reading'], ['finished', 'Finished'], ['want_to_read', 'Want'], ['dropped', 'Dropped'], ['summaries', 'Summaries']] as [string, string][]).map(([t, label]) => (
+              <button key={t} onClick={() => setBookSubTab(t as any)}
+                style={{ padding: '6px 13px', borderRadius: 999, flexShrink: 0, background: bookSubTab === t ? theme.accent : theme.bgSecondary, color: bookSubTab === t ? theme.accentFg : theme.muted, border: 'none', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* Summaries tab */}
-        {tab === 'summaries' && (
+        {mainSection === 'books' && bookSubTab === 'summaries' && (
           <div style={{ paddingBottom: 100 }}>
             {summaries.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '48px 0' }}>
@@ -346,7 +353,7 @@ export default function LibraryScreen() {
         )}
 
         {/* Discover tab */}
-        {tab === 'discover' && (
+        {mainSection === 'discover' && (
           <div style={{ paddingBottom: 100 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
               <div style={{ fontSize: 11, color: theme.muted }}>Based on your reading history · refreshes every 24h</div>
@@ -397,8 +404,8 @@ export default function LibraryScreen() {
           </div>
         )}
 
-        {/* Virtual shelf tab — full-bleed, fills remaining height */}
-        {tab === 'shelf' && (
+        {/* Virtual shelf — full-bleed */}
+        {mainSection === 'shelf' && (
           <div style={{ flex: 1, margin: '0 -22px', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
             <VirtualShelf />
           </div>
