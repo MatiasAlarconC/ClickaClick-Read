@@ -328,7 +328,10 @@ export default function VirtualShelf() {
             : isEmpty ? '' : `${books.length} on the shelf · tap a book to edit`}
         </span>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button onClick={() => setShowStyleSheet(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 15, color: theme.muted, lineHeight: 1 }} title="Customize shelf">⊞</button>
+          <button onClick={() => setShowStyleSheet(true)} style={{ background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 8, cursor: 'pointer', padding: '4px 10px', fontSize: 11.5, color: theme.muted, fontFamily: '-apple-system,system-ui,sans-serif', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.3"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.93 2.93l1.41 1.41M9.66 9.66l1.41 1.41M2.93 11.07l1.41-1.41M9.66 4.34l1.41-1.41" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+            Style
+          </button>
           {!isEmpty && (
             <button onClick={async () => { await Promise.all(books.map(b => supabase.from('user_books').update({ shelf_pos: null }).eq('id', b.userBookId))); setBooks([]); setSelected(null) }}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11.5, color: theme.muted, textDecoration: 'underline', fontFamily: '-apple-system,system-ui,sans-serif' }}>

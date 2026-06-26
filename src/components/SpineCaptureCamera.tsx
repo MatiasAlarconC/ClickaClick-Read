@@ -97,7 +97,7 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
     analysis.width = AW; analysis.height = AH
     analysisRef.current = analysis
     navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1080 }, height: { ideal: 1920 } } })
+      .getUserMedia({ video: { facingMode: { ideal: 'environment' } } })
       .then(s => {
         stream = s
         if (videoRef.current) {
