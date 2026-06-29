@@ -50,7 +50,9 @@ export default function StatsScreen() {
       const bookPages = b.custom_pages ?? (b.book as { pages_default?: number | null } | undefined)?.pages_default ?? 0
       if (!bookPages) continue
       const tracked = sessionPagesByBook[b.book_id] ?? 0
-      if (bookPages > tracked) pagesRead += (bookPages - tracked)
+      // Cap at current_page if available and less than total pages (prevents over-counting when accidentally marked finished)
+      const effectivePages = (b.current_page && b.current_page < bookPages) ? b.current_page : bookPages
+      if (effectivePages > tracked) pagesRead += (effectivePages - tracked)
     }
     // Timed sessions only (exclude is_manual and zero-duration entries)
     const timedSessions = sessions.filter(s => !s.is_manual && (s.duration_seconds ?? 0) > 0)

@@ -102,7 +102,8 @@ export default function ProfileScreen() {
         const bookPages = b.custom_pages ?? b.book?.pages_default ?? 0
         if (!bookPages) continue
         const tracked = sessionPagesByBook[b.book_id] ?? 0
-        if (bookPages > tracked) pagesRead += (bookPages - tracked)
+        const effectivePages = (b.current_page && b.current_page < bookPages) ? b.current_page : bookPages
+        if (effectivePages > tracked) pagesRead += (effectivePages - tracked)
       }
       const totalSeconds   = sessions.reduce((s: number, r: any) => s + (r.duration_seconds ?? 0), 0)
       const hours          = Math.round(totalSeconds / 3600)
