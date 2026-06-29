@@ -377,6 +377,25 @@ export default function BookDetailScreen() {
     }
   }
 
+  const continueReading = async () => {
+    if (!user || !userBook) return
+    setAddingToLib(true)
+    await supabase.from('user_books').update({ status: 'reading', finished_at: null }).eq('id', userBook.id)
+    setUserBook(prev => prev ? { ...prev, status: 'reading' as const, finished_at: null } : prev)
+    setAddingToLib(false)
+  }
+
+  const reRead = async () => {
+    if (!user || !userBook) return
+    setAddingToLib(true)
+    await supabase.from('user_books').update({
+      status: 'reading', current_page: 0,
+      started_at: new Date().toISOString(), finished_at: null,
+    }).eq('id', userBook.id)
+    setUserBook(prev => prev ? { ...prev, status: 'reading' as const, current_page: 0, finished_at: null } : prev)
+    setAddingToLib(false)
+  }
+
   const handleSpineCaptured = async (dataUrl: string) => {
     if (!user || !userBook) return
     setSpineCapturing(false)
@@ -491,7 +510,19 @@ export default function BookDetailScreen() {
 
           {/* Finished */}
           {userBook?.status === 'finished' && (
-            <div style={{ padding: '6px 12px', background: theme.bgSecondary, borderRadius: 8, fontSize: 12, color: theme.muted, fontWeight: 500, display: 'inline-block' }}>Finished</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ padding: '6px 12px', background: theme.bgSecondary, borderRadius: 8, fontSize: 12, color: theme.muted, fontWeight: 500, display: 'inline-block' }}>Finished</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={continueReading} disabled={addingToLib}
+                  style={{ flex: 1, padding: '9px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  {addingToLib ? '…' : 'Continue reading'}
+                </button>
+                <button onClick={reRead} disabled={addingToLib}
+                  style={{ padding: '9px 14px', background: theme.bgSecondary, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13, cursor: 'pointer' }}>
+                  {addingToLib ? '…' : 'Re-read'}
+                </button>
+              </div>
+            </div>
           )}
         </div>
 
