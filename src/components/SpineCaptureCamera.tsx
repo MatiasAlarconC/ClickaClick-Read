@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 interface Props {
   bookTitle: string
@@ -11,7 +11,6 @@ const AH = 284
 const EMA_ALPHA = 0.12
 const CONFIDENCE_THRESH = 5
 
-// Left/right edge detection only — top/bottom always full height
 function detectLR(data: Uint8ClampedArray, w: number, h: number): { left: number; right: number } | null {
   const colMag = new Float32Array(w)
   const gray = (px: number, py: number) => {
@@ -42,9 +41,9 @@ function detectLR(data: Uint8ClampedArray, w: number, h: number): { left: number
   return { left, right }
 }
 
-// Document scan: auto-levels per channel + S-curve contrast
+// Auto-levels per channel (2% clip) + gentle S-curve contrast
 function applyDocumentScan(src: HTMLCanvasElement): string {
-  const MAX = 1400
+  const MAX = 1600
   let sw = src.width, sh = src.height
   if (sh > MAX) { const s = MAX / sh; sw = Math.round(sw * s); sh = MAX }
   const c = document.createElement('canvas')
@@ -58,27 +57,39 @@ function applyDocumentScan(src: HTMLCanvasElement): string {
   const lo = [0,0,0], hi = [255,255,255]
   for (let ch = 0; ch < 3; ch++) {
     let cnt = 0
-    for (let v = 0; v < 256; v++) { cnt += hist[ch][v]; if (cnt >= pixels * 0.01) { lo[ch] = v; break } }
+    for (let v = 0; v < 256; v++) { cnt += hist[ch][v]; if (cnt >= pixels * 0.02) { lo[ch] = v; break } }
     cnt = 0
-    for (let v = 255; v >= 0; v--) { cnt += hist[ch][v]; if (cnt >= pixels * 0.01) { hi[ch] = v; break } }
+    for (let v = 255; v >= 0; v--) { cnt += hist[ch][v]; if (cnt >= pixels * 0.02) { hi[ch] = v; break } }
     if (hi[ch] <= lo[ch]) { lo[ch] = 0; hi[ch] = 255 }
   }
   for (let i = 0; i < n; i += 4) {
     for (let ch = 0; ch < 3; ch++) {
       let v = (d[i+ch] - lo[ch]) / (hi[ch] - lo[ch])
       v = Math.max(0, Math.min(1, v))
-      v = v < 0.5 ? 2*v*v : 1 - Math.pow(-2*v+2, 2) / 2
+      // Gentle S-curve (less aggressive than before)
+      v = v < 0.5 ? v + v * (1 - v) * 0.3 : v + (v - 1) * v * (-0.3)
       d[i+ch] = Math.round(v * 255)
     }
   }
   ctx.putImageData(img, 0, 0)
-  return c.toDataURL('image/jpeg', 0.90)
+  return c.toDataURL('image/jpeg', 0.93)
+}
+
+function cropAndScan(raw: HTMLCanvasElement, topFrac: number, botFrac: number): string {
+  const h = raw.height
+  const cropY = Math.round(h * topFrac)
+  const cropH = Math.max(10, Math.round(h * (1 - topFrac - botFrac)))
+  const dst = document.createElement('canvas')
+  dst.width = raw.width; dst.height = cropH
+  dst.getContext('2d')!.drawImage(raw, 0, cropY, raw.width, cropH, 0, 0, raw.width, cropH)
+  return applyDocumentScan(dst)
 }
 
 export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const analysisRef = useRef<HTMLCanvasElement | null>(null)
+  const rawCanvasRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef<number>(0)
   const smoothedLR = useRef<{ left: number; right: number } | null>(null)
   const confidenceRef = useRef(0)
@@ -90,6 +101,9 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
   const [manualL, setManualL] = useState(0.25)
   const [manualR, setManualR] = useState(0.75)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [cropTop, setCropTop] = useState(0)
+  const [cropBot, setCropBot] = useState(0)
+  const [showCropControls, setShowCropControls] = useState(false)
 
   useEffect(() => {
     let stream: MediaStream | null = null
@@ -127,7 +141,6 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
       const CW = canvas.width, CH = canvas.height
       ctx.clearRect(0, 0, CW, CH)
 
-      // Compute objectFit:cover scale so guide lines match what the camera shows
       const vw = video.videoWidth, vh = video.videoHeight
       const videoAR = vw / vh, displayAR = CW / CH
       let scaleX: number, offX: number, offY: number
@@ -159,7 +172,6 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
         : (smoothedLR.current && confidenceRef.current >= CONFIDENCE_THRESH ? smoothedLR.current
         : { left: 0.32, right: 0.68 })
 
-      // Map video fractions → display pixels (accounts for objectFit:cover)
       const L = lr.left * vw * scaleX + offX
       const R = lr.right * vw * scaleX + offX
       const T = offY + 0.005 * vh * scaleX
@@ -203,7 +215,6 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
       : (smoothedLR.current && confidenceRef.current >= CONFIDENCE_THRESH ? smoothedLR.current
       : { left: 0.32, right: 0.68 })
 
-    // Determine visible region of video (objectFit:cover)
     const dispW = video.offsetWidth, dispH = video.offsetHeight
     const videoAR = vw / vh, displayAR = dispW / dispH
     let visVW = vw, visVH = vh, offVX = 0, offVY = 0
@@ -226,18 +237,39 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
     src.width = vw; src.height = vh
     src.getContext('2d')!.drawImage(video, 0, 0)
 
-    const dst = document.createElement('canvas')
-    dst.width = cropW; dst.height = cropH
-    dst.getContext('2d')!.drawImage(src, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH)
+    const raw = document.createElement('canvas')
+    raw.width = cropW; raw.height = cropH
+    raw.getContext('2d')!.drawImage(src, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH)
 
-    setPreviewUrl(applyDocumentScan(dst))
+    rawCanvasRef.current = raw
+    setCropTop(0)
+    setCropBot(0)
+    setShowCropControls(false)
+    setPreviewUrl(applyDocumentScan(raw))
   }
 
-  // ── Preview screen ────────────────────────────────────────────────────────────
+  const updateCrop = useCallback((top: number, bot: number) => {
+    const raw = rawCanvasRef.current
+    if (!raw) return
+    setCropTop(top)
+    setCropBot(bot)
+    setPreviewUrl(cropAndScan(raw, top, bot))
+  }, [])
+
+  const retake = () => {
+    setPreviewUrl(null)
+    rawCanvasRef.current = null
+    setCropTop(0)
+    setCropBot(0)
+    setShowCropControls(false)
+  }
+
+  // ── Preview screen ─────────────────────────────────────────────────────────────
   if (previewUrl) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 500, display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '52px 20px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+        {/* Header */}
+        <div style={{ padding: '52px 20px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 11, textTransform: 'uppercase', letterSpacing: 1.2, fontFamily: '-apple-system,system-ui,sans-serif', marginBottom: 3 }}>Preview</div>
             <div style={{ color: '#fff', fontFamily: 'Georgia, serif', fontSize: 16, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bookTitle}</div>
@@ -245,33 +277,61 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
           <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', border: 'none', color: '#fff', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>×</button>
         </div>
 
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#080808', padding: '0 30px' }}>
-          {/* Shadow layers for depth */}
-          <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', inset: -8, background: 'rgba(0,0,0,0.4)', borderRadius: 6, filter: 'blur(12px)' }} />
+        {/* Spine image — tall centered display */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060606', position: 'relative', minHeight: 0 }}>
+          <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 0' }}>
+            {/* Soft glow behind spine */}
+            <div style={{ position: 'absolute', width: 90, top: 0, bottom: 0, background: 'radial-gradient(ellipse at center, rgba(255,255,255,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
             <img
               src={previewUrl}
               alt="Spine preview"
               draggable={false}
               style={{
-                position: 'relative',
-                maxWidth: '52%',
-                maxHeight: 'calc(100vh - 220px)',
+                height: '100%',
+                maxHeight: 'calc(100vh - 290px)',
+                maxWidth: '72vw',
                 objectFit: 'contain',
                 borderRadius: 3,
                 display: 'block',
-                boxShadow: '4px 4px 0 rgba(0,0,0,0.6), 8px 8px 0 rgba(0,0,0,0.3)',
+                position: 'relative',
+                boxShadow: '6px 0 16px rgba(0,0,0,0.7), -2px 0 8px rgba(0,0,0,0.4)',
               }}
             />
           </div>
+
+          {/* Crop adjust button */}
+          <button
+            onClick={() => setShowCropControls(s => !s)}
+            style={{ position: 'absolute', bottom: 12, right: 12, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, color: 'rgba(255,255,255,0.7)', fontSize: 11, padding: '6px 11px', cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif', backdropFilter: 'blur(6px)' }}>
+            {showCropControls ? 'Done' : '✂ Adjust crop'}
+          </button>
         </div>
 
-        <div style={{ flexShrink: 0, background: 'rgba(0,0,0,0.88)', padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom,0px))' }}>
-          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.4)', textAlign: 'center', marginBottom: 12, fontFamily: '-apple-system,system-ui,sans-serif' }}>
+        {/* Crop controls */}
+        {showCropControls && (
+          <div style={{ flexShrink: 0, background: 'rgba(10,10,10,0.95)', padding: '14px 20px 10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 12, textAlign: 'center', fontFamily: '-apple-system,system-ui,sans-serif' }}>
+              Trim top or bottom if the scan captured extra space
+            </div>
+            {[['Top', cropTop, (v: number) => updateCrop(v, cropBot)], ['Bottom', cropBot, (v: number) => updateCrop(cropTop, v)]] .map(([label, val, setter]) => (
+              <div key={label as string} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, width: 44, fontFamily: '-apple-system,system-ui,sans-serif' }}>{label as string}</span>
+                <input type="range" min={0} max={0.35} step={0.01} value={val as number}
+                  onChange={e => (setter as (v: number) => void)(Number(e.target.value))}
+                  style={{ flex: 1, accentColor: '#fff' }} />
+                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, width: 28, fontFamily: 'monospace' }}>{Math.round((val as number) * 100)}%</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Bottom bar */}
+        <div style={{ flexShrink: 0, background: 'rgba(0,0,0,0.92)', padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom,0px))' }}>
+          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.35)', textAlign: 'center', marginBottom: 12, fontFamily: '-apple-system,system-ui,sans-serif' }}>
             Scan effect applied · looks good?
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={() => setPreviewUrl(null)} style={{ flex: 1, padding: '13px 0', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 12, fontSize: 15, color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif' }}>Retake</button>
+            <button onClick={retake} style={{ flex: 1, padding: '13px 0', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 12, fontSize: 15, color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif' }}>Retake</button>
             <button onClick={() => onCapture(previewUrl)} style={{ flex: 2, padding: '13px 0', background: '#fff', border: 'none', borderRadius: 12, fontSize: 15, color: '#000', fontWeight: 600, cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif' }}>Use Photo</button>
           </div>
         </div>

@@ -84,7 +84,10 @@ export async function getRecommendations(params: {
   ).join('\n')
   const excludeStr = params.exclude?.length
     ? `\nDo NOT include: ${params.exclude.map(t => `"${t}"`).join(', ')}.` : ''
-  const prompt = `You are a book recommendation engine. Output ONLY a valid JSON array, no markdown, no explanation.\n\nReader's books:\n${booksStr}${excludeStr}\n\nRecommend exactly ${count} books. Keep "reason" under 15 words. Return:\n[{"title":"...","author":"...","reason":"..."}]`
+  // Rotate the variety instruction based on the current week so recommendations change over time
+  const variety = ['Prioritize lesser-known hidden gems and debut novels.', 'Mix classic and contemporary titles across different decades.', 'Emphasize books from authors the reader has NOT read yet.', 'Include books from different countries and translated works.']
+  const varietyHint = variety[Math.floor(Date.now() / (7 * 86400000)) % variety.length]
+  const prompt = `You are a book recommendation engine. Output ONLY a valid JSON array, no markdown, no explanation.\n\nReader's books:\n${booksStr}${excludeStr}\n\n${varietyHint}\n\nRecommend exactly ${count} books the reader has NOT read. Vary genres and authors widely. Keep "reason" under 15 words. Return:\n[{"title":"...","author":"...","reason":"..."}]`
 
   try {
     const { text, tokens } = await callGemini(prompt, cfg.model, true)
