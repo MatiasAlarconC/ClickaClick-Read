@@ -477,7 +477,7 @@ function SpineFace({ book, w, h, theme }: { book: ShelfBook; w: number; h: numbe
   if (book.spineUrl) {
     return (
       <div style={{ width: '100%', height: '100%', borderRadius: 2, overflow: 'hidden', position: 'relative', boxShadow: 'inset 0 0 14px rgba(0,0,0,0.55)' }}>
-        <img src={book.spineUrl} alt={book.title} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+        <img src={book.spineUrl} alt={book.title} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'fill', display: 'block', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 2, background: 'rgba(255,255,255,0.16)' }} />
         <div style={{ position: 'absolute', top: 0, bottom: 0, right: 0, width: 3, background: 'rgba(0,0,0,0.35)' }} />
       </div>

@@ -100,8 +100,36 @@ export async function searchBooks(
   if (googleRes.status === 'fulfilled')  { addUnique(googleRes.value.results); totalItems = Math.max(totalItems, googleRes.value.totalItems) }
   if (openLibGen.status === 'fulfilled') { addUnique(openLibGen.value.results); totalItems = Math.max(totalItems, openLibGen.value.totalItems) }
 
-  cache.set(cacheKey, { results, totalItems, ts: Date.now() })
-  return { results, totalItems }
+  // Re-rank by title/author relevance so exact matches appear first
+  const scored = results.map(r => ({ r, score: relevanceScore(r, q) }))
+  scored.sort((a, b) => b.score - a.score)
+  const ranked = scored.map(x => x.r)
+
+  cache.set(cacheKey, { results: ranked, totalItems, ts: Date.now() })
+  return { results: ranked, totalItems }
+}
+
+function relevanceScore(result: SearchResult, query: string): number {
+  const q = query.toLowerCase().trim()
+  if (!q) return 0
+  const title = (result.title ?? '').toLowerCase()
+  const author = (result.author ?? '').toLowerCase()
+  // Exact title match
+  if (title === q) return 100
+  // Title starts with query
+  if (title.startsWith(q)) return 88
+  // Title contains query as substring
+  if (title.includes(q)) return 74
+  // All query words present in title
+  const words = q.split(/\s+/).filter(w => w.length > 2)
+  const titleWordMatches = words.filter(w => title.includes(w)).length
+  if (words.length > 0 && titleWordMatches === words.length) return 60
+  // Most query words in title
+  const titleRatio = words.length > 0 ? titleWordMatches / words.length : 0
+  if (titleRatio >= 0.6) return Math.round(40 * titleRatio)
+  // Author match as fallback
+  if (author.includes(q)) return 20
+  return 0
 }
 
 // Maps ISO 639-1 code → MARC language code for Open Library

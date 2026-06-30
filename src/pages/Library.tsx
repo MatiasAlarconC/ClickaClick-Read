@@ -35,8 +35,8 @@ export default function LibraryScreen() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [mainSection, setMainSection] = useState<'books' | 'shelf' | 'discover'>('books')
-  const [bookSubTab, setBookSubTab] = useState<'reading' | 'finished' | 'want_to_read' | 'dropped' | 'summaries'>('reading')
-  const tab: LibTab = mainSection === 'shelf' ? 'shelf' : mainSection === 'discover' ? 'discover' : bookSubTab
+  const [bookSubTab, setBookSubTab] = useState<'reading' | 'finished' | 'want_to_read' | 'dropped'>('reading')
+  const tab: LibTab = mainSection === 'shelf' ? 'shelf' : mainSection === 'discover' ? 'discover' : (bookSubTab as LibTab)
   const [books, setBooks] = useState<Record<BookTab, UserBook[]>>({ reading: [], finished: [], want_to_read: [], dropped: [] })
   const [loading, setLoading] = useState(true)
   const [spineTarget, setSpineTarget] = useState<{ userBookId: string; title: string } | null>(null)
@@ -213,8 +213,8 @@ export default function LibraryScreen() {
       // Cache fresh data for next visit
       try { localStorage.setItem(cacheKey, JSON.stringify(grouped)) } catch { /* ignore */ }
 
-      // Pre-load recommendations from cache (localStorage or Supabase) in background
-      preloadRecsFromCache()
+      // Pre-load or generate recommendations in background so Discover is ready instantly
+      loadDiscover()
 
       // Load sessions in background — doesn't block book display
       const readingIds = grouped.reading.map(b => b.book_id)
@@ -242,8 +242,11 @@ export default function LibraryScreen() {
   }
 
   const totalBooks = books.reading.length + books.finished.length + books.want_to_read.length
-  const isBookTab = mainSection === 'books' && bookSubTab !== 'summaries'
+  const isBookTab = mainSection === 'books'
   const [finishedSearch, setFinishedSearch] = useState('')
+  const [finishedYear, setFinishedYear] = useState<string>('')
+  const [finishedGenre, setFinishedGenre] = useState<string>('')
+  const [showSummaries, setShowSummaries] = useState(false)
   const [dbSummaries, setDbSummaries] = useState<SavedSummary[]>([])
 
   useEffect(() => {
@@ -301,7 +304,16 @@ export default function LibraryScreen() {
       <div style={{ flex: 1, padding: '22px 22px 0', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20 }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 400, color: theme.fg, letterSpacing: -1 }}>Library</div>
-          <div style={{ fontSize: 12, color: theme.muted, paddingBottom: 4 }}>{totalBooks} books</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 4 }}>
+            <button
+              onClick={() => setShowSummaries(s => !s)}
+              title="Summaries"
+              style={{ background: showSummaries ? theme.fg : theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 7, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: showSummaries ? theme.bg : theme.muted, fontSize: 11 }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><polyline points="14,2 14,8 20,8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><polyline points="10,9 9,9 8,9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+              Notes
+            </button>
+            <div style={{ fontSize: 12, color: theme.muted }}>{totalBooks} books</div>
+          </div>
         </div>
 
         {/* Main section selector */}
@@ -317,7 +329,7 @@ export default function LibraryScreen() {
         {/* Status chips — only inside My Books */}
         {mainSection === 'books' && (
           <div style={{ display: 'flex', gap: 7, marginBottom: 20, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
-            {([['reading', 'Reading'], ['finished', 'Finished'], ['want_to_read', 'Want'], ['dropped', 'Dropped'], ['summaries', 'Summaries']] as [string, string][]).map(([t, label]) => (
+            {([['reading', 'Reading'], ['finished', 'Finished'], ['want_to_read', 'Want to read'], ['dropped', 'Dropped']] as [string, string][]).map(([t, label]) => (
               <button key={t} onClick={() => setBookSubTab(t as any)}
                 style={{ padding: '6px 13px', borderRadius: 999, flexShrink: 0, background: bookSubTab === t ? theme.accent : theme.bgSecondary, color: bookSubTab === t ? theme.accentFg : theme.muted, border: 'none', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
                 {label}
@@ -326,29 +338,38 @@ export default function LibraryScreen() {
           </div>
         )}
 
-        {/* Summaries tab */}
-        {mainSection === 'books' && bookSubTab === 'summaries' && (
-          <div style={{ paddingBottom: 100 }}>
-            {summaries.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '48px 0' }}>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.muted, marginBottom: 8 }}>No summaries yet</div>
-                <div style={{ fontSize: 13, color: theme.muted, opacity: 0.7 }}>When you generate an AI summary on a finished book it will appear here.</div>
+        {/* Summaries overlay panel */}
+        {showSummaries && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 300 }}>
+            <div onClick={() => setShowSummaries(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
+            <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: theme.bg, borderRadius: '22px 22px 0 0', maxHeight: '80%', display: 'flex', flexDirection: 'column', boxShadow: '0 -10px 40px rgba(0,0,0,0.4)' }}>
+              <div style={{ padding: '14px 22px 12px' }}>
+                <div style={{ width: 38, height: 4, borderRadius: 999, background: theme.border, margin: '0 auto 16px' }} />
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: theme.fg, letterSpacing: -0.5 }}>Notes & Summaries</div>
               </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                {summaries.map((s, i) => (
-                  <div key={`${s.bookId}-${i}`} style={{ padding: 16, background: theme.bgSecondary, borderRadius: 16, border: `1px solid ${theme.border}` }}>
-                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, color: theme.fg, marginBottom: 3 }}>{s.bookTitle}</div>
-                    <div style={{ fontSize: 12, color: theme.muted, marginBottom: 12 }}>
-                      {s.bookAuthor}
-                      {s.pageRange.from || s.pageRange.to ? ` · pp. ${s.pageRange.from ?? '?'}–${s.pageRange.to ?? '?'}` : ''}
-                      {' · '}{new Date(s.savedAt).toLocaleDateString()}
-                    </div>
-                    <div style={{ fontSize: 13, color: theme.fgDim, lineHeight: 1.7 }}>{s.summary}</div>
+              <div style={{ overflowY: 'auto', padding: '4px 22px calc(36px + env(safe-area-inset-bottom,0px))', flex: 1 }}>
+                {summaries.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.muted, marginBottom: 8 }}>No summaries yet</div>
+                    <div style={{ fontSize: 13, color: theme.muted, opacity: 0.7 }}>Generate an AI summary on any book to see it here.</div>
                   </div>
-                ))}
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {summaries.map((s, i) => (
+                      <div key={`${s.bookId}-${i}`} style={{ padding: 16, background: theme.bgSecondary, borderRadius: 16, border: `1px solid ${theme.border}` }}>
+                        <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, color: theme.fg, marginBottom: 3 }}>{s.bookTitle}</div>
+                        <div style={{ fontSize: 12, color: theme.muted, marginBottom: 12 }}>
+                          {s.bookAuthor}
+                          {s.pageRange.from || s.pageRange.to ? ` · pp. ${s.pageRange.from ?? '?'}–${s.pageRange.to ?? '?'}` : ''}
+                          {' · '}{new Date(s.savedAt).toLocaleDateString()}
+                        </div>
+                        <div style={{ fontSize: 13, color: theme.fgDim, lineHeight: 1.7 }}>{s.summary}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -414,25 +435,53 @@ export default function LibraryScreen() {
         {/* Book list */}
         {isBookTab && (
         <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: 100 }}>
-          {/* Search bar for finished books */}
-          {tab === 'finished' && !loading && books.finished.length > 0 && (
-            <div style={{ position: 'relative', marginBottom: 16 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                <circle cx="11" cy="11" r="8" stroke={theme.muted} strokeWidth="2"/>
-                <path d="M21 21l-4.35-4.35" stroke={theme.muted} strokeWidth="2" strokeLinecap="round"/>
-              </svg>
-              <input
-                type="text"
-                value={finishedSearch}
-                onChange={e => setFinishedSearch(e.target.value)}
-                placeholder="Search finished books…"
-                style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px 9px 34px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13, color: theme.fg, outline: 'none' }}
-              />
-              {finishedSearch && (
-                <button onClick={() => setFinishedSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2 }}>×</button>
-              )}
-            </div>
-          )}
+          {/* Search + filters for finished books */}
+          {tab === 'finished' && !loading && books.finished.length > 0 && (() => {
+            const years = Array.from(new Set(
+              books.finished.map(b => b.finished_at ? new Date(b.finished_at).getFullYear().toString() : null).filter(Boolean) as string[]
+            )).sort((a, b) => Number(b) - Number(a))
+            const genres = Array.from(new Set(
+              books.finished.flatMap(b => b.book?.genres ?? [])
+            )).sort()
+            return (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ position: 'relative', marginBottom: 10 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                    <circle cx="11" cy="11" r="8" stroke={theme.muted} strokeWidth="2"/>
+                    <path d="M21 21l-4.35-4.35" stroke={theme.muted} strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                  <input
+                    type="text"
+                    value={finishedSearch}
+                    onChange={e => setFinishedSearch(e.target.value)}
+                    placeholder="Search finished books…"
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px 9px 34px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13, color: theme.fg, outline: 'none' }}
+                  />
+                  {finishedSearch && (
+                    <button onClick={() => setFinishedSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2 }}>×</button>
+                  )}
+                </div>
+                {/* Year filter */}
+                {years.length > 1 && (
+                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginBottom: 7 }}>
+                    <button onClick={() => setFinishedYear('')} style={{ padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: !finishedYear ? theme.fg : theme.bgSecondary, color: !finishedYear ? theme.bg : theme.muted, border: 'none', fontSize: 12, cursor: 'pointer' }}>All years</button>
+                    {years.map(y => (
+                      <button key={y} onClick={() => setFinishedYear(y === finishedYear ? '' : y)} style={{ padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: finishedYear === y ? theme.fg : theme.bgSecondary, color: finishedYear === y ? theme.bg : theme.muted, border: 'none', fontSize: 12, cursor: 'pointer' }}>{y}</button>
+                    ))}
+                  </div>
+                )}
+                {/* Genre filter */}
+                {genres.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
+                    <button onClick={() => setFinishedGenre('')} style={{ padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: !finishedGenre ? theme.fg : theme.bgSecondary, color: !finishedGenre ? theme.bg : theme.muted, border: 'none', fontSize: 12, cursor: 'pointer' }}>All genres</button>
+                    {genres.slice(0, 10).map(g => (
+                      <button key={g} onClick={() => setFinishedGenre(g === finishedGenre ? '' : g)} style={{ padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: finishedGenre === g ? theme.fg : theme.bgSecondary, color: finishedGenre === g ? theme.bg : theme.muted, border: 'none', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>{g}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
           {loading ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: theme.muted }}>Loading…</div>
           ) : books[tab as BookTab].length === 0 ? (
@@ -444,9 +493,15 @@ export default function LibraryScreen() {
           ) : tab === 'finished'
             ? renderFinishedGrouped(
                 books.finished.filter(b => {
-                  if (!finishedSearch) return true
-                  const q = finishedSearch.toLowerCase()
-                  return (b.book?.title ?? '').toLowerCase().includes(q) || (b.book?.author ?? '').toLowerCase().includes(q)
+                  if (finishedSearch) {
+                    const q = finishedSearch.toLowerCase()
+                    if (!(b.book?.title ?? '').toLowerCase().includes(q) && !(b.book?.author ?? '').toLowerCase().includes(q)) return false
+                  }
+                  if (finishedYear && b.finished_at) {
+                    if (new Date(b.finished_at).getFullYear().toString() !== finishedYear) return false
+                  }
+                  if (finishedGenre && !(b.book?.genres ?? []).includes(finishedGenre)) return false
+                  return true
                 }),
                 theme, navigate, sessionsByBook, user?.id ?? '', setBooks, supabase,
                 (userBookId, title) => setSpineTarget({ userBookId, title }),
