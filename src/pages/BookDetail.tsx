@@ -24,12 +24,13 @@ function computeFinishPrediction(
   if (recent.length === 0) return null
   const byDay: Record<string, number> = {}
   for (const s of recent) {
-    const day = new Date(s.started_at).toDateString()
+    // Use UTC date string (same as Library.tsx) so both predictions stay in sync
+    const day = s.started_at.slice(0, 10)
     byDay[day] = (byDay[day] ?? 0) + (s.pages_read ?? 0)
   }
   const daysActive = Object.keys(byDay).length
-  const pagesRead = Object.values(byDay).reduce((a, b) => a + b, 0)
-  const pagesPerDay = pagesRead / daysActive
+  const totalPagesInSessions = Object.values(byDay).reduce((a, b) => a + b, 0)
+  const pagesPerDay = totalPagesInSessions / daysActive
   if (pagesPerDay <= 0) return null
   const daysToFinish = Math.ceil(remaining / pagesPerDay)
   const finishDate = new Date()
@@ -470,33 +471,53 @@ export default function BookDetailScreen() {
             </div>
           )}
 
-          {/* Currently reading — primary action first, then secondary row */}
-          {userBook?.status === 'reading' && (
-            <>
-              <button
-                onClick={() => epubPath ? setShowModeModal(true) : navigate('/session', { state: { book: userBook } })}
-                style={{ width: '100%', padding: '12px 18px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <svg width="11" height="13" viewBox="0 0 10 12" fill="none"><path d="M1 1l8 5.5L1 12V1z" fill="currentColor"/></svg>
-                Start Session
-              </button>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <div style={{ padding: '6px 12px', background: theme.bgSecondary, borderRadius: 8, fontSize: 12, color: theme.muted, fontWeight: 500 }}>Reading</div>
-                <label style={{ padding: '6px 12px', background: theme.bgSecondary, color: epubPath ? theme.fg : theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5 5h4M5 7.5h4M5 10h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
-                  {epubUploading ? 'Uploading…' : epubPath ? 'ePub ✓' : 'Upload ePub'}
-                  <input type="file" accept=".epub,application/epub+zip" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadEpub(f) }} disabled={epubUploading} />
-                </label>
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                  <button onClick={() => addToLibrary('finished')} disabled={addingToLib} style={{ padding: '6px 12px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>
-                    {addingToLib ? '…' : 'Finished'}
+          {/* Currently reading */}
+          {userBook?.status === 'reading' && (() => {
+            const totalPages = userBook.custom_pages ?? (userBook.book as any)?.pages_default ?? book.pages ?? 0
+            const currentPage = userBook.current_page ?? 0
+            const progress = totalPages > 0 ? Math.min(currentPage / totalPages, 1) : 0
+            return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* Primary CTA */}
+                <button
+                  onClick={() => epubPath ? setShowModeModal(true) : navigate('/session', { state: { book: userBook } })}
+                  style={{ width: '100%', padding: '13px 18px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}>
+                  <svg width="11" height="13" viewBox="0 0 10 12" fill="none"><path d="M1 1l8 5.5L1 12V1z" fill="currentColor"/></svg>
+                  Start Session
+                </button>
+
+                {/* Progress bar */}
+                {totalPages > 0 && (
+                  <div>
+                    <div style={{ height: 4, borderRadius: 2, background: theme.bgSecondary, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${progress * 100}%`, background: theme.fg, borderRadius: 2 }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontSize: 11.5, color: theme.muted }}>
+                      <span>p. {currentPage} of {totalPages}</span>
+                      <span>{Math.round(progress * 100)}%</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Secondary actions */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <label style={{ flex: 1, padding: '9px 12px', background: theme.bgSecondary, color: epubPath ? theme.fg : theme.muted, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 12.5, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, boxSizing: 'border-box' }}>
+                    <svg width="11" height="11" viewBox="0 0 14 14" fill="none"><rect x="2" y="1" width="10" height="12" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5 5h4M5 7.5h4M5 10h2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>
+                    {epubUploading ? 'Uploading…' : epubPath ? 'ePub ✓' : 'Upload ePub'}
+                    <input type="file" accept=".epub,application/epub+zip" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) uploadEpub(f) }} disabled={epubUploading} />
+                  </label>
+                  <button onClick={() => addToLibrary('finished')} disabled={addingToLib}
+                    style={{ flex: 1, padding: '9px 12px', background: theme.bgSecondary, color: theme.fg, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 12.5, cursor: 'pointer', fontWeight: 500 }}>
+                    {addingToLib ? '…' : '✓ Finished'}
                   </button>
-                  <button onClick={() => addToLibrary('dropped')} disabled={addingToLib} style={{ padding: '6px 12px', background: theme.bgSecondary, color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 8, fontSize: 12, cursor: 'pointer' }}>
+                  <button onClick={() => addToLibrary('dropped')} disabled={addingToLib}
+                    style={{ padding: '9px 14px', background: 'none', color: theme.muted, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 12.5, cursor: 'pointer' }}>
                     {addingToLib ? '…' : 'Drop'}
                   </button>
                 </div>
               </div>
-            </>
-          )}
+            )
+          })()}
 
           {/* Want to read or dropped — show status + re-start option */}
           {(userBook?.status === 'want_to_read' || userBook?.status === 'dropped') && (

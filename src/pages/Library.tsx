@@ -35,7 +35,7 @@ export default function LibraryScreen() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const [mainSection, setMainSection] = useState<'books' | 'shelf' | 'discover'>('books')
-  const [bookSubTab, setBookSubTab] = useState<'reading' | 'finished' | 'want_to_read' | 'dropped'>('reading')
+  const [bookSubTab, setBookSubTab] = useState<'reading' | 'finished' | 'want_to_read' | 'dropped' | 'summaries'>('reading')
   const tab: LibTab = mainSection === 'shelf' ? 'shelf' : mainSection === 'discover' ? 'discover' : (bookSubTab as LibTab)
   const [books, setBooks] = useState<Record<BookTab, UserBook[]>>({ reading: [], finished: [], want_to_read: [], dropped: [] })
   const [loading, setLoading] = useState(true)
@@ -174,11 +174,29 @@ export default function LibraryScreen() {
   }
 
   const enrichRecs = async (results: BookRecommendation[]) => {
+    // Use Google Books only (faster — skip Open Library) with a 4s timeout per book
     return Promise.all(results.map(async rec => {
       try {
-        const { results: search } = await searchBooks(`${rec.title} ${rec.author}`)
-        if (search[0]) return { ...rec, searchResult: search[0] }
-      } catch { /* ignore */ }
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 4000)
+        const params = new URLSearchParams({ q: `intitle:${rec.title} inauthor:${rec.author}`, startIndex: '0' })
+        const res = await fetch(`/api/books?${params}`, { signal: controller.signal })
+        clearTimeout(timer)
+        if (!res.ok) return rec
+        const data = await res.json()
+        const item = data.items?.[0]
+        if (item) {
+          const info = item.volumeInfo
+          return {
+            ...rec, searchResult: {
+              id: item.id,
+              title: info.title ?? rec.title,
+              author: (info.authors ?? [rec.author]).join(', '),
+              cover_url: (info.imageLinks?.extraLarge ?? info.imageLinks?.large ?? info.imageLinks?.thumbnail)?.replace('http:', 'https:') ?? null,
+            }
+          }
+        }
+      } catch { /* timeout or network error — skip enrichment */ }
       return rec
     }))
   }
@@ -242,11 +260,11 @@ export default function LibraryScreen() {
   }
 
   const totalBooks = books.reading.length + books.finished.length + books.want_to_read.length
-  const isBookTab = mainSection === 'books'
+  const isBookTab = mainSection === 'books' && bookSubTab !== 'summaries'
   const [finishedSearch, setFinishedSearch] = useState('')
   const [finishedYear, setFinishedYear] = useState<string>('')
   const [finishedGenre, setFinishedGenre] = useState<string>('')
-  const [showSummaries, setShowSummaries] = useState(false)
+  const [showFinishedFilters, setShowFinishedFilters] = useState(false)
   const [dbSummaries, setDbSummaries] = useState<SavedSummary[]>([])
 
   useEffect(() => {
@@ -304,16 +322,7 @@ export default function LibraryScreen() {
       <div style={{ flex: 1, padding: '22px 22px 0', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20 }}>
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, fontWeight: 400, color: theme.fg, letterSpacing: -1 }}>Library</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 4 }}>
-            <button
-              onClick={() => setShowSummaries(s => !s)}
-              title="Summaries"
-              style={{ background: showSummaries ? theme.fg : theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 7, padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: showSummaries ? theme.bg : theme.muted, fontSize: 11 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><polyline points="14,2 14,8 20,8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/><polyline points="10,9 9,9 8,9" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
-              Notes
-            </button>
-            <div style={{ fontSize: 12, color: theme.muted }}>{totalBooks} books</div>
-          </div>
+          <div style={{ fontSize: 12, color: theme.muted, paddingBottom: 4 }}>{totalBooks} books</div>
         </div>
 
         {/* Main section selector */}
@@ -329,7 +338,7 @@ export default function LibraryScreen() {
         {/* Status chips — only inside My Books */}
         {mainSection === 'books' && (
           <div style={{ display: 'flex', gap: 7, marginBottom: 20, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
-            {([['reading', 'Reading'], ['finished', 'Finished'], ['want_to_read', 'Want to read'], ['dropped', 'Dropped']] as [string, string][]).map(([t, label]) => (
+            {([['reading', 'Reading'], ['finished', 'Finished'], ['want_to_read', 'Want'], ['dropped', 'Dropped'], ['summaries', 'Notes']] as [string, string][]).map(([t, label]) => (
               <button key={t} onClick={() => setBookSubTab(t as any)}
                 style={{ padding: '6px 13px', borderRadius: 999, flexShrink: 0, background: bookSubTab === t ? theme.accent : theme.bgSecondary, color: bookSubTab === t ? theme.accentFg : theme.muted, border: 'none', whiteSpace: 'nowrap', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
                 {label}
@@ -338,38 +347,29 @@ export default function LibraryScreen() {
           </div>
         )}
 
-        {/* Summaries overlay panel */}
-        {showSummaries && (
-          <div style={{ position: 'fixed', inset: 0, zIndex: 300 }}>
-            <div onClick={() => setShowSummaries(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
-            <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: theme.bg, borderRadius: '22px 22px 0 0', maxHeight: '80%', display: 'flex', flexDirection: 'column', boxShadow: '0 -10px 40px rgba(0,0,0,0.4)' }}>
-              <div style={{ padding: '14px 22px 12px' }}>
-                <div style={{ width: 38, height: 4, borderRadius: 999, background: theme.border, margin: '0 auto 16px' }} />
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: theme.fg, letterSpacing: -0.5 }}>Notes & Summaries</div>
+        {/* Notes / Summaries tab */}
+        {mainSection === 'books' && bookSubTab === 'summaries' && (
+          <div style={{ paddingBottom: 100 }}>
+            {summaries.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '48px 0' }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.muted, marginBottom: 8 }}>No notes yet</div>
+                <div style={{ fontSize: 13, color: theme.muted, opacity: 0.7 }}>Generate an AI summary on a finished book and it will appear here.</div>
               </div>
-              <div style={{ overflowY: 'auto', padding: '4px 22px calc(36px + env(safe-area-inset-bottom,0px))', flex: 1 }}>
-                {summaries.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '48px 0' }}>
-                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 18, color: theme.muted, marginBottom: 8 }}>No summaries yet</div>
-                    <div style={{ fontSize: 13, color: theme.muted, opacity: 0.7 }}>Generate an AI summary on any book to see it here.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {summaries.map((s, i) => (
+                  <div key={`${s.bookId}-${i}`} style={{ padding: 16, background: theme.bgSecondary, borderRadius: 16, border: `1px solid ${theme.border}` }}>
+                    <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, color: theme.fg, marginBottom: 3 }}>{s.bookTitle}</div>
+                    <div style={{ fontSize: 12, color: theme.muted, marginBottom: 12 }}>
+                      {s.bookAuthor}
+                      {s.pageRange.from || s.pageRange.to ? ` · pp. ${s.pageRange.from ?? '?'}–${s.pageRange.to ?? '?'}` : ''}
+                      {' · '}{new Date(s.savedAt).toLocaleDateString()}
+                    </div>
+                    <div style={{ fontSize: 13, color: theme.fgDim, lineHeight: 1.7 }}>{s.summary}</div>
                   </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    {summaries.map((s, i) => (
-                      <div key={`${s.bookId}-${i}`} style={{ padding: 16, background: theme.bgSecondary, borderRadius: 16, border: `1px solid ${theme.border}` }}>
-                        <div style={{ fontFamily: 'Georgia, serif', fontSize: 16, color: theme.fg, marginBottom: 3 }}>{s.bookTitle}</div>
-                        <div style={{ fontSize: 12, color: theme.muted, marginBottom: 12 }}>
-                          {s.bookAuthor}
-                          {s.pageRange.from || s.pageRange.to ? ` · pp. ${s.pageRange.from ?? '?'}–${s.pageRange.to ?? '?'}` : ''}
-                          {' · '}{new Date(s.savedAt).toLocaleDateString()}
-                        </div>
-                        <div style={{ fontSize: 13, color: theme.fgDim, lineHeight: 1.7 }}>{s.summary}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                ))}
               </div>
-            </div>
+            )}
           </div>
         )}
 
@@ -435,50 +435,104 @@ export default function LibraryScreen() {
         {/* Book list */}
         {isBookTab && (
         <div style={{ display: 'flex', flexDirection: 'column', paddingBottom: 100 }}>
-          {/* Search + filters for finished books */}
+          {/* Search + filter bar for finished books */}
           {tab === 'finished' && !loading && books.finished.length > 0 && (() => {
+            const activeFilters = [finishedYear, finishedGenre].filter(Boolean).length
+            return (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: showFinishedFilters ? 12 : 0 }}>
+                  <div style={{ flex: 1, position: 'relative' }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                      <circle cx="11" cy="11" r="8" stroke={theme.muted} strokeWidth="2"/>
+                      <path d="M21 21l-4.35-4.35" stroke={theme.muted} strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                    <input
+                      type="text"
+                      value={finishedSearch}
+                      onChange={e => setFinishedSearch(e.target.value)}
+                      placeholder="Search finished books…"
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px 9px 34px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13, color: theme.fg, outline: 'none' }}
+                    />
+                    {finishedSearch && (
+                      <button onClick={() => setFinishedSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2 }}>×</button>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setShowFinishedFilters(s => !s)}
+                    style={{ flexShrink: 0, padding: '0 14px', background: activeFilters > 0 ? theme.fg : theme.bgSecondary, border: `1px solid ${activeFilters > 0 ? theme.fg : theme.border}`, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', color: activeFilters > 0 ? theme.bg : theme.muted, fontSize: 13, fontWeight: 500 }}>
+                    <svg width="13" height="12" viewBox="0 0 16 14" fill="none"><path d="M1 2h14M4 7h8M7 12h2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+                    {activeFilters > 0 ? `${activeFilters}` : 'Filter'}
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Filter sheet for finished books */}
+          {showFinishedFilters && tab === 'finished' && (() => {
             const years = Array.from(new Set(
               books.finished.map(b => b.finished_at ? new Date(b.finished_at).getFullYear().toString() : null).filter(Boolean) as string[]
             )).sort((a, b) => Number(b) - Number(a))
             const genres = Array.from(new Set(
               books.finished.flatMap(b => b.book?.genres ?? [])
-            )).sort()
+            )).filter(g => g.length < 22).sort()
+            const filteredCount = books.finished.filter(b => {
+              if (finishedSearch) { const q = finishedSearch.toLowerCase(); if (!(b.book?.title ?? '').toLowerCase().includes(q) && !(b.book?.author ?? '').toLowerCase().includes(q)) return false }
+              if (finishedYear && b.finished_at && new Date(b.finished_at).getFullYear().toString() !== finishedYear) return false
+              if (finishedGenre && !(b.book?.genres ?? []).includes(finishedGenre)) return false
+              return true
+            }).length
             return (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ position: 'relative', marginBottom: 10 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                    <circle cx="11" cy="11" r="8" stroke={theme.muted} strokeWidth="2"/>
-                    <path d="M21 21l-4.35-4.35" stroke={theme.muted} strokeWidth="2" strokeLinecap="round"/>
-                  </svg>
-                  <input
-                    type="text"
-                    value={finishedSearch}
-                    onChange={e => setFinishedSearch(e.target.value)}
-                    placeholder="Search finished books…"
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px 9px 34px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 10, fontSize: 13, color: theme.fg, outline: 'none' }}
-                  />
-                  {finishedSearch && (
-                    <button onClick={() => setFinishedSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: theme.muted, cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 2 }}>×</button>
-                  )}
+              <div style={{ position: 'fixed', inset: 0, zIndex: 400 }}>
+                <div onClick={() => setShowFinishedFilters(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
+                <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: theme.bg, borderRadius: '20px 20px 0 0', maxHeight: '78%', display: 'flex', flexDirection: 'column', boxShadow: '0 -10px 40px rgba(0,0,0,0.4)' }}>
+                  {/* Sheet header */}
+                  <div style={{ padding: '14px 20px 12px', borderBottom: `1px solid ${theme.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                    <div style={{ width: 38, height: 4, borderRadius: 999, background: theme.border, position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)' }} />
+                    <div style={{ fontSize: 15, fontWeight: 600, color: theme.fg, marginTop: 6 }}>
+                      Filters {(finishedYear || finishedGenre) ? <span style={{ fontSize: 12, fontWeight: 400, color: theme.muted }}>· {[finishedYear, finishedGenre].filter(Boolean).length} active</span> : ''}
+                    </div>
+                    <button onClick={() => { setFinishedYear(''); setFinishedGenre('') }} style={{ background: 'none', border: 'none', color: theme.muted, fontSize: 13, cursor: 'pointer', padding: '4px 0', marginTop: 6 }}>Clear</button>
+                  </div>
+                  {/* Scrollable content */}
+                  <div style={{ overflowY: 'auto', flex: 1, padding: '20px 20px 8px' }}>
+                    {/* Year section */}
+                    {years.length > 0 && (
+                      <div style={{ marginBottom: 24 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 12 }}>Year finished</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {years.map(y => (
+                            <button key={y} onClick={() => setFinishedYear(y === finishedYear ? '' : y)}
+                              style={{ padding: '8px 16px', borderRadius: 8, background: finishedYear === y ? theme.fg : theme.bgSecondary, color: finishedYear === y ? theme.bg : theme.fg, border: `1px solid ${finishedYear === y ? theme.fg : theme.border}`, fontSize: 14, cursor: 'pointer', fontWeight: finishedYear === y ? 600 : 400 }}>
+                              {y}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* Genre section */}
+                    {genres.length > 0 && (
+                      <div style={{ marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 12 }}>Genre</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {genres.map(g => (
+                            <button key={g} onClick={() => setFinishedGenre(g === finishedGenre ? '' : g)}
+                              style={{ padding: '8px 16px', borderRadius: 8, background: finishedGenre === g ? theme.fg : theme.bgSecondary, color: finishedGenre === g ? theme.bg : theme.fg, border: `1px solid ${finishedGenre === g ? theme.fg : theme.border}`, fontSize: 14, cursor: 'pointer', fontWeight: finishedGenre === g ? 600 : 400 }}>
+                              {g}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Footer CTA */}
+                  <div style={{ padding: '12px 20px', paddingBottom: 'calc(12px + env(safe-area-inset-bottom,0px))', borderTop: `1px solid ${theme.border}`, flexShrink: 0 }}>
+                    <button onClick={() => setShowFinishedFilters(false)}
+                      style={{ width: '100%', padding: '14px 0', background: theme.fg, color: theme.bg, border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+                      Show results ({filteredCount})
+                    </button>
+                  </div>
                 </div>
-                {/* Year filter */}
-                {years.length > 1 && (
-                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', marginBottom: 7 }}>
-                    <button onClick={() => setFinishedYear('')} style={{ padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: !finishedYear ? theme.fg : theme.bgSecondary, color: !finishedYear ? theme.bg : theme.muted, border: 'none', fontSize: 12, cursor: 'pointer' }}>All years</button>
-                    {years.map(y => (
-                      <button key={y} onClick={() => setFinishedYear(y === finishedYear ? '' : y)} style={{ padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: finishedYear === y ? theme.fg : theme.bgSecondary, color: finishedYear === y ? theme.bg : theme.muted, border: 'none', fontSize: 12, cursor: 'pointer' }}>{y}</button>
-                    ))}
-                  </div>
-                )}
-                {/* Genre filter */}
-                {genres.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' }}>
-                    <button onClick={() => setFinishedGenre('')} style={{ padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: !finishedGenre ? theme.fg : theme.bgSecondary, color: !finishedGenre ? theme.bg : theme.muted, border: 'none', fontSize: 12, cursor: 'pointer' }}>All genres</button>
-                    {genres.slice(0, 10).map(g => (
-                      <button key={g} onClick={() => setFinishedGenre(g === finishedGenre ? '' : g)} style={{ padding: '4px 11px', borderRadius: 999, flexShrink: 0, background: finishedGenre === g ? theme.fg : theme.bgSecondary, color: finishedGenre === g ? theme.bg : theme.muted, border: 'none', fontSize: 12, cursor: 'pointer', whiteSpace: 'nowrap' }}>{g}</button>
-                    ))}
-                  </div>
-                )}
               </div>
             )
           })()}
