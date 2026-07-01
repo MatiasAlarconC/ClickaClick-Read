@@ -424,44 +424,100 @@ function PersonalitySlide({ personality, p }: { personality: string; p: Palette 
   )
 }
 
-function OutroSlide({ booksFinished, pagesRead, hours, p }: { booksFinished: number; pagesRead: number; hours: number; p: Palette }) {
-  const rows = [
-    {
-      label: 'Books finished', value: booksFinished,
-      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/></svg>,
-    },
-    {
-      label: 'Pages read', value: pagesRead,
-      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" strokeWidth="1.5"/><line x1="7" y1="8" x2="17" y2="8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="7" y1="12" x2="14" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
-    },
-    {
-      label: 'Hours reading', value: hours,
-      icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5"/><path d="M12 7V12L15 15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
-    },
-  ]
+function DotGrid({ color }: { color: string }) {
+  return (
+    <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', opacity: 0.07 }} xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <pattern id="dotgrid" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+          <circle cx="1.5" cy="1.5" r="1.5" fill={color} />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#dotgrid)" />
+    </svg>
+  )
+}
+
+function OutroSlide({ booksFinished, pagesRead, hours, bookCovers, p, year }: { booksFinished: number; pagesRead: number; hours: number; bookCovers: string[]; p: Palette; year: number }) {
+  const covers = bookCovers.slice(0, 5)
+  const hasCovers = covers.length > 0
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px 96px', position: 'relative' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
       <StarField accent={p.accent} />
       <Confetti accent={p.accent} />
-      <motion.div animate={{ scale: [1, 1.22, 1], opacity: [0.28, 0.58, 0.28] }} transition={{ duration: 3.2, repeat: Infinity }}
-        style={{ position: 'absolute', top: '38%', left: '50%', transform: 'translate(-50%,-50%)', width: 460, height: 460, borderRadius: '50%', background: `radial-gradient(circle,${p.accent}32 0%,transparent 62%)`, pointerEvents: 'none', zIndex: 0 }} />
-      <div style={{ position: 'relative', zIndex: 3 }}>
-        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7 }}>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 44, lineHeight: 1.2, marginBottom: 38,
-            background: `linear-gradient(135deg,#fff 40%,${p.accent})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+      <DotGrid color={p.accent} />
+
+      {/* Accent glow */}
+      <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', width: 400, height: 400, borderRadius: '50%', background: `radial-gradient(circle, ${p.accent}28 0%, transparent 65%)`, pointerEvents: 'none', zIndex: 0 }} />
+
+      {/* Book covers strip */}
+      {hasCovers && (
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.34, 1.56, 0.64, 1] }}
+          style={{ position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'center', alignItems: 'flex-end', gap: 6, paddingTop: 80, paddingBottom: 0 }}>
+          {covers.map((url, i) => {
+            const isMid = i === Math.floor(covers.length / 2)
+            const rotation = (i - Math.floor(covers.length / 2)) * 6
+            const yOffset = isMid ? -10 : Math.abs(i - Math.floor(covers.length / 2)) * 6
+            return (
+              <motion.div key={i}
+                initial={{ opacity: 0, y: 30, rotate: rotation * 1.5, scale: 0.8 }}
+                animate={{ opacity: 1, y: yOffset, rotate: rotation, scale: isMid ? 1.08 : 1 }}
+                transition={{ delay: 0.12 * i, duration: 0.55, ease: [0.34, 1.56, 0.64, 1] }}
+                style={{ flexShrink: 0, borderRadius: 6, overflow: 'hidden', boxShadow: `0 8px 28px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08)`, border: isMid ? `1.5px solid ${p.accent}88` : 'none' }}
+              >
+                <img src={url} alt="" style={{ width: 62, height: 90, objectFit: 'cover', display: 'block' }} crossOrigin="anonymous" />
+              </motion.div>
+            )
+          })}
+        </motion.div>
+      )}
+
+      {/* Main content */}
+      <div style={{ position: 'relative', zIndex: 3, flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px', paddingTop: hasCovers ? 16 : 90 }}>
+
+        {/* Nothing OS style divider */}
+        <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.35, duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
+          style={{ height: 1, background: `linear-gradient(90deg, transparent, ${p.accent}88, transparent)`, marginBottom: 20, transformOrigin: 'left' }} />
+
+        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45, duration: 0.65 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3.5, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 10 }}>
+            {year} · Reading Wrapped
+          </div>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 40, lineHeight: 1.15, letterSpacing: -1,
+            background: `linear-gradient(135deg,#fff 30%,${p.accent})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', marginBottom: 24 }}>
             What a year<br/>of reading.
           </div>
         </motion.div>
-        {rows.map(({ label, value, icon }, i) => (
-          <motion.div key={label} initial={{ opacity: 0, x: -26 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 + i * 0.18, duration: 0.6, ease: [0.34, 1.56, 0.64, 1] }}
-            style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: `1px solid ${p.text}13` }}>
-            <span style={{ fontSize: 15, color: `${p.text}77`, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: `${p.text}66` }}>{icon}</span> {label}
-            </span>
-            <span style={{ fontFamily: 'Georgia, serif', fontSize: 24, background: `linear-gradient(90deg,#fff,${p.accent})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{value.toLocaleString()}</span>
-          </motion.div>
-        ))}
+
+        {/* Big number block — Nothing OS style */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+          {[
+            { value: booksFinished.toLocaleString(), label: 'books' },
+            { value: pagesRead.toLocaleString(), label: 'pages' },
+            { value: hours + 'h', label: 'reading' },
+          ].map(({ value, label }, i) => (
+            <motion.div key={label}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.55 + i * 0.1, duration: 0.5, ease: [0.34, 1.56, 0.64, 1] }}
+              style={{ flex: 1, background: `rgba(255,255,255,0.05)`, border: `1px solid ${p.text}14`, borderRadius: 14, padding: '14px 10px', textAlign: 'center', backdropFilter: 'blur(4px)' }}
+            >
+              <div style={{ fontFamily: 'Georgia, serif', fontSize: 26, fontWeight: 400, color: p.text, lineHeight: 1 }}>{value}</div>
+              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', color: `${p.text}55`, marginTop: 5 }}>{label}</div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Nothing OS style bottom divider */}
+        <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.85, duration: 0.5 }}
+          style={{ height: 1, background: `linear-gradient(90deg, transparent, ${p.accent}44, transparent)`, transformOrigin: 'left' }} />
+
+        {/* ClickaClick branding */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.95, duration: 0.5 }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 14 }}>
+          <svg width="10" height="10" viewBox="0 0 10 10"><circle cx="5" cy="5" r="4" fill={p.accent} opacity="0.5"/><circle cx="5" cy="5" r="2" fill={p.accent}/></svg>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 2, textTransform: 'uppercase', color: `${p.text}44` }}>ClickaClick</span>
+        </motion.div>
       </div>
     </div>
   )
@@ -655,7 +711,7 @@ export default function YearInReviewScreen() {
       case 'genre': return <GenreSlide topGenre={yearStats.topGenre} bookCount={yearStats.topGenreCount} p={cur.p} />
       case 'streak': return <StreakSlide streak={yearStats.longestStreak} p={cur.p} />
       case 'personality': return personality ? <PersonalitySlide personality={personality} p={cur.p} /> : null
-      case 'outro': return <OutroSlide booksFinished={yearStats.booksFinished} pagesRead={yearStats.pagesRead} hours={hours} p={cur.p} />
+      case 'outro': return <OutroSlide booksFinished={yearStats.booksFinished} pagesRead={yearStats.pagesRead} hours={hours} bookCovers={yearStats.bookCovers} year={year} p={cur.p} />
       default: return null
     }
   }

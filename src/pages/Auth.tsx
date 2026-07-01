@@ -1,8 +1,9 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { BlobShape, BackButton, FormInput, PrimaryButton } from '../components/UI'
 import { useAuth, useTheme } from '../context/AppContext'
+import { supabase } from '../lib/supabase'
 
 // ─── Splash ──────────────────────────────────────────────────────────────────
 export function SplashScreen() {
@@ -181,7 +182,14 @@ export function SignInScreen() {
               </>
             ) : (
               <div style={{ padding: '24px 0', textAlign: 'center' }}>
-                <div style={{ fontSize: 40, marginBottom: 16 }}>✉️</div>
+                <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center' }}>
+                  <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="6" y="18" width="60" height="40" rx="6" stroke={theme.fg} strokeWidth="2"/>
+                    <path d="M6 24l30 20 30-20" stroke={theme.fg} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <circle cx="36" cy="44" r="10" fill={theme.bg} stroke={theme.accent} strokeWidth="2"/>
+                    <path d="M31 44l3.5 3.5L41 40" stroke={theme.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
                 <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, marginBottom: 8 }}>Check your inbox</div>
                 <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.6 }}>
                   If an account exists for <strong style={{ color: theme.fg }}>{forgotEmail}</strong>, you'll receive a password reset link shortly.
@@ -194,6 +202,79 @@ export function SignInScreen() {
               ← Back to sign in
             </button>
           </motion.div>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── Reset Password ───────────────────────────────────────────────────────────
+export function ResetPasswordScreen() {
+  const { theme } = useTheme()
+  const navigate = useNavigate()
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+  const [sessionReady, setSessionReady] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setSessionReady(true)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') setSessionReady(true)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleSubmit = async () => {
+    if (!password) { setError('Enter a new password'); return }
+    if (password !== confirm) { setError('Passwords do not match'); return }
+    if (password.length < 8) { setError('Password must be at least 8 characters'); return }
+    setLoading(true); setError(null)
+    const { error: err } = await supabase.auth.updateUser({ password })
+    setLoading(false)
+    if (err) { setError(err.message); return }
+    setDone(true)
+    setTimeout(() => navigate('/home'), 2200)
+  }
+
+  return (
+    <motion.div initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} style={{ minHeight: '100%', background: theme.bg, position: 'relative', overflow: 'hidden' }}>
+      <style>{`input:-webkit-autofill,input:-webkit-autofill:hover,input:-webkit-autofill:focus,input:-webkit-autofill:active{-webkit-box-shadow:0 0 0px 1000px ${theme.bg} inset !important;-webkit-text-fill-color:${theme.fg} !important;caret-color:${theme.fg};transition:background-color 5000s ease-in-out 0s;}`}</style>
+      <div style={{ position: 'absolute', top: -20, right: -50, width: 180, height: 180, pointerEvents: 'none' }}>
+        <BlobShape size="medium" fill={theme.blobFill} opacity={0.35} style={{ width: '100%', height: '100%' }} />
+      </div>
+      <div style={{ padding: '24px 32px 48px', paddingTop: 64 }}>
+        <div style={{ fontFamily: 'Georgia, serif', fontSize: 38, fontWeight: 400, color: theme.fg, lineHeight: 1.0, letterSpacing: -1.5, marginBottom: 8, whiteSpace: 'pre-line' }}>
+          {done ? 'Password\nupdated.' : 'New\nPassword'}
+        </div>
+        <div style={{ fontSize: 14, color: theme.muted, marginBottom: 44 }}>
+          {done ? 'Redirecting you to the app…' : 'Choose a strong password for your account.'}
+        </div>
+
+        {done ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, paddingTop: 24 }}>
+            <div style={{ width: 64, height: 64, borderRadius: '50%', background: `${theme.accent}22`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L19 7" stroke={theme.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            </div>
+            <div style={{ fontSize: 15, color: theme.muted }}>All set!</div>
+          </div>
+        ) : !sessionReady ? (
+          <div style={{ textAlign: 'center', padding: '40px 0', color: theme.muted, fontSize: 14 }}>
+            Verifying reset link…
+          </div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
+              <FormInput label="New Password" type="password" value={password} onChange={setPassword} placeholder="At least 8 characters" theme={theme} autoComplete="new-password" />
+              <FormInput label="Confirm Password" type="password" value={confirm} onChange={setConfirm} placeholder="Repeat your password" theme={theme} autoComplete="new-password" />
+            </div>
+            {error && <div style={{ marginTop: 16, padding: '10px 14px', background: '#ff444420', borderRadius: 10, fontSize: 13, color: '#ff4444' }}>{error}</div>}
+            <PrimaryButton label={loading ? 'Updating…' : 'Set New Password'} onPress={handleSubmit} disabled={loading || !password || !confirm} theme={theme} style={{ marginTop: 36 }} />
+          </>
         )}
       </div>
     </motion.div>
