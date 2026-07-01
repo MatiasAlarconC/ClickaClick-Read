@@ -352,15 +352,6 @@ export default function VirtualShelf() {
               <div style={{ position: 'absolute', top: BOARD_H, left: 0, right: 0, height: 16, background: `linear-gradient(rgba(0,0,0,0.40), transparent)` }} />
               <div style={{ height: 3, background: board.top }} />
               <div style={{ height: BOARD_H - 3, background: board.face, borderBottom: `1.5px solid ${board.edge}` }} />
-              {/* Decoration toggle button (right end of board) */}
-              <button
-                onPointerDown={e => e.stopPropagation()}
-                onClick={e => { e.stopPropagation(); cycleDeco(r) }}
-                style={{ position: 'absolute', right: 6, top: 0, height: BOARD_H, background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px', opacity: 0.4 }}
-                title="Cycle decoration"
-              >
-                <svg width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3.5" stroke={board.top} strokeWidth="1" fill="none" /></svg>
-              </button>
             </div>
           ))}
 
@@ -591,11 +582,6 @@ function StyleSheet({ config, theme, onSave, onClose }: {
             ))}
           </div>
 
-          <div style={{ marginTop: 20, paddingTop: 18, borderTop: `1px solid ${theme.border}` }}>
-            <div style={{ fontSize: 11, color: theme.muted, fontFamily: '-apple-system,system-ui,sans-serif', lineHeight: 1.5 }}>
-              Tip: tap the small circle at the right end of each shelf board to add a bookend or plant decoration.
-            </div>
-          </div>
         </div>
       </div>
     </div>

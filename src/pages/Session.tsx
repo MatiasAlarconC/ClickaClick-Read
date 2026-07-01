@@ -549,19 +549,49 @@ export default function SessionScreen() {
         })()}
 
       {/* Book cover */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-        <BookCover index={0} width={120} height={182} coverUrl={userBook?.book?.cover_url} title={userBook?.book?.title} author={userBook?.book?.author} />
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+        <BookCover index={0} width={100} height={152} coverUrl={userBook?.book?.cover_url} title={userBook?.book?.title} author={userBook?.book?.author} />
       </div>
 
       {/* Book info */}
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <div style={{ fontFamily: 'Georgia, serif', fontSize: 19, color: fg, lineHeight: 1.3 }}>{userBook?.book?.title ?? 'Reading Session'}</div>
-        <div style={{ fontSize: 13, color: muted, marginTop: 3 }}>{userBook?.book?.author ?? ''}</div>
+      <div style={{ textAlign: 'center', marginBottom: 28 }}>
+        <div style={{ fontFamily: 'Georgia, serif', fontSize: 26, color: fg, lineHeight: 1.25, letterSpacing: -0.5 }}>{userBook?.book?.title ?? 'Reading Session'}</div>
+        <div style={{ fontSize: 13, color: muted, marginTop: 5 }}>{userBook?.book?.author ?? ''}</div>
       </div>
 
       {/* Timer */}
-      <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div style={{ fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 48, fontWeight: 200, color: fg, letterSpacing: 3, lineHeight: 1 }}>{fmt(secs)}</div>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
+        <motion.div
+          animate={playing ? { boxShadow: [`0 0 0px 0px ${fg}00`, `0 0 28px 6px ${fg}18`, `0 0 0px 0px ${fg}00`] } : {}}
+          transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ background: dark ? '#111111' : '#F5F5F3', borderRadius: 20, padding: '18px 28px' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {fmt(secs).split('').map((char, i) => (
+              char === ':' ? (
+                <motion.span
+                  key={`sep-${i}`}
+                  animate={playing ? { opacity: [1, 0.3, 1] } : { opacity: 0.5 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{ fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 52, fontWeight: 200, color: fg, lineHeight: 1, width: 16, textAlign: 'center', display: 'inline-block' }}
+                >:</motion.span>
+              ) : (
+                <div key={i} style={{ width: 32, height: 60, overflow: 'hidden', position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.span
+                      key={`${i}-${char}`}
+                      initial={{ y: -20, opacity: 0 }}
+                      animate={{ y: 0, opacity: 1 }}
+                      exit={{ y: 20, opacity: 0 }}
+                      transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                      style={{ position: 'absolute', fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 52, fontWeight: 200, color: fg, lineHeight: 1 }}
+                    >{char}</motion.span>
+                  </AnimatePresence>
+                </div>
+              )
+            ))}
+          </div>
+        </motion.div>
       </div>
 
       {/* Current page — static display; user sets final page in the End modal */}

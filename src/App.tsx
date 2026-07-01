@@ -5,7 +5,7 @@ import { useAuth, useTheme, useIsDesktop } from './context/AppContext'
 import { Spinner } from './components/UI'
 
 // Pages
-import { SplashScreen, SignUpScreen, SignInScreen } from './pages/Auth'
+import { SplashScreen, SignUpScreen, SignInScreen, ResetPasswordScreen } from './pages/Auth'
 import HomeScreen from './pages/Home'
 import SearchScreen from './pages/Search'
 import BookDetailScreen from './pages/BookDetail'
@@ -55,6 +55,7 @@ function AppRoutes() {
         <Route path="/" element={<SplashScreen />} />
         <Route path="/signup" element={<SignUpScreen />} />
         <Route path="/signin" element={<SignInScreen />} />
+        <Route path="/reset-password" element={<ResetPasswordScreen />} />
         <Route path="/home" element={<ProtectedRoute><HomeScreen /></ProtectedRoute>} />
         <Route path="/search" element={<ProtectedRoute><SearchScreen /></ProtectedRoute>} />
         <Route path="/detail" element={<ProtectedRoute><BookDetailScreen /></ProtectedRoute>} />
