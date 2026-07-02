@@ -501,36 +501,74 @@ export default function SessionScreen() {
           </div>
         </div>
 
-        {/* Timer — large ring with play/pause button inside */}
-        <div style={{ display: 'flex', justifyContent: 'center', flex: 1, alignItems: 'center', marginBottom: 44 }}>
+        {/* Timer — watch-face with tick marks, play below */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 26, marginBottom: 16 }}>
           {(() => {
-            const SIZE = 268
-            const STROKE = 2.5
-            const R = (SIZE - STROKE * 2) / 2
+            const SIZE = 278
+            const R = SIZE / 2 - 18  // 18px space for ticks outside
             const C = 2 * Math.PI * R
-            const progress = (secs % 1800) / 1800
-            const dash = C * progress
+            const progress = (secs % 3600) / 3600
+            const cx = SIZE / 2, cy = SIZE / 2
+            const minsPassed = Math.floor((secs % 3600) / 60)
             return (
               <div style={{ position: 'relative', width: SIZE, height: SIZE }}>
-                <svg width={SIZE} height={SIZE} style={{ position: 'absolute', top: 0, left: 0, transform: 'rotate(-90deg)' }}>
-                  <circle cx={SIZE/2} cy={SIZE/2} r={R} stroke={dark ? '#1C1C1C' : '#E8E8E8'} strokeWidth={STROKE} fill="none" />
-                  <motion.circle cx={SIZE/2} cy={SIZE/2} r={R} stroke={fg} strokeWidth={STROKE} fill="none" strokeLinecap="round"
-                    strokeDasharray={C} animate={{ strokeDashoffset: C - dash }} transition={{ duration: 0.8, ease: 'linear' }} />
+                <svg width={SIZE} height={SIZE} style={{ position: 'absolute', top: 0, left: 0 }}>
+                  <defs>
+                    <filter id="glow-arc" x="-30%" y="-30%" width="160%" height="160%">
+                      <feGaussianBlur stdDeviation="3" result="blur"/>
+                      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                    </filter>
+                  </defs>
+                  {/* Track */}
+                  <circle cx={cx} cy={cy} r={R} stroke={dark ? '#1C1C1C' : '#E8E8E8'} strokeWidth={1} fill="none"/>
+                  {/* Progress arc — clockwise from top, resets every 60 min */}
+                  <g transform={`rotate(-90, ${cx}, ${cy})`}>
+                    <motion.circle cx={cx} cy={cy} r={R} stroke={fg} strokeWidth={2} fill="none" strokeLinecap="round"
+                      strokeDasharray={C}
+                      animate={{ strokeDashoffset: C - C * progress }}
+                      transition={{ duration: 0.8, ease: 'linear' }}
+                      filter={playing ? 'url(#glow-arc)' : undefined}
+                    />
+                  </g>
+                  {/* 12 tick marks — clock-style, light up as time passes */}
+                  {Array.from({ length: 12 }).map((_, i) => {
+                    const angle = (i / 12) * 2 * Math.PI - Math.PI / 2
+                    const isMajor = i % 3 === 0
+                    const outerR = R + 12
+                    const innerR = isMajor ? R + 3 : R + 6
+                    const cos = Math.cos(angle), sin = Math.sin(angle)
+                    const lit = i === 0 ? secs > 0 : i * 5 <= minsPassed
+                    return (
+                      <line key={i}
+                        x1={cx + innerR * cos} y1={cy + innerR * sin}
+                        x2={cx + outerR * cos} y2={cy + outerR * sin}
+                        stroke={lit ? fg : (dark ? '#2A2A2A' : '#D0D0D0')}
+                        strokeWidth={isMajor ? 2 : 1.2}
+                        strokeLinecap="round"
+                      />
+                    )
+                  })}
                 </svg>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 22 }}>
-                  <div style={{ fontFamily: '"SF Mono","Courier New",monospace', fontSize: 48, fontWeight: 200, color: fg, letterSpacing: 2, lineHeight: 1 }}>
+                {/* Center */}
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <div style={{ fontFamily: '"SF Mono","Courier New",monospace', fontSize: 52, fontWeight: 200, color: fg, letterSpacing: 3, lineHeight: 1 }}>
                     {fmt(secs)}
                   </div>
-                  <button onClick={() => setPlaying(p => !p)} style={{ width: 68, height: 68, borderRadius: '50%', background: fg, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: dark ? '0 0 0 10px rgba(255,255,255,0.06)' : '0 0 0 10px rgba(0,0,0,0.04)' }}>
-                    {playing
-                      ? <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="5" y="4" width="4.5" height="14" rx="1.5" fill={bg}/><rect x="12.5" y="4" width="4.5" height="14" rx="1.5" fill={bg}/></svg>
-                      : <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M7 4.5L18 11L7 17.5V4.5Z" fill={bg}/></svg>
-                    }
-                  </button>
+                  <div style={{ fontSize: 10.5, color: muted, fontFamily: '-apple-system,system-ui,sans-serif', letterSpacing: 1.5, textTransform: 'uppercase' }}>
+                    {secs === 0 ? 'ready' : `${Math.floor((secs % 3600) / 60)} min`}
+                  </div>
                 </div>
               </div>
             )
           })()}
+
+          {/* Play / Pause */}
+          <button onClick={() => setPlaying(p => !p)} style={{ width: 64, height: 64, borderRadius: '50%', background: fg, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: dark ? '0 0 0 10px rgba(255,255,255,0.05)' : '0 0 0 10px rgba(0,0,0,0.04)' }}>
+            {playing
+              ? <svg width="20" height="20" viewBox="0 0 22 22" fill="none"><rect x="5" y="4" width="4.5" height="14" rx="1.5" fill={bg}/><rect x="12.5" y="4" width="4.5" height="14" rx="1.5" fill={bg}/></svg>
+              : <svg width="20" height="20" viewBox="0 0 22 22" fill="none"><path d="M7 4.5L18 11L7 17.5V4.5Z" fill={bg}/></svg>
+            }
+          </button>
         </div>
 
         {/* End Session */}
