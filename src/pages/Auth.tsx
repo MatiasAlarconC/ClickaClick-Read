@@ -110,8 +110,12 @@ export function SignInScreen() {
   const [error, setError] = useState<string | null>(null)
   const [showForgotPw, setShowForgotPw] = useState(false)
   const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotStep, setForgotStep] = useState<'email' | 'otp' | 'newpass' | 'done'>('email')
   const [forgotLoading, setForgotLoading] = useState(false)
-  const [forgotDone, setForgotDone] = useState(false)
+  const [forgotError, setForgotError] = useState<string | null>(null)
+  const [otpCode, setOtpCode] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
 
   const handleSubmit = async () => {
     if (!email || !password) { setError('All fields required'); return }
@@ -122,15 +126,33 @@ export function SignInScreen() {
     navigate('/home')
   }
 
-  const handleForgotPw = async () => {
+  const handleSendOtp = async () => {
     if (!forgotEmail) return
-    setForgotLoading(true)
-    const { supabase } = await import('../lib/supabase')
-    await supabase.auth.resetPasswordForEmail(forgotEmail, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    })
+    setForgotLoading(true); setForgotError(null)
+    const { error } = await supabase.auth.signInWithOtp({ email: forgotEmail, options: { shouldCreateUser: false } })
     setForgotLoading(false)
-    setForgotDone(true)
+    if (error) { setForgotError(error.message); return }
+    setForgotStep('otp')
+  }
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length !== 6) { setForgotError('Enter the 6-digit code'); return }
+    setForgotLoading(true); setForgotError(null)
+    const { error } = await supabase.auth.verifyOtp({ email: forgotEmail, token: otpCode, type: 'email' })
+    setForgotLoading(false)
+    if (error) { setForgotError('Invalid code — try again'); return }
+    setForgotStep('newpass')
+  }
+
+  const handleSetNewPassword = async () => {
+    if (!newPassword || newPassword.length < 8) { setForgotError('At least 8 characters'); return }
+    if (newPassword !== newPasswordConfirm) { setForgotError('Passwords do not match'); return }
+    setForgotLoading(true); setForgotError(null)
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+    setForgotLoading(false)
+    if (error) { setForgotError(error.message); return }
+    setForgotStep('done')
+    setTimeout(() => { setShowForgotPw(false); setForgotStep('email'); setOtpCode(''); setNewPassword(''); setNewPasswordConfirm(''); setForgotEmail('') }, 2000)
   }
 
   return (
@@ -165,42 +187,70 @@ export function SignInScreen() {
             </p>
           </>
         ) : (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-            {!forgotDone ? (
+          <motion.div key={forgotStep} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            {forgotStep === 'email' && (
               <>
-                <div style={{ fontSize: 14, color: theme.muted, marginBottom: 28 }}>
-                  Enter your email and we'll send you a link to reset your password.
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 26, color: theme.fg, marginBottom: 6 }}>Forgot password?</div>
+                <div style={{ fontSize: 14, color: theme.muted, marginBottom: 28, lineHeight: 1.6 }}>
+                  We'll send a 6-digit code to your email — enter it here to reset your password without leaving the app.
                 </div>
-                <FormInput label="Email" type="email" value={forgotEmail} onChange={setForgotEmail} placeholder="matias@example.com" theme={theme} autoComplete="email" />
-                <PrimaryButton
-                  label={forgotLoading ? 'Sending…' : 'Send reset link'}
-                  onPress={handleForgotPw}
-                  disabled={forgotLoading || !forgotEmail}
-                  theme={theme}
-                  style={{ marginTop: 28 }}
-                />
+                <FormInput label="Email" type="email" value={forgotEmail} onChange={e => { setForgotEmail(e); setForgotError(null) }} placeholder="matias@example.com" theme={theme} autoComplete="email" />
+                {forgotError && <div style={{ marginTop: 12, fontSize: 13, color: '#ff4444' }}>{forgotError}</div>}
+                <PrimaryButton label={forgotLoading ? 'Sending…' : 'Send code'} onPress={handleSendOtp} disabled={forgotLoading || !forgotEmail} theme={theme} style={{ marginTop: 28 }} />
               </>
-            ) : (
-              <div style={{ padding: '24px 0', textAlign: 'center' }}>
-                <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center' }}>
-                  <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="6" y="18" width="60" height="40" rx="6" stroke={theme.fg} strokeWidth="2"/>
-                    <path d="M6 24l30 20 30-20" stroke={theme.fg} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <circle cx="36" cy="44" r="10" fill={theme.bg} stroke={theme.accent} strokeWidth="2"/>
-                    <path d="M31 44l3.5 3.5L41 40" stroke={theme.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
+            )}
+            {forgotStep === 'otp' && (
+              <>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 26, color: theme.fg, marginBottom: 6 }}>Enter code</div>
+                <div style={{ fontSize: 14, color: theme.muted, marginBottom: 28, lineHeight: 1.6 }}>
+                  We sent a 6-digit code to <strong style={{ color: theme.fg }}>{forgotEmail}</strong>. Check your inbox.
                 </div>
-                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, marginBottom: 8 }}>Check your inbox</div>
-                <div style={{ fontSize: 14, color: theme.muted, lineHeight: 1.6 }}>
-                  If an account exists for <strong style={{ color: theme.fg }}>{forgotEmail}</strong>, you'll receive a password reset link shortly.
+                <div style={{ marginBottom: 8 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, display: 'block', marginBottom: 8 }}>Verification code</label>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={e => { setOtpCode(e.target.value.slice(0, 6)); setForgotError(null) }}
+                    placeholder="123456"
+                    style={{ width: '100%', padding: '15px', background: theme.bg, border: `1.5px solid ${theme.border}`, borderRadius: 12, fontSize: 24, fontWeight: 600, color: theme.fg, textAlign: 'center', letterSpacing: 8, fontFamily: 'monospace', boxSizing: 'border-box' }}
+                  />
                 </div>
+                {forgotError && <div style={{ fontSize: 13, color: '#ff4444', marginBottom: 8 }}>{forgotError}</div>}
+                <PrimaryButton label={forgotLoading ? 'Verifying…' : 'Verify'} onPress={handleVerifyOtp} disabled={forgotLoading || otpCode.length !== 6} theme={theme} style={{ marginTop: 20 }} />
+                <button onClick={() => { setForgotStep('email'); setForgotError(null); setOtpCode('') }} style={{ marginTop: 14, background: 'none', border: 'none', color: theme.muted, fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+                  ← Resend code
+                </button>
+              </>
+            )}
+            {forgotStep === 'newpass' && (
+              <>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 26, color: theme.fg, marginBottom: 6 }}>New password</div>
+                <div style={{ fontSize: 14, color: theme.muted, marginBottom: 28 }}>Choose a strong password for your account.</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  <FormInput label="New Password" type="password" value={newPassword} onChange={e => { setNewPassword(e); setForgotError(null) }} placeholder="At least 8 characters" theme={theme} autoComplete="new-password" />
+                  <FormInput label="Confirm Password" type="password" value={newPasswordConfirm} onChange={e => { setNewPasswordConfirm(e); setForgotError(null) }} placeholder="Repeat your password" theme={theme} autoComplete="new-password" />
+                </div>
+                {forgotError && <div style={{ marginTop: 12, fontSize: 13, color: '#ff4444' }}>{forgotError}</div>}
+                <PrimaryButton label={forgotLoading ? 'Saving…' : 'Set New Password'} onPress={handleSetNewPassword} disabled={forgotLoading || !newPassword || !newPasswordConfirm} theme={theme} style={{ marginTop: 28 }} />
+              </>
+            )}
+            {forgotStep === 'done' && (
+              <div style={{ paddingTop: 16, textAlign: 'center' }}>
+                <div style={{ width: 60, height: 60, borderRadius: '50%', background: `${theme.accent}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none"><path d="M5 12l5 5L19 7" stroke={theme.accent} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                </div>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, marginBottom: 6 }}>Password updated!</div>
+                <div style={{ fontSize: 14, color: theme.muted }}>Signing you in…</div>
               </div>
             )}
-            <button
-              onClick={() => { setShowForgotPw(false); setForgotDone(false) }}
-              style={{ marginTop: 20, background: 'none', border: 'none', color: theme.muted, fontSize: 14, cursor: 'pointer', padding: '8px 0' }}>
-              ← Back to sign in
-            </button>
+            {forgotStep !== 'done' && (
+              <button onClick={() => { setShowForgotPw(false); setForgotStep('email'); setForgotError(null); setOtpCode(''); setNewPassword(''); setNewPasswordConfirm('') }}
+                style={{ marginTop: 20, background: 'none', border: 'none', color: theme.muted, fontSize: 14, cursor: 'pointer', padding: '8px 0' }}>
+                ← Back to sign in
+              </button>
+            )}
           </motion.div>
         )}
       </div>
