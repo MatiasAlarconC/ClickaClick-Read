@@ -374,251 +374,170 @@ export default function SessionScreen() {
   const muted = '#888888'
 
   return (
-    <div style={{ minHeight: '100%', background: bg, display: 'flex', flexDirection: 'column', padding: '64px 28px 40px' }}>
-      {/* Top bar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 36 }}>
-        <button onClick={() => { setPlaying(false); setEndPage(page); setShowEndModal(true) }} style={{ width: 34, height: 34, borderRadius: '50%', background: dark ? '#1E1E1E' : '#F5F5F3', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1L11 11M11 1L1 11" stroke={fg} strokeWidth="1.5" strokeLinecap="round"/></svg>
-        </button>
-        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.2, textTransform: 'uppercase', color: muted }}>Focus Mode</span>
-        {/* Music toggle button — starts/shows player */}
-        <button
-          onClick={toggleMusic}
-          title={musicOn ? 'Pause music' : musicTrackName ? 'Resume music' : 'Start reading music'}
-          style={{ width: 34, height: 34, borderRadius: '50%', background: (musicOn || musicTrackName) ? fg : (dark ? '#1E1E1E' : '#F5F5F3'), border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
-        >
-          {musicLoading
-            ? <Spinner color={(musicOn || musicTrackName) ? bg : muted} />
-            : musicOn
-              ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="4" height="18" rx="1" fill={bg}/><rect x="15" y="3" width="4" height="18" rx="1" fill={bg}/></svg>
-              : musicTrackName
-                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={bg}/></svg>
-                : <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={fg} strokeWidth="1.5"/><circle cx="18" cy="16" r="3" stroke={fg} strokeWidth="1.5"/></svg>
-          }
-        </button>
-      </div>
+    <div style={{ minHeight: '100dvh', background: bg, display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
 
-      {/* ── Music player panel ─────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {(musicTrackName || musicLoading || musicError) && (
-          <motion.div key="music-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-            style={{ overflow: 'hidden', marginTop: -20, marginBottom: 16 }}>
-            <div style={{ background: dark ? '#141414' : '#F5F5F3', borderRadius: 14, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Track name + skip */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {/* Equalizer or pause bars */}
-                <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 14, flexShrink: 0 }}>
-                  {[0.5, 0.9, 0.6, 1, 0.7].map((h, i) => (
-                    <motion.div key={i} style={{ width: 2.5, background: musicOn ? fg : muted, borderRadius: 1, height: `${h * 14}px` }}
-                      animate={musicOn ? { scaleY: [h * 0.4, h, h * 0.3, h * 0.8, h * 0.4] } : { scaleY: 0.3 }}
-                      transition={{ duration: 1.1 + i * 0.15, repeat: Infinity, ease: 'easeInOut' }} />
-                  ))}
+      {/* Ambient blurred cover — desaturated, subtle */}
+      {userBook?.book?.cover_url && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 0, backgroundImage: `url(${userBook.book.cover_url})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'blur(80px) saturate(0)', transform: 'scale(1.4)', opacity: dark ? 0.14 : 0.07, pointerEvents: 'none' }} />
+      )}
+
+      <div style={{ position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column', padding: '60px 28px 36px' }}>
+
+        {/* Top bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+          <button onClick={() => { setPlaying(false); setEndPage(page); setShowEndModal(true) }} style={{ width: 36, height: 36, borderRadius: '50%', background: dark ? '#1E1E1E' : '#F0F0EE', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M1 1L11 11M11 1L1 11" stroke={fg} strokeWidth="1.5" strokeLinecap="round"/></svg>
+          </button>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1.5, textTransform: 'uppercase', color: muted, fontFamily: '-apple-system,system-ui,sans-serif' }}>Focus Mode</span>
+          <button onClick={toggleMusic} title={musicOn ? 'Pause music' : musicTrackName ? 'Resume music' : 'Start reading music'} style={{ width: 36, height: 36, borderRadius: '50%', background: (musicOn || musicTrackName) ? fg : (dark ? '#1E1E1E' : '#F0F0EE'), border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s', cursor: 'pointer' }}>
+            {musicLoading
+              ? <Spinner color={(musicOn || musicTrackName) ? bg : muted} />
+              : musicOn
+                ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="4" height="18" rx="1" fill={bg}/><rect x="15" y="3" width="4" height="18" rx="1" fill={bg}/></svg>
+                : musicTrackName
+                  ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={bg}/></svg>
+                  : <svg width="15" height="15" viewBox="0 0 24 24" fill="none"><path d="M9 18V5l12-2v13" stroke={fg} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="6" cy="18" r="3" stroke={fg} strokeWidth="1.5"/><circle cx="18" cy="16" r="3" stroke={fg} strokeWidth="1.5"/></svg>
+            }
+          </button>
+        </div>
+
+        {/* Music panel */}
+        <AnimatePresence>
+          {(musicTrackName || musicLoading || musicError) && (
+            <motion.div key="music-panel" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden', marginTop: -12, marginBottom: 14 }}>
+              <div style={{ background: dark ? '#141414' : '#F5F5F3', borderRadius: 14, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 14, flexShrink: 0 }}>
+                    {[0.5, 0.9, 0.6, 1, 0.7].map((h, i) => (
+                      <motion.div key={i} style={{ width: 2.5, background: musicOn ? fg : muted, borderRadius: 1, height: `${h * 14}px` }}
+                        animate={musicOn ? { scaleY: [h * 0.4, h, h * 0.3, h * 0.8, h * 0.4] } : { scaleY: 0.3 }}
+                        transition={{ duration: 1.1 + i * 0.15, repeat: Infinity, ease: 'easeInOut' }} />
+                    ))}
+                  </div>
+                  <span style={{ flex: 1, fontSize: 12, color: musicError ? '#FF6B6B' : muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {musicError ? 'Could not load music track' : (musicLoading ? 'Loading…' : (musicTrackName ?? ''))}
+                  </span>
+                  {!musicError && musicTrackName && (
+                    <button onClick={skipTrack} disabled={musicLoading} style={{ background: 'none', border: 'none', color: muted, cursor: 'pointer', padding: '2px 4px', fontSize: 12, flexShrink: 0 }}>⏭</button>
+                  )}
                 </div>
-                <span style={{ flex: 1, fontSize: 12, color: musicError ? '#FF6B6B' : muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {musicError ? 'Could not load music track' : (musicLoading ? 'Loading…' : (musicTrackName ?? ''))}
-                </span>
-                {!musicError && musicTrackName && (
-                  <button onClick={skipTrack} disabled={musicLoading} title="Skip track"
-                    style={{ background: 'none', border: 'none', color: muted, cursor: 'pointer', padding: '2px 4px', fontSize: 12, flexShrink: 0 }}>
-                    ⏭
-                  </button>
-                )}
-              </div>
-              {/* Play / Pause + Volume */}
-              {!musicError && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {/* Play / Pause big button */}
-                  <button onClick={toggleMusic} disabled={musicLoading}
-                    style={{ width: 40, height: 40, borderRadius: '50%', background: fg, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: musicLoading ? 'default' : 'pointer', opacity: musicLoading ? 0.5 : 1 }}>
-                    {musicLoading
-                      ? <Spinner color={bg} />
-                      : musicOn
+                {!musicError && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <button onClick={toggleMusic} disabled={musicLoading} style={{ width: 40, height: 40, borderRadius: '50%', background: fg, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, cursor: musicLoading ? 'default' : 'pointer', opacity: musicLoading ? 0.5 : 1 }}>
+                      {musicLoading ? <Spinner color={bg} /> : musicOn
                         ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="5" y="3" width="4" height="18" rx="1" fill={bg}/><rect x="15" y="3" width="4" height="18" rx="1" fill={bg}/></svg>
                         : <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 4l14 8-14 8V4z" fill={bg}/></svg>
-                    }
-                  </button>
-                  {/* Volume slider */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 5L6 9H2v6h4l5 4V5z" fill={muted}/></svg>
-                    <input type="range" min="0" max="1" step="0.05" value={volume}
-                      onChange={e => handleVolumeChange(parseFloat(e.target.value))}
-                      style={{ flex: 1, accentColor: fg, cursor: 'pointer' }} />
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 5L6 9H2v6h4l5 4V5z" fill={muted}/><path d="M15.54 8.46a5 5 0 010 7.07" stroke={muted} strokeWidth="1.5" strokeLinecap="round"/><path d="M19.07 4.93a10 10 0 010 14.14" stroke={muted} strokeWidth="1.5" strokeLinecap="round"/></svg>
+                      }
+                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 5L6 9H2v6h4l5 4V5z" fill={muted}/></svg>
+                      <input type="range" min="0" max="1" step="0.05" value={volume} onChange={e => handleVolumeChange(parseFloat(e.target.value))} style={{ flex: 1, accentColor: fg, cursor: 'pointer' }} />
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M11 5L6 9H2v6h4l5 4V5z" fill={muted}/><path d="M15.54 8.46a5 5 0 010 7.07" stroke={muted} strokeWidth="1.5" strokeLinecap="round"/><path d="M19.07 4.93a10 10 0 010 14.14" stroke={muted} strokeWidth="1.5" strokeLinecap="round"/></svg>
+                    </div>
                   </div>
-                </div>
-              )}
-              {musicError && (
-                <button onClick={toggleMusic} style={{ padding: '7px', borderRadius: 8, background: fg, color: bg, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                  Try again
-                </button>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                )}
+                {musicError && (
+                  <button onClick={toggleMusic} style={{ padding: '7px', borderRadius: 8, background: fg, color: bg, border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Try again</button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* ePub anchor banner — last-sentence bridge from previous virtual session */}
-      {epubAnchor && anchorExpanded && (() => {
+        {/* ePub anchor */}
+        {epubAnchor && anchorExpanded && (() => {
           const isPhysical = !epubAnchor.cfi && !epubAnchor.chapter && !epubAnchor.progress
           const totalPagesForAnchor = userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0
           const estimatedPage = epubAnchor.progress > 0 ? Math.round(epubAnchor.progress * totalPagesForAnchor) : 0
           return (
-        <div style={{ margin: '0 0 20px', padding: '14px 16px', background: dark ? '#1a1a1a' : '#f5f5f3', borderRadius: 14, border: `1px solid ${dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: muted, marginBottom: 2 }}>
-                {isPhysical ? 'Last physical position' : 'Last ePub sentence'}
-              </div>
-              {epubAnchor.chapter && <div style={{ fontSize: 11, color: muted }}>{epubAnchor.chapter}</div>}
-            </div>
-            <button onClick={() => setAnchorExpanded(false)} style={{ background: 'none', border: 'none', color: muted, fontSize: 18, lineHeight: 1, cursor: 'pointer' }}>×</button>
-          </div>
-          <div style={{ fontSize: 13, color: fg, fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>
-            "{epubAnchor.sentence}"
-          </div>
-          {estimatedPage > 0 && (
-          <div style={{ fontSize: 12, color: muted, marginBottom: 10 }}>
-            Estimated page: <strong style={{ color: fg }}>{estimatedPage}</strong>
-            {' '}of {totalPagesForAnchor || '?'}
-          </div>
-          )}
-          {!pageConfirmed ? (
-            <div>
-              <div style={{ fontSize: 11, color: muted, marginBottom: 6 }}>Found a different page? Correct it:</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input
-                  type="number"
-                  value={correctedPage}
-                  onChange={e => setCorrectedPage(e.target.value)}
-                  placeholder={String(Math.round(epubAnchor.progress * (userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0)))}
-                  style={{ flex: 1, padding: '8px 10px', background: dark ? '#0d0d0d' : '#fff', border: `1px solid ${dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)'}`, borderRadius: 8, fontSize: 14, color: fg }}
-                />
-                <button
-                  onClick={async () => {
-                    if (!correctedPage || !userBook) {
-                      setPageConfirmed(true)
-                      setAnchorExpanded(false)
-                      localStorage.removeItem(`epub_anchor_${userBook?.book_id}`)
-                      return
-                    }
-                    const corrected = parseInt(correctedPage)
-                    const est = Math.round(epubAnchor.progress * (userBook.custom_pages ?? (userBook.book as any)?.pages_default ?? 0))
-
-                    // 1. Update current_page so this physical session starts from the right page
-                    await supabase.from('user_books')
-                      .update({ current_page: corrected })
-                      .eq('id', userBook.id)
-
-                    // 2. Recalibrate epub_page_ratio for future estimates
-                    if (est > 0) {
-                      await supabase.from('user_books')
-                        .update({ epub_page_ratio: corrected / est })
-                        .eq('id', userBook.id)
-                    }
-
-                    // 3. Retroactively fix end_page of the most recent epub session
-                    const { data: lastEpub } = await supabase
-                      .from('reading_sessions')
-                      .select('id')
-                      .eq('user_id', user!.id)
-                      .eq('book_id', userBook.book_id)
-                      .eq('session_type', 'epub')
-                      .order('started_at', { ascending: false })
-                      .limit(1)
-                      .maybeSingle()
-                    if (lastEpub) {
-                      await supabase.from('reading_sessions')
-                        .update({ end_page: corrected })
-                        .eq('id', lastEpub.id)
-                    }
-
-                    setPageConfirmed(true)
-                    setAnchorExpanded(false)
-                    localStorage.removeItem(`epub_anchor_${userBook.book_id}`)
-                  }}
-                  style={{ padding: '8px 14px', background: fg, color: bg, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  Confirm
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div style={{ fontSize: 12, color: '#22C55E' }}>Page confirmed — starting from {correctedPage}</div>
-          )}
-        </div>
-          )
-        })()}
-
-      {/* Book cover */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
-        <BookCover index={0} width={100} height={152} coverUrl={userBook?.book?.cover_url} title={userBook?.book?.title} author={userBook?.book?.author} />
-      </div>
-
-      {/* Book info */}
-      <div style={{ textAlign: 'center', marginBottom: 28 }}>
-        <div style={{ fontFamily: 'Georgia, serif', fontSize: 26, color: fg, lineHeight: 1.25, letterSpacing: -0.5 }}>{userBook?.book?.title ?? 'Reading Session'}</div>
-        <div style={{ fontSize: 13, color: muted, marginTop: 5 }}>{userBook?.book?.author ?? ''}</div>
-      </div>
-
-      {/* Timer — circular ring, fills every 30 min */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-        {(() => {
-          const SIZE = 186
-          const STROKE = 3
-          const R = (SIZE - STROKE * 2) / 2
-          const C = 2 * Math.PI * R
-          const progress = (secs % 1800) / 1800
-          const dash = C * progress
-          return (
-            <div style={{ position: 'relative', width: SIZE, height: SIZE }}>
-              <svg width={SIZE} height={SIZE} style={{ position: 'absolute', top: 0, left: 0, transform: 'rotate(-90deg)' }}>
-                {/* Track */}
-                <circle cx={SIZE/2} cy={SIZE/2} r={R} stroke={dark ? '#1E1E1E' : '#EBEBEB'} strokeWidth={STROKE} fill="none" />
-                {/* Filled arc */}
-                <motion.circle
-                  cx={SIZE/2} cy={SIZE/2} r={R}
-                  stroke={fg}
-                  strokeWidth={STROKE}
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeDasharray={C}
-                  animate={{ strokeDashoffset: C - dash }}
-                  transition={{ duration: 0.8, ease: 'linear' }}
-                />
-              </svg>
-              {/* Centre content */}
-              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <div style={{ fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 38, fontWeight: 200, color: fg, letterSpacing: 1, lineHeight: 1 }}>
-                  {fmt(secs)}
+            <div style={{ margin: '0 0 18px', padding: '14px 16px', background: dark ? '#1a1a1a' : '#f5f5f3', borderRadius: 14, border: `1px solid ${dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: muted, marginBottom: 2 }}>{isPhysical ? 'Last physical position' : 'Last ePub sentence'}</div>
+                  {epubAnchor.chapter && <div style={{ fontSize: 11, color: muted }}>{epubAnchor.chapter}</div>}
                 </div>
-                {playing && (
-                  <motion.div
-                    animate={{ opacity: [1, 0.2, 1] }}
-                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                    style={{ width: 5, height: 5, borderRadius: '50%', background: fg, opacity: 0.5 }}
-                  />
-                )}
+                <button onClick={() => setAnchorExpanded(false)} style={{ background: 'none', border: 'none', color: muted, fontSize: 18, lineHeight: 1, cursor: 'pointer' }}>×</button>
               </div>
+              <div style={{ fontSize: 13, color: fg, fontStyle: 'italic', lineHeight: 1.55, marginBottom: 10 }}>"{epubAnchor.sentence}"</div>
+              {estimatedPage > 0 && (
+                <div style={{ fontSize: 12, color: muted, marginBottom: 10 }}>Estimated page: <strong style={{ color: fg }}>{estimatedPage}</strong> of {totalPagesForAnchor || '?'}</div>
+              )}
+              {!pageConfirmed ? (
+                <div>
+                  <div style={{ fontSize: 11, color: muted, marginBottom: 6 }}>Found a different page? Correct it:</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input type="number" value={correctedPage} onChange={e => setCorrectedPage(e.target.value)}
+                      placeholder={String(Math.round(epubAnchor.progress * (userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0)))}
+                      style={{ flex: 1, padding: '8px 10px', background: dark ? '#0d0d0d' : '#fff', border: `1px solid ${dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)'}`, borderRadius: 8, fontSize: 14, color: fg }} />
+                    <button onClick={async () => {
+                      if (!correctedPage || !userBook) { setPageConfirmed(true); setAnchorExpanded(false); localStorage.removeItem(`epub_anchor_${userBook?.book_id}`); return }
+                      const corrected = parseInt(correctedPage)
+                      const est = Math.round(epubAnchor.progress * (userBook.custom_pages ?? (userBook.book as any)?.pages_default ?? 0))
+                      await supabase.from('user_books').update({ current_page: corrected }).eq('id', userBook.id)
+                      if (est > 0) await supabase.from('user_books').update({ epub_page_ratio: corrected / est }).eq('id', userBook.id)
+                      const { data: lastEpub } = await supabase.from('reading_sessions').select('id').eq('user_id', user!.id).eq('book_id', userBook.book_id).eq('session_type', 'epub').order('started_at', { ascending: false }).limit(1).maybeSingle()
+                      if (lastEpub) await supabase.from('reading_sessions').update({ end_page: corrected }).eq('id', lastEpub.id)
+                      setPageConfirmed(true); setAnchorExpanded(false); localStorage.removeItem(`epub_anchor_${userBook.book_id}`)
+                    }} style={{ padding: '8px 14px', background: fg, color: bg, border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Confirm</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 12, color: '#22C55E' }}>Page confirmed — starting from {correctedPage}</div>
+              )}
             </div>
           )
         })()}
-      </div>
 
-      {/* Current page — static display; user sets final page in the End modal */}
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, marginBottom: 40 }}>
-        <span style={{ fontSize: 13, color: muted }}>Page</span>
-        <span style={{ padding: '7px 10px', background: dark ? '#1A1A1A' : '#F5F5F3', borderRadius: 10, fontSize: 16, fontWeight: 500, color: fg }}>{page}</span>
-        <span style={{ fontSize: 13, color: muted }}>/ {userBook?.custom_pages ?? userBook?.book?.pages_default ?? '?'}</span>
-      </div>
+        {/* Book info — compact horizontal strip */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 36, padding: '0 2px' }}>
+          <BookCover index={0} width={52} height={78} coverUrl={userBook?.book?.cover_url} title={userBook?.book?.title} author={userBook?.book?.author} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 17, color: fg, lineHeight: 1.25, letterSpacing: -0.3, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as const }}>{userBook?.book?.title ?? 'Reading Session'}</div>
+            <div style={{ fontSize: 12, color: muted, marginTop: 3, fontFamily: '-apple-system,system-ui,sans-serif' }}>{userBook?.book?.author ?? ''}</div>
+          </div>
+          <div style={{ flexShrink: 0, textAlign: 'right' }}>
+            <div style={{ fontFamily: '"SF Mono","Courier New",monospace', fontSize: 22, fontWeight: 300, color: fg, lineHeight: 1 }}>{page}</div>
+            <div style={{ fontSize: 10.5, color: muted, marginTop: 3, fontFamily: '-apple-system,system-ui,sans-serif' }}>/ {userBook?.custom_pages ?? userBook?.book?.pages_default ?? '?'}</div>
+          </div>
+        </div>
 
-      {/* Controls */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22 }}>
-        <button onClick={() => setPlaying(p => !p)} style={{ width: 76, height: 76, borderRadius: '50%', background: fg, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: dark ? '0 0 0 10px rgba(255,255,255,0.07)' : '0 0 0 10px rgba(0,0,0,0.05)' }}>
-          {playing
-            ? <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="5" y="4" width="4.5" height="14" rx="1.5" fill={bg}/><rect x="12.5" y="4" width="4.5" height="14" rx="1.5" fill={bg}/></svg>
-            : <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M7 4.5L18 11L7 17.5V4.5Z" fill={bg}/></svg>
-          }
-        </button>
-        <button onClick={() => { setPlaying(false); setEndPage(page); setShowEndModal(true) }} style={{ background: 'none', border: 'none', fontSize: 13, color: muted, letterSpacing: 0.2 }}>End Session</button>
+        {/* Timer — large ring with play/pause button inside */}
+        <div style={{ display: 'flex', justifyContent: 'center', flex: 1, alignItems: 'center', marginBottom: 44 }}>
+          {(() => {
+            const SIZE = 268
+            const STROKE = 2.5
+            const R = (SIZE - STROKE * 2) / 2
+            const C = 2 * Math.PI * R
+            const progress = (secs % 1800) / 1800
+            const dash = C * progress
+            return (
+              <div style={{ position: 'relative', width: SIZE, height: SIZE }}>
+                <svg width={SIZE} height={SIZE} style={{ position: 'absolute', top: 0, left: 0, transform: 'rotate(-90deg)' }}>
+                  <circle cx={SIZE/2} cy={SIZE/2} r={R} stroke={dark ? '#1C1C1C' : '#E8E8E8'} strokeWidth={STROKE} fill="none" />
+                  <motion.circle cx={SIZE/2} cy={SIZE/2} r={R} stroke={fg} strokeWidth={STROKE} fill="none" strokeLinecap="round"
+                    strokeDasharray={C} animate={{ strokeDashoffset: C - dash }} transition={{ duration: 0.8, ease: 'linear' }} />
+                </svg>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 22 }}>
+                  <div style={{ fontFamily: '"SF Mono","Courier New",monospace', fontSize: 48, fontWeight: 200, color: fg, letterSpacing: 2, lineHeight: 1 }}>
+                    {fmt(secs)}
+                  </div>
+                  <button onClick={() => setPlaying(p => !p)} style={{ width: 68, height: 68, borderRadius: '50%', background: fg, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: dark ? '0 0 0 10px rgba(255,255,255,0.06)' : '0 0 0 10px rgba(0,0,0,0.04)' }}>
+                    {playing
+                      ? <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="5" y="4" width="4.5" height="14" rx="1.5" fill={bg}/><rect x="12.5" y="4" width="4.5" height="14" rx="1.5" fill={bg}/></svg>
+                      : <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M7 4.5L18 11L7 17.5V4.5Z" fill={bg}/></svg>
+                    }
+                  </button>
+                </div>
+              </div>
+            )
+          })()}
+        </div>
+
+        {/* End Session */}
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <button onClick={() => { setPlaying(false); setEndPage(page); setShowEndModal(true) }} style={{ background: 'none', border: 'none', fontSize: 13, color: muted, letterSpacing: 0.2, fontFamily: '-apple-system,system-ui,sans-serif', cursor: 'pointer' }}>End Session</button>
+        </div>
+
       </div>
 
       {/* End session modal */}
@@ -630,40 +549,33 @@ export default function SessionScreen() {
               style={{ width: '100%', maxWidth: 500, background: bg, borderRadius: '24px 24px 0 0', padding: '28px 24px 48px' }}>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: fg, marginBottom: 6 }}>End Session</div>
               <div style={{ fontSize: 14, color: muted, marginBottom: 24 }}>You read for {fmt(secs)}</div>
-
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: muted, display: 'block', marginBottom: 8 }}>What page did you finish on?</label>
                 <input value={endPage} onChange={e => setEndPage(e.target.value)} type="number" placeholder={page}
                   style={{ width: '100%', padding: '13px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 16, color: fg }} />
               </div>
-
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: muted, display: 'block', marginBottom: 8 }}>Quick note (optional)</label>
                 <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Any thoughts or highlights…" rows={3}
                   style={{ width: '100%', padding: '13px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 14, color: fg, resize: 'none' }} />
               </div>
-
               <div style={{ marginBottom: 24 }}>
                 <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: muted, display: 'block', marginBottom: 4 }}>Last sentence (optional)</label>
                 <div style={{ fontSize: 12, color: muted, marginBottom: 8 }}>The ePub reader will open to this sentence next time.</div>
                 <textarea value={lastSentence} onChange={e => setLastSentence(e.target.value)} placeholder="Type the last sentence you read…" rows={2}
                   style={{ width: '100%', padding: '13px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 14, color: fg, resize: 'none', fontStyle: lastSentence ? 'italic' : 'normal' }} />
               </div>
-
               {saveError && (
                 <div style={{ marginBottom: 14, padding: '12px 14px', background: '#FF3B3020', borderRadius: 10, fontSize: 13, color: '#FF3B30' }}>
                   Save failed. Check your connection and try again.
                 </div>
               )}
-
-              <button onClick={handleEndSession} disabled={saving} style={{ width: '100%', padding: 15, background: saveError ? '#FF3B30' : fg, color: bg, border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 500, opacity: saving ? 0.7 : 1 }}>
+              <button onClick={handleEndSession} disabled={saving} style={{ width: '100%', padding: 15, background: saveError ? '#FF3B30' : fg, color: bg, border: 'none', borderRadius: 12, fontSize: 15, fontWeight: 500, opacity: saving ? 0.7 : 1, cursor: 'pointer' }}>
                 {saving ? (
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <Spinner color={bg} />Saving…
-                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><Spinner color={bg} />Saving…</span>
                 ) : saveError ? 'Retry Save' : 'Save & Finish'}
               </button>
-              <button onClick={() => { setShowEndModal(false); setSaveError(false); setPlaying(true) }} style={{ width: '100%', padding: '12px', marginTop: 10, background: 'none', border: 'none', fontSize: 14, color: muted }}>
+              <button onClick={() => { setShowEndModal(false); setSaveError(false); setPlaying(true) }} style={{ width: '100%', padding: '12px', marginTop: 10, background: 'none', border: 'none', fontSize: 14, color: muted, cursor: 'pointer' }}>
                 Keep Reading
               </button>
             </motion.div>
