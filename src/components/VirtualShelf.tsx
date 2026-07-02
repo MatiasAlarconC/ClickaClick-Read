@@ -37,7 +37,6 @@ const WALL_PRESETS = [
 const DECO_CYCLE = [0, 1, 2]
 
 const DECO_ITEMS = [
-  { id: 0, label: 'None' },
   { id: 1, label: 'Bookend' },
   { id: 2, label: 'Cactus' },
   { id: 3, label: 'Globe' },
@@ -48,13 +47,21 @@ const DECO_ITEMS = [
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ShelfPos = { shelf: number; left: number; rot: number; scale: number }
 
+interface ShelfDeco {
+  uid: string
+  type: number   // 1=bookend 2=cactus 3=globe 4=trophy 5=candle
+  shelf: number
+  left: number
+}
+
 interface ShelfConfig {
   woodIdx: number
   wallIdx: number
-  decos: number[]  // index = shelf row
+  decos: number[]       // legacy — kept for backward compat, unused
+  decoItems: ShelfDeco[]
 }
 
-const DEFAULT_CONFIG: ShelfConfig = { woodIdx: 0, wallIdx: 0, decos: [] }
+const DEFAULT_CONFIG: ShelfConfig = { woodIdx: 0, wallIdx: 0, decos: [], decoItems: [] }
 
 interface ShelfBook {
   userBookId: string
@@ -74,7 +81,7 @@ interface LibBook {
 }
 
 type GestureState =
-  | { type: 'drag'; id: string; grabOffset: number }
+  | { type: 'drag'; id: string; grabOffset: number; isDeco?: boolean }
   | { type: 'rotate'; id: string; cx: number; cy: number; startAng: number; startRot: number }
   | { type: 'scale'; id: string; cx: number; cy: number; startDist: number; startScale: number }
 
@@ -102,7 +109,9 @@ export default function VirtualShelf() {
   const [libBooks, setLibBooks] = useState<LibBook[]>([])
   const [libLoading, setLibLoading] = useState(false)
   const [showStyleSheet, setShowStyleSheet] = useState(false)
+  const [showDecoSheet, setShowDecoSheet] = useState(false)
   const [config, setConfig] = useState<ShelfConfig>(DEFAULT_CONFIG)
+  const [selectedDeco, setSelectedDeco] = useState<string | null>(null)
 
   const rowsRef = useRef<HTMLDivElement>(null)
   const gestureRef = useRef<GestureState | null>(null)
@@ -178,9 +187,19 @@ export default function VirtualShelf() {
         const el = rowsRef.current; if (!el) return
         const r = el.getBoundingClientRect()
         const shelf = Math.max(0, Math.min(rows - 1, Math.floor((e.clientY - r.top) / ROW_H)))
-        const sz = spineSize(g.id)
-        const left = Math.max(6, Math.min(e.clientX - r.left - g.grabOffset, el.offsetWidth - sz.w - 6))
-        updatePos(g.id, { shelf, left })
+        if (g.isDeco) {
+          const left = Math.max(6, Math.min(e.clientX - r.left - g.grabOffset, el.offsetWidth - 40))
+          setConfig(prev => {
+            const decoItems = prev.decoItems.map(d => d.uid === g.id ? { ...d, shelf, left } : d)
+            const next = { ...prev, decoItems }
+            if (user) localStorage.setItem(`cc_shelf_cfg_${user.id}`, JSON.stringify(next))
+            return next
+          })
+        } else {
+          const sz = spineSize(g.id)
+          const left = Math.max(6, Math.min(e.clientX - r.left - g.grabOffset, el.offsetWidth - sz.w - 6))
+          updatePos(g.id, { shelf, left })
+        }
       } else if (g.type === 'rotate') {
         const ang = Math.atan2(e.clientY - g.cy, e.clientX - g.cx) * 180 / Math.PI
         updatePos(g.id, { rot: Math.max(-30, Math.min(30, g.startRot + (ang - g.startAng))) })
@@ -325,6 +344,22 @@ export default function VirtualShelf() {
     saveConfig({ ...config, decos })
   }
 
+  const addDeco = (type: number) => {
+    const wallW = rowsRef.current?.offsetWidth ?? 340
+    const uid = `deco_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    const existingOnShelf0 = config.decoItems.filter(d => d.shelf === 0)
+    const left = existingOnShelf0.reduce((m, d) => Math.max(m, d.left + 40), wallW - 56)
+    const item: ShelfDeco = { uid, type, shelf: 0, left: Math.max(6, Math.min(left, wallW - 40)) }
+    const next = { ...config, decoItems: [...config.decoItems, item] }
+    saveConfig(next)
+    setShowDecoSheet(false)
+  }
+
+  const removeDeco = (uid: string) => {
+    saveConfig({ ...config, decoItems: config.decoItems.filter(d => d.uid !== uid) })
+    if (selectedDeco === uid) setSelectedDeco(null)
+  }
+
   const isEmpty = books.length === 0
 
   return (
@@ -350,74 +385,108 @@ export default function VirtualShelf() {
         </div>
       </div>
 
+      {/* ── Crown bar ── */}
+      <div style={{ height: 20, background: `linear-gradient(to bottom, ${board.edge}, ${board.face})`, boxShadow: '0 4px 10px rgba(0,0,0,0.4)', flexShrink: 0, borderTop: `2px solid ${board.edge}` }} />
+
       {/* ── Scroll container ── */}
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 110 }}>
-        <div ref={rowsRef} onPointerDown={() => setSelected(null)}
-          style={{ position: 'relative', height: rows * ROW_H, background: wallBg, borderLeft: `1px solid ${theme.border}`, borderRight: `1px solid ${theme.border}` }}>
 
-          {/* Shelf boards + decorations */}
-          {Array.from({ length: rows }).map((_, r) => (
-            <div key={r} style={{ position: 'absolute', left: 0, right: 0, top: r * ROW_H + DECK_H }}>
-              <div style={{ position: 'absolute', top: BOARD_H, left: 0, right: 0, height: 16, background: `linear-gradient(rgba(0,0,0,0.40), transparent)` }} />
-              <div style={{ height: 3, background: board.top }} />
-              <div style={{ height: BOARD_H - 3, background: board.face, borderBottom: `1.5px solid ${board.edge}` }} />
-            </div>
-          ))}
+        {/* Bookcase frame with side walls */}
+        <div style={{ position: 'relative' }}>
+          {/* Left wall */}
+          <div style={{ position: 'absolute', top: 0, left: 0, width: 14, bottom: 0, zIndex: 20, pointerEvents: 'none',
+            background: `linear-gradient(to right, ${board.edge}, ${board.face})`,
+            boxShadow: 'inset -3px 0 8px rgba(0,0,0,0.45)' }} />
+          {/* Right wall */}
+          <div style={{ position: 'absolute', top: 0, right: 0, width: 14, bottom: 0, zIndex: 20, pointerEvents: 'none',
+            background: `linear-gradient(to left, ${board.edge}, ${board.face})`,
+            boxShadow: 'inset 3px 0 8px rgba(0,0,0,0.45)' }} />
 
-          {/* Decorations */}
-          {Array.from({ length: rows }).map((_, r) => {
-            const deco = config.decos[r] ?? 0
-            if (!deco) return null
-            return (
-              <div key={`deco-${r}`} style={{ position: 'absolute', right: 8, bottom: (rows - 1 - r) * ROW_H + BOARD_H, pointerEvents: 'none' }}>
-                {deco === 1 && <BookendSVG />}
-                {deco === 2 && <PlantSVG />}
-                {deco === 3 && <GlobeSVG />}
-                {deco === 4 && <FigurineSVG />}
-                {deco === 5 && <CandleSVG />}
+          <div ref={rowsRef} onPointerDown={() => { setSelected(null); setSelectedDeco(null) }}
+            style={{ position: 'relative', height: rows * ROW_H, background: wallBg, marginLeft: 14, marginRight: 14 }}>
+
+            {/* Shelf boards */}
+            {Array.from({ length: rows }).map((_, r) => (
+              <div key={r} style={{ position: 'absolute', left: 0, right: 0, top: r * ROW_H + DECK_H }}>
+                <div style={{ position: 'absolute', top: BOARD_H, left: 0, right: 0, height: 16, background: `linear-gradient(rgba(0,0,0,0.40), transparent)` }} />
+                <div style={{ height: 3, background: board.top }} />
+                <div style={{ height: BOARD_H - 3, background: board.face, borderBottom: `1.5px solid ${board.edge}` }} />
               </div>
-            )
-          })}
+            ))}
 
-          {/* Books */}
-          {books.map(book => {
-            const sz = spineSize(book.userBookId)
-            const sel = book.userBookId === selected
-            const inv = 1 / book.pos.scale
-            return (
-              <div key={book.userBookId} data-spine={book.userBookId} onPointerDown={e => bodyDown(e, book)}
-                style={{ position: 'absolute', left: book.pos.left, top: book.pos.shelf * ROW_H + DECK_H - sz.h, width: sz.w, height: sz.h, transform: `rotate(${book.pos.rot}deg) scale(${book.pos.scale})`, transformOrigin: 'bottom center', zIndex: sel ? 50 : 10 + book.pos.shelf, cursor: 'grab', touchAction: 'none', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.55))' }}>
-                <SpineFace book={book} w={sz.w} h={sz.h} theme={theme} />
-                {sel && <div style={{ position: 'absolute', inset: -4, border: `1.5px solid ${theme.fg}`, borderRadius: 4, pointerEvents: 'none' }} />}
-                {sel && (
-                  <>
-                    <div style={{ position: 'absolute', left: '50%', top: -22, width: 1.5, height: 22, background: theme.fg, transform: `scaleX(${inv})`, transformOrigin: 'top center', pointerEvents: 'none' }} />
-                    <Handle invScale={inv} theme={theme} onPointerDown={e => rotateDown(e, book)} style={{ left: '50%', top: -22, marginLeft: -13, transform: `translateY(-100%) scale(${inv})` }}>
-                      <RotateIcon color={theme.bg} />
-                    </Handle>
-                    <Handle invScale={inv} theme={theme} onPointerDown={e => scaleDown(e, book)} style={{ right: -13, bottom: -13, transform: `scale(${inv})` }}>
-                      <ScaleIcon color={theme.bg} />
-                    </Handle>
-                    <Handle invScale={inv} theme={theme} onPointerDown={e => { e.stopPropagation(); removeBook(book.userBookId) }} style={{ right: -13, top: -13, transform: `scale(${inv})` }}>
-                      <svg width="11" height="11" viewBox="0 0 11 11"><path d="M1 1L10 10M10 1L1 10" stroke={theme.bg} strokeWidth="1.6" strokeLinecap="round" /></svg>
-                    </Handle>
-                    <Handle invScale={inv} theme={theme} bg={theme.bg} fg={theme.fg} onPointerDown={e => { e.stopPropagation(); setSpineTarget({ userBookId: book.userBookId, title: book.title }) }} style={{ left: -13, bottom: -13, border: `1.5px solid ${theme.fg}`, transform: `scale(${inv})` }}>
-                      <CameraIcon color={theme.fg} />
-                    </Handle>
-                  </>
-                )}
+            {/* Draggable decorations */}
+            {config.decoItems.map(deco => {
+              const decoH = deco.type === 1 ? 166 : deco.type === 3 ? 54 : 56
+              const decoTop = deco.shelf * ROW_H + DECK_H - decoH
+              const selD = deco.uid === selectedDeco
+              return (
+                <div key={deco.uid}
+                  onPointerDown={e => {
+                    e.stopPropagation()
+                    setSelectedDeco(deco.uid); setSelected(null)
+                    const el = rowsRef.current; if (!el) return
+                    gestureRef.current = { type: 'drag', id: deco.uid, grabOffset: e.clientX - el.getBoundingClientRect().left - deco.left, isDeco: true }
+                    setGesturing(true)
+                  }}
+                  style={{ position: 'absolute', left: deco.left, top: decoTop, zIndex: selD ? 55 : 15, cursor: 'grab', touchAction: 'none' }}>
+                  {deco.type === 1 && <BookendSVG />}
+                  {deco.type === 2 && <PlantSVG />}
+                  {deco.type === 3 && <GlobeSVG />}
+                  {deco.type === 4 && <FigurineSVG />}
+                  {deco.type === 5 && <CandleSVG />}
+                  {selD && (
+                    <button onPointerDown={e => { e.stopPropagation(); removeDeco(deco.uid) }}
+                      style={{ position: 'absolute', top: -12, right: -12, width: 24, height: 24, borderRadius: '50%', background: theme.fg, border: `1.5px solid ${theme.bg}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 60 }}>
+                      <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1L9 9M9 1L1 9" stroke={theme.bg} strokeWidth="1.5" strokeLinecap="round"/></svg>
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* Books */}
+            {books.map(book => {
+              const sz = spineSize(book.userBookId)
+              const sel = book.userBookId === selected
+              const inv = 1 / book.pos.scale
+              return (
+                <div key={book.userBookId} data-spine={book.userBookId} onPointerDown={e => bodyDown(e, book)}
+                  style={{ position: 'absolute', left: book.pos.left, top: book.pos.shelf * ROW_H + DECK_H - sz.h, width: sz.w, height: sz.h, transform: `rotate(${book.pos.rot}deg) scale(${book.pos.scale})`, transformOrigin: 'bottom center', zIndex: sel ? 50 : 10 + book.pos.shelf, cursor: 'grab', touchAction: 'none', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.55))' }}>
+                  <SpineFace book={book} w={sz.w} h={sz.h} theme={theme} />
+                  {sel && <div style={{ position: 'absolute', inset: -4, border: `1.5px solid ${theme.fg}`, borderRadius: 4, pointerEvents: 'none' }} />}
+                  {sel && (
+                    <>
+                      <div style={{ position: 'absolute', left: '50%', top: -22, width: 1.5, height: 22, background: theme.fg, transform: `scaleX(${inv})`, transformOrigin: 'top center', pointerEvents: 'none' }} />
+                      <Handle invScale={inv} theme={theme} onPointerDown={e => rotateDown(e, book)} style={{ left: '50%', top: -22, marginLeft: -13, transform: `translateY(-100%) scale(${inv})` }}>
+                        <RotateIcon color={theme.bg} />
+                      </Handle>
+                      <Handle invScale={inv} theme={theme} onPointerDown={e => scaleDown(e, book)} style={{ right: -13, bottom: -13, transform: `scale(${inv})` }}>
+                        <ScaleIcon color={theme.bg} />
+                      </Handle>
+                      <Handle invScale={inv} theme={theme} onPointerDown={e => { e.stopPropagation(); removeBook(book.userBookId) }} style={{ right: -13, top: -13, transform: `scale(${inv})` }}>
+                        <svg width="11" height="11" viewBox="0 0 11 11"><path d="M1 1L10 10M10 1L1 10" stroke={theme.bg} strokeWidth="1.6" strokeLinecap="round" /></svg>
+                      </Handle>
+                      <Handle invScale={inv} theme={theme} bg={theme.bg} fg={theme.fg} onPointerDown={e => { e.stopPropagation(); setSpineTarget({ userBookId: book.userBookId, title: book.title }) }} style={{ left: -13, bottom: -13, border: `1.5px solid ${theme.fg}`, transform: `scale(${inv})` }}>
+                        <CameraIcon color={theme.fg} />
+                      </Handle>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+
+            {isEmpty && (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 40px' }}>
+                <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: theme.fg, letterSpacing: -0.5 }}>Your shelf is empty</div>
+                <div style={{ fontSize: 13, color: theme.muted, marginTop: 8, lineHeight: 1.5, maxWidth: 230, fontFamily: '-apple-system,system-ui,sans-serif' }}>Add books from your library, then capture each spine with the camera.</div>
+                <button onClick={openLibSheet} style={{ marginTop: 22, padding: '11px 22px', borderRadius: 999, background: theme.fg, color: theme.bg, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 500, fontFamily: '-apple-system,system-ui,sans-serif' }}>From Library</button>
               </div>
-            )
-          })}
-
-          {isEmpty && (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 40px' }}>
-              <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: theme.fg, letterSpacing: -0.5 }}>Your shelf is empty</div>
-              <div style={{ fontSize: 13, color: theme.muted, marginTop: 8, lineHeight: 1.5, maxWidth: 230, fontFamily: '-apple-system,system-ui,sans-serif' }}>Add books from your library, then capture each spine with the camera.</div>
-              <button onClick={openLibSheet} style={{ marginTop: 22, padding: '11px 22px', borderRadius: 999, background: theme.fg, color: theme.bg, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 500, fontFamily: '-apple-system,system-ui,sans-serif' }}>From Library</button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
+
+        {/* Baseboard */}
+        <div style={{ height: 16, background: `linear-gradient(to top, ${board.edge}, ${board.face})`, boxShadow: '0 -4px 10px rgba(0,0,0,0.4)', borderBottom: `2px solid ${board.edge}` }} />
 
         {/* Row management row */}
         <div style={{ display: 'flex', borderTop: `1px dashed ${theme.border}` }}>
@@ -439,8 +508,12 @@ export default function VirtualShelf() {
       </div>
 
       {/* ── FABs ── */}
+      {/* Decoration FAB */}
+      <button onClick={() => setShowDecoSheet(true)} style={{ position: 'absolute', bottom: 22, left: 20, width: 44, height: 44, borderRadius: '50%', background: theme.bgElevated, color: theme.fg, border: `1px solid ${theme.border}`, cursor: 'pointer', zIndex: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
+      </button>
       {!isEmpty && (
-        <button onClick={openLibSheet} style={{ position: 'absolute', bottom: 22, left: 20, padding: '10px 16px', borderRadius: 999, background: theme.bgElevated, color: theme.fg, border: `1px solid ${theme.border}`, cursor: 'pointer', fontSize: 13, fontWeight: 500, zIndex: 80, display: 'flex', alignItems: 'center', gap: 6, fontFamily: '-apple-system,system-ui,sans-serif', boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>
+        <button onClick={openLibSheet} style={{ position: 'absolute', bottom: 22, left: 74, padding: '10px 16px', borderRadius: 999, background: theme.bgElevated, color: theme.fg, border: `1px solid ${theme.border}`, cursor: 'pointer', fontSize: 13, fontWeight: 500, zIndex: 80, display: 'flex', alignItems: 'center', gap: 6, fontFamily: '-apple-system,system-ui,sans-serif', boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>
           <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Library
         </button>
       )}
@@ -470,6 +543,10 @@ export default function VirtualShelf() {
 
       {showStyleSheet && (
         <StyleSheet config={config} theme={theme} onSave={saveConfig} onClose={() => setShowStyleSheet(false)} rows={rows} />
+      )}
+
+      {showDecoSheet && (
+        <DecoLibSheet theme={theme} onAdd={addDeco} onClose={() => setShowDecoSheet(false)} />
       )}
     </div>
   )
@@ -564,11 +641,43 @@ function AddFromLibSheet({ books, loading, theme, onAdd, onAddWithCapture, onClo
   )
 }
 
+// ─── Deco library sheet ───────────────────────────────────────────────────────
+function DecoLibSheet({ theme, onAdd, onClose }: { theme: Theme; onAdd: (type: number) => void; onClose: () => void }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 400 }}>
+      <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
+      <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: theme.bg, borderRadius: '22px 22px 0 0', boxShadow: '0 -10px 40px rgba(0,0,0,0.4)', paddingBottom: 'calc(28px + env(safe-area-inset-bottom,0px))' }}>
+        <div style={{ padding: '14px 22px 20px' }}>
+          <div style={{ width: 38, height: 4, borderRadius: 999, background: theme.border, margin: '0 auto 16px' }} />
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, letterSpacing: -0.5, marginBottom: 6 }}>Add Decoration</div>
+          <div style={{ fontSize: 12.5, color: theme.muted, marginBottom: 20, fontFamily: '-apple-system,system-ui,sans-serif' }}>Tap to add · drag anywhere on the shelf</div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {DECO_ITEMS.map(item => (
+              <button key={item.id} onClick={() => onAdd(item.id)} style={{ width: 64, borderRadius: 12, background: theme.bgSecondary, border: `1.5px solid ${theme.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 4px 8px', gap: 6 }}>
+                <div style={{ height: 48, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden' }}>
+                  <div style={{ transform: 'scale(0.58)', transformOrigin: 'bottom center', flexShrink: 0 }}>
+                    {item.id === 1 && <BookendSVG />}
+                    {item.id === 2 && <PlantSVG />}
+                    {item.id === 3 && <GlobeSVG />}
+                    {item.id === 4 && <FigurineSVG />}
+                    {item.id === 5 && <CandleSVG />}
+                  </div>
+                </div>
+                <span style={{ fontSize: 9.5, color: theme.muted, fontFamily: '-apple-system,system-ui,sans-serif', textAlign: 'center' }}>{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Style sheet ──────────────────────────────────────────────────────────────
-function StyleSheet({ config, theme, onSave, onClose, rows }: {
+function StyleSheet({ config, theme, onSave, onClose, rows: _rows }: {
   config: ShelfConfig; theme: Theme; onSave: (c: ShelfConfig) => void; onClose: () => void; rows: number
 }) {
-  const [tab, setTab] = useState<'style' | 'decor'>('style')
+  const [tab, setTab] = useState<'style'>('style')
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 400 }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
@@ -577,76 +686,25 @@ function StyleSheet({ config, theme, onSave, onClose, rows }: {
         <div style={{ padding: '14px 22px 0', flexShrink: 0 }}>
           <div style={{ width: 38, height: 4, borderRadius: 999, background: theme.border, margin: '0 auto 16px' }} />
           <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, letterSpacing: -0.5, marginBottom: 14 }}>Customize Shelf</div>
-          {/* Tabs */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 18, background: theme.bgSecondary, borderRadius: 10, padding: 3 }}>
-            {(['style', 'decor'] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', background: tab === t ? theme.bg : 'transparent', color: tab === t ? theme.fg : theme.muted, fontSize: 13, fontWeight: tab === t ? 600 : 400, fontFamily: '-apple-system,system-ui,sans-serif', boxShadow: tab === t ? '0 1px 4px rgba(0,0,0,0.15)' : 'none', textTransform: 'capitalize' }}>
-                {t}
+        </div>
+
+        <div style={{ overflowY: 'auto', padding: '0 22px 18px', flex: 1 }}>
+          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10, fontFamily: '-apple-system,system-ui,sans-serif' }}>Wood</div>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 22 }}>
+            {WOOD_PRESETS.map((w, i) => (
+              <button key={i} onClick={() => onSave({ ...config, woodIdx: i })} style={{ flex: 1, height: 40, borderRadius: 8, cursor: 'pointer', background: `linear-gradient(to bottom, ${w.top}, ${w.face})`, border: config.woodIdx === i ? `2.5px solid ${theme.fg}` : `2px solid transparent`, outline: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 5 }}>
+                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: '-apple-system,system-ui,sans-serif', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{w.name}</span>
               </button>
             ))}
           </div>
-        </div>
-
-        {/* Content */}
-        <div style={{ overflowY: 'auto', padding: '0 22px 18px', flex: 1 }}>
-          {tab === 'style' ? (
-            <>
-              <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10, fontFamily: '-apple-system,system-ui,sans-serif' }}>Wood</div>
-              <div style={{ display: 'flex', gap: 10, marginBottom: 22 }}>
-                {WOOD_PRESETS.map((w, i) => (
-                  <button key={i} onClick={() => onSave({ ...config, woodIdx: i })} style={{ flex: 1, height: 40, borderRadius: 8, cursor: 'pointer', background: `linear-gradient(to bottom, ${w.top}, ${w.face})`, border: config.woodIdx === i ? `2.5px solid ${theme.fg}` : `2px solid transparent`, outline: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 5 }}>
-                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: '-apple-system,system-ui,sans-serif', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{w.name}</span>
-                  </button>
-                ))}
-              </div>
-              <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10, fontFamily: '-apple-system,system-ui,sans-serif' }}>Wall</div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                {WALL_PRESETS.map((w, i) => (
-                  <button key={i} onClick={() => onSave({ ...config, wallIdx: i })} style={{ flex: 1, height: 40, borderRadius: 8, cursor: 'pointer', background: w.bg, border: config.wallIdx === i ? `2.5px solid ${theme.fg}` : `2px solid ${theme.border}`, outline: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 5 }}>
-                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: '-apple-system,system-ui,sans-serif', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>{w.name}</span>
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ fontSize: 11.5, color: theme.muted, fontFamily: '-apple-system,system-ui,sans-serif', marginBottom: 16, lineHeight: 1.4 }}>
-                Pick a decoration for each shelf row.
-              </div>
-              {Array.from({ length: rows }).map((_, r) => (
-                <div key={r} style={{ marginBottom: 22 }}>
-                  <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 8, fontFamily: '-apple-system,system-ui,sans-serif' }}>Shelf {r + 1}</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    {DECO_ITEMS.map(item => {
-                      const sel = (config.decos[r] ?? 0) === item.id
-                      return (
-                        <button key={item.id} onClick={() => {
-                          const decos = [...(config.decos ?? [])]
-                          decos[r] = item.id
-                          onSave({ ...config, decos })
-                        }} style={{ flexShrink: 0, width: 52, borderRadius: 10, background: sel ? theme.bgSecondary : 'transparent', border: sel ? `2px solid ${theme.fg}` : `2px solid ${theme.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 4px 6px', gap: 4 }}>
-                          <div style={{ width: 36, height: 42, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden' }}>
-                            {item.id === 0
-                              ? <span style={{ fontSize: 20, color: theme.muted, paddingBottom: 6 }}>—</span>
-                              : (
-                                <div style={{ transform: 'scale(0.52)', transformOrigin: 'bottom center', flexShrink: 0 }}>
-                                  {item.id === 1 && <BookendSVG />}
-                                  {item.id === 2 && <PlantSVG />}
-                                  {item.id === 3 && <GlobeSVG />}
-                                  {item.id === 4 && <FigurineSVG />}
-                                  {item.id === 5 && <CandleSVG />}
-                                </div>
-                              )}
-                          </div>
-                          <span style={{ fontSize: 8.5, color: sel ? theme.fg : theme.muted, fontFamily: '-apple-system,system-ui,sans-serif', textAlign: 'center', lineHeight: 1.2 }}>{item.label}</span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
+          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10, fontFamily: '-apple-system,system-ui,sans-serif' }}>Wall</div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {WALL_PRESETS.map((w, i) => (
+              <button key={i} onClick={() => onSave({ ...config, wallIdx: i })} style={{ flex: 1, height: 40, borderRadius: 8, cursor: 'pointer', background: w.bg, border: config.wallIdx === i ? `2.5px solid ${theme.fg}` : `2px solid ${theme.border}`, outline: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 5 }}>
+                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: '-apple-system,system-ui,sans-serif', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>{w.name}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </div>

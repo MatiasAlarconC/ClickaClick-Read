@@ -665,7 +665,7 @@ export default function YearInReviewScreen() {
         <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, height: 90, background: 'linear-gradient(to top,rgba(0,0,0,0.65),transparent)', pointerEvents: 'none', zIndex: 5 }} />
 
         {/* Top bar */}
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'calc(14px + env(safe-area-inset-top, 0px)) 16px 14px' }}>
           <button onClick={() => navigate('/stats')} style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(0,0,0,0.45)', border: '1px solid rgba(255,255,255,0.13)', display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', cursor: 'pointer' }}>
             <svg width="7" height="12" viewBox="0 0 7 12" fill="none"><path d="M6 1L1 6L6 11" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </button>
@@ -698,7 +698,7 @@ export default function YearInReviewScreen() {
 
         {cur.id === 'outro' && (
           <motion.div initial={{ opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65 }}
-            style={{ position: 'fixed', bottom: 24, left: 22, right: 22, zIndex: 20 }}>
+            style={{ position: 'fixed', bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))', left: 22, right: 22, zIndex: 20 }}>
             <button onClick={handleShare} disabled={sharing}
               style={{ width: '100%', padding: '15px', background: 'rgba(255,255,255,0.95)', color: '#0A0A0A', border: 'none', borderRadius: 14, fontSize: 15, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
               <svg width="16" height="14" viewBox="0 0 24 20" fill="none">
