@@ -41,12 +41,12 @@ function detectLR(data: Uint8ClampedArray, w: number, h: number): { left: number
   return { left, right }
 }
 
-// Improved scan: auto-levels (1% clip) + stronger S-curve + unsharp mask
+// Improved scan: auto-levels (1% clip) + contrast S-curve + unsharp mask
 function applyDocumentScan(src: HTMLCanvasElement): string {
-  const MAX = 2000
+  const MAX = 2200
   let sw = src.width, sh = src.height
-  if (sh > MAX) { const s = MAX / sh; sw = Math.round(sw * s); sh = MAX }
-  if (sw > MAX) { const s = MAX / sw; sh = Math.round(sh * s); sw = MAX }
+  const scl = Math.min(1, MAX / Math.max(sw, sh))
+  sw = Math.round(sw * scl); sh = Math.round(sh * scl)
   const c = document.createElement('canvas')
   c.width = sw; c.height = sh
   const ctx = c.getContext('2d')!
@@ -54,7 +54,7 @@ function applyDocumentScan(src: HTMLCanvasElement): string {
   const img = ctx.getImageData(0, 0, sw, sh)
   const d = img.data, n = d.length, pixels = sw * sh
 
-  // Auto-levels with 1% clip per channel
+  // Auto-levels per channel — 1% clip
   const hist = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)]
   for (let i = 0; i < n; i += 4) { hist[0][d[i]]++; hist[1][d[i+1]]++; hist[2][d[i+2]]++ }
   const lo = [0,0,0], hi = [255,255,255]
@@ -66,58 +66,45 @@ function applyDocumentScan(src: HTMLCanvasElement): string {
     if (hi[ch] <= lo[ch]) { lo[ch] = 0; hi[ch] = 255 }
   }
 
-  // Build LUT for performance
+  // Build LUT with stronger S-curve for print/spine contrast
   const lut = [new Uint8Array(256), new Uint8Array(256), new Uint8Array(256)]
   for (let ch = 0; ch < 3; ch++) {
     for (let v = 0; v < 256; v++) {
       let t = (v - lo[ch]) / (hi[ch] - lo[ch])
       t = Math.max(0, Math.min(1, t))
-      // S-curve: stronger contrast for print/spine text
-      t = t < 0.5
-        ? t + t * (1 - t) * 0.55
-        : t + (t - 1) * t * (-0.55)
+      t = t < 0.5 ? t + t * (1 - t) * 0.6 : t + (t - 1) * t * (-0.6)
       lut[ch][v] = Math.round(t * 255)
     }
   }
   for (let i = 0; i < n; i += 4) {
-    d[i]   = lut[0][d[i]]
-    d[i+1] = lut[1][d[i+1]]
-    d[i+2] = lut[2][d[i+2]]
+    d[i] = lut[0][d[i]]; d[i+1] = lut[1][d[i+1]]; d[i+2] = lut[2][d[i+2]]
   }
   ctx.putImageData(img, 0, 0)
 
-  // Unsharp mask: sharpens text and fine detail
-  const sharp = ctx.getImageData(0, 0, sw, sh)
-  const sd = sharp.data
-  const blurred = new Uint8ClampedArray(n)
-  // Simple box-blur 3x3 for unsharp reference
+  // Unsharp mask — sharpens text detail
+  const after = ctx.getImageData(0, 0, sw, sh)
+  const sd = after.data
+  const blur = new Uint8ClampedArray(n)
   for (let y = 1; y < sh - 1; y++) {
     for (let x = 1; x < sw - 1; x++) {
       const base = (y * sw + x) * 4
       for (let ch = 0; ch < 3; ch++) {
         let s = 0
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            s += sd[((y + dy) * sw + (x + dx)) * 4 + ch]
-          }
-        }
-        blurred[base + ch] = Math.round(s / 9)
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) s += sd[((y+dy)*sw+(x+dx))*4+ch]
+        blur[base+ch] = Math.round(s / 9)
       }
     }
   }
-  const amount = 0.55
+  const amount = 0.6
   for (let i = 0; i < n; i += 4) {
     for (let ch = 0; ch < 3; ch++) {
-      const sharpened = sd[i+ch] + amount * (sd[i+ch] - blurred[i+ch])
-      sd[i+ch] = Math.max(0, Math.min(255, Math.round(sharpened)))
+      sd[i+ch] = Math.max(0, Math.min(255, Math.round(sd[i+ch] + amount * (sd[i+ch] - blur[i+ch]))))
     }
   }
-  ctx.putImageData(sharp, 0, 0)
-
+  ctx.putImageData(after, 0, 0)
   return c.toDataURL('image/jpeg', 0.96)
 }
 
-// Crop from the full frame using 4 fractions [0..1] and apply scan
 function cropAndScan(full: HTMLCanvasElement, lFrac: number, rFrac: number, tFrac: number, bFrac: number): string {
   const fw = full.width, fh = full.height
   const x = Math.round(lFrac * fw)
@@ -130,14 +117,22 @@ function cropAndScan(full: HTMLCanvasElement, lFrac: number, rFrac: number, tFra
   return applyDocumentScan(dst)
 }
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+type Handle = 'tl' | 'tr' | 'bl' | 'br' | 'none'
+
+interface CropRect { l: number; r: number; t: number; b: number }
+
 export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const analysisRef = useRef<HTMLCanvasElement | null>(null)
-  const fullFrameRef = useRef<HTMLCanvasElement | null>(null)  // full camera frame at capture time
+  const fullFrameRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef<number>(0)
   const smoothedLR = useRef<{ left: number; right: number } | null>(null)
   const confidenceRef = useRef(0)
+  const cropContainerRef = useRef<HTMLDivElement>(null)
+  const activeHandle = useRef<Handle>('none')
+  const dragStart = useRef<{ x: number; y: number; crop: CropRect } | null>(null)
 
   const [ready, setReady] = useState(false)
   const [cameraError, setCameraError] = useState('')
@@ -146,13 +141,9 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
   const [manualL, setManualL] = useState(0.25)
   const [manualR, setManualR] = useState(0.75)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [showCropControls, setShowCropControls] = useState(false)
-
-  // Crop fractions relative to full frame
-  const [cropL, setCropL] = useState(0)
-  const [cropR, setCropR] = useState(1)
-  const [cropT, setCropT] = useState(0)
-  const [cropB, setCropB] = useState(1)
+  const [showCropMode, setShowCropMode] = useState(false)
+  const [crop, setCrop] = useState<CropRect>({ l: 0, r: 1, t: 0, b: 1 })
+  const [scanning, setScanning] = useState(false)
 
   useEffect(() => {
     let stream: MediaStream | null = null
@@ -227,14 +218,10 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
       const B = CH - offY - 0.005 * vh * scaleX
 
       ctx.fillStyle = 'rgba(0,0,0,0.52)'
-      ctx.fillRect(0, 0, CW, T)
-      ctx.fillRect(0, B, CW, CH - B)
-      ctx.fillRect(0, T, L, B - T)
-      ctx.fillRect(R, T, CW - R, B - T)
-
+      ctx.fillRect(0, 0, CW, T); ctx.fillRect(0, B, CW, CH - B)
+      ctx.fillRect(0, T, L, B - T); ctx.fillRect(R, T, CW - R, B - T)
       ctx.strokeStyle = 'rgba(255,255,255,0.88)'; ctx.lineWidth = 1.5
       ctx.strokeRect(L, T, R - L, B - T)
-
       const A = 22
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.lineCap = 'square'
       ctx.beginPath()
@@ -260,13 +247,11 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
     if (!video || !video.videoWidth) return
     const vw = video.videoWidth, vh = video.videoHeight
 
-    // Store full native frame
     const full = document.createElement('canvas')
     full.width = vw; full.height = vh
     full.getContext('2d')!.drawImage(video, 0, 0)
     fullFrameRef.current = full
 
-    // Calculate initial crop bounds from detected/manual spine + full vertical
     const lr = useManual ? { left: manualL, right: manualR }
       : (smoothedLR.current && confidenceRef.current >= CONFIDENCE_THRESH ? smoothedLR.current
       : { left: 0.32, right: 0.68 })
@@ -280,46 +265,76 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
       const scale = dispW / vw; visVH = dispH / scale; offVY = (vh - visVH) / 2
     }
 
-    // Convert display-space lr fractions to full-frame fractions
-    const lFrac = (offVX + lr.left * visVW) / vw
-    const rFrac = (offVX + lr.right * visVW) / vw
-    const tFrac = offVY / vh
-    const bFrac = (offVY + visVH) / vh
-
-    setCropL(lFrac)
-    setCropR(rFrac)
-    setCropT(tFrac)
-    setCropB(bFrac)
-    setShowCropControls(false)
-    setPreviewUrl(cropAndScan(full, lFrac, rFrac, tFrac, bFrac))
+    const initCrop: CropRect = {
+      l: (offVX + lr.left * visVW) / vw,
+      r: (offVX + lr.right * visVW) / vw,
+      t: offVY / vh,
+      b: (offVY + visVH) / vh,
+    }
+    setCrop(initCrop)
+    setShowCropMode(false)
+    setPreviewUrl(cropAndScan(full, initCrop.l, initCrop.r, initCrop.t, initCrop.b))
   }
 
-  const updateCrop = useCallback((l: number, r: number, t: number, b: number) => {
+  // ── Touch/pointer drag handlers for crop rectangle ────────────────────────
+  const onHandlePointerDown = useCallback((e: React.PointerEvent, handle: Handle) => {
+    e.preventDefault(); e.stopPropagation()
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    activeHandle.current = handle
+    dragStart.current = { x: e.clientX, y: e.clientY, crop: { ...crop } }
+  }, [crop])
+
+  const onContainerPointerMove = useCallback((e: React.PointerEvent) => {
+    if (activeHandle.current === 'none' || !dragStart.current || !cropContainerRef.current) return
+    const rect = cropContainerRef.current.getBoundingClientRect()
+    const dx = (e.clientX - dragStart.current.x) / rect.width
+    const dy = (e.clientY - dragStart.current.y) / rect.height
+    const MIN = 0.08
+    const base = dragStart.current.crop
+    let { l, r, t, b } = base
+
+    if (activeHandle.current === 'tl') {
+      l = Math.max(0, Math.min(base.l + dx, base.r - MIN))
+      t = Math.max(0, Math.min(base.t + dy, base.b - MIN))
+    } else if (activeHandle.current === 'tr') {
+      r = Math.min(1, Math.max(base.r + dx, base.l + MIN))
+      t = Math.max(0, Math.min(base.t + dy, base.b - MIN))
+    } else if (activeHandle.current === 'bl') {
+      l = Math.max(0, Math.min(base.l + dx, base.r - MIN))
+      b = Math.min(1, Math.max(base.b + dy, base.t + MIN))
+    } else if (activeHandle.current === 'br') {
+      r = Math.min(1, Math.max(base.r + dx, base.l + MIN))
+      b = Math.min(1, Math.max(base.b + dy, base.t + MIN))
+    }
+    setCrop({ l, r, t, b })
+  }, [])
+
+  const onContainerPointerUp = useCallback(() => {
+    if (activeHandle.current === 'none' || !fullFrameRef.current) return
+    activeHandle.current = 'none'
+    dragStart.current = null
+    // Re-scan with new crop (debounced via state update)
+    setScanning(true)
     const full = fullFrameRef.current
-    if (!full) return
-    setCropL(l); setCropR(r); setCropT(t); setCropB(b)
-    setPreviewUrl(cropAndScan(full, l, r, t, b))
+    setCrop(prev => {
+      setTimeout(() => {
+        setPreviewUrl(cropAndScan(full, prev.l, prev.r, prev.t, prev.b))
+        setScanning(false)
+      }, 50)
+      return prev
+    })
   }, [])
 
   const retake = () => {
     setPreviewUrl(null)
     fullFrameRef.current = null
-    setCropL(0); setCropR(1); setCropT(0); setCropB(1)
-    setShowCropControls(false)
+    setCrop({ l: 0, r: 1, t: 0, b: 1 })
+    setShowCropMode(false)
   }
 
-  // ── Preview screen ─────────────────────────────────────────────────────────────
+  // ── Preview screen ─────────────────────────────────────────────────────────
   if (previewUrl) {
-    // Thumbnail of full frame for crop guide
     const full = fullFrameRef.current
-    const thumbDataUrl = full ? (() => {
-      const t = document.createElement('canvas')
-      const maxDim = 160
-      const s = Math.min(maxDim / full.width, maxDim / full.height)
-      t.width = Math.round(full.width * s); t.height = Math.round(full.height * s)
-      t.getContext('2d')!.drawImage(full, 0, 0, t.width, t.height)
-      return t.toDataURL('image/jpeg', 0.7)
-    })() : null
 
     return (
       <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 500, display: 'flex', flexDirection: 'column' }}>
@@ -332,91 +347,135 @@ export default function SpineCaptureCamera({ bookTitle, onCapture, onClose }: Pr
           <button onClick={onClose} style={{ width: 34, height: 34, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', border: 'none', color: '#fff', fontSize: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>×</button>
         </div>
 
-        {/* Spine image */}
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060606', position: 'relative', minHeight: 0 }}>
-          <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 0' }}>
-            <div style={{ position: 'absolute', width: 90, top: 0, bottom: 0, background: 'radial-gradient(ellipse at center, rgba(255,255,255,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
+        {/* Main image area — crop mode or preview mode */}
+        {showCropMode && full ? (
+          // ── Crop mode: show full frame with draggable handles ───────────────
+          <div
+            ref={cropContainerRef}
+            onPointerMove={onContainerPointerMove}
+            onPointerUp={onContainerPointerUp}
+            style={{ flex: 1, position: 'relative', minHeight: 0, touchAction: 'none', userSelect: 'none' }}
+          >
+            {/* Full frame image */}
             <img
-              src={previewUrl}
-              alt="Spine preview"
-              draggable={false}
-              style={{
-                height: '100%',
-                maxHeight: 'calc(100vh - 290px)',
-                maxWidth: '72vw',
-                objectFit: 'contain',
-                borderRadius: 3,
-                display: 'block',
-                position: 'relative',
-                boxShadow: '6px 0 16px rgba(0,0,0,0.7), -2px 0 8px rgba(0,0,0,0.4)',
-              }}
+              src={(() => {
+                if (!full) return ''
+                const t = document.createElement('canvas')
+                const maxDim = 1200
+                const s = Math.min(1, maxDim / Math.max(full.width, full.height))
+                t.width = Math.round(full.width * s); t.height = Math.round(full.height * s)
+                t.getContext('2d')!.drawImage(full, 0, 0, t.width, t.height)
+                return t.toDataURL('image/jpeg', 0.85)
+              })()}
+              alt="Full frame"
+              style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block', opacity: 0.7 }}
             />
-          </div>
-
-          <button
-            onClick={() => setShowCropControls(s => !s)}
-            style={{ position: 'absolute', bottom: 12, right: 12, background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 8, color: 'rgba(255,255,255,0.7)', fontSize: 11, padding: '6px 11px', cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif', backdropFilter: 'blur(6px)' }}>
-            {showCropControls ? 'Done' : '✂ Adjust crop'}
-          </button>
-        </div>
-
-        {/* Crop controls — full-frame sliders */}
-        {showCropControls && (
-          <div style={{ flexShrink: 0, background: 'rgba(10,10,10,0.97)', padding: '14px 20px 10px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-            {/* Full-frame thumbnail with crop overlay */}
-            {thumbDataUrl && (
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <img src={thumbDataUrl} alt="" style={{ display: 'block', maxHeight: 80, opacity: 0.5, borderRadius: 4 }} />
-                  {/* Crop overlay */}
-                  <div style={{
-                    position: 'absolute',
-                    left: `${cropL * 100}%`,
-                    top: `${cropT * 100}%`,
-                    right: `${(1 - cropR) * 100}%`,
-                    bottom: `${(1 - cropB) * 100}%`,
-                    border: '1.5px solid rgba(255,255,255,0.8)',
-                    borderRadius: 2,
-                    pointerEvents: 'none',
-                  }} />
-                </div>
-              </div>
-            )}
-            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.4)', marginBottom: 10, textAlign: 'center', fontFamily: '-apple-system,system-ui,sans-serif' }}>
-              Adjust crop from the full camera frame
+            {/* Crop overlay mask */}
+            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+              {/* Dark outside crop */}
+              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)' }} />
+              {/* Bright crop rectangle (poke hole via mix-blend-mode) */}
+              <div style={{
+                position: 'absolute',
+                left: `${crop.l * 100}%`,
+                top: `${crop.t * 100}%`,
+                right: `${(1 - crop.r) * 100}%`,
+                bottom: `${(1 - crop.b) * 100}%`,
+                border: '2px solid rgba(255,255,255,0.9)',
+                borderRadius: 2,
+                boxShadow: '0 0 0 9999px rgba(0,0,0,0.55)',
+                background: 'transparent',
+              }} />
             </div>
-            {([
-              ['Left',   cropL, (v: number) => updateCrop(Math.min(v, cropR - 0.05), cropR, cropT, cropB)],
-              ['Right',  cropR, (v: number) => updateCrop(cropL, Math.max(v, cropL + 0.05), cropT, cropB)],
-              ['Top',    cropT, (v: number) => updateCrop(cropL, cropR, Math.min(v, cropB - 0.05), cropB)],
-              ['Bottom', cropB, (v: number) => updateCrop(cropL, cropR, cropT, Math.max(v, cropT + 0.05))],
-            ] as [string, number, (v: number) => void][]).map(([label, val, setter]) => (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 11, width: 44, fontFamily: '-apple-system,system-ui,sans-serif' }}>{label}</span>
-                <input type="range" min={0} max={1} step={0.01} value={val}
-                  onChange={e => setter(Number(e.target.value))}
-                  style={{ flex: 1, accentColor: '#fff' }} />
-                <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, width: 28, fontFamily: 'monospace' }}>{Math.round(val * 100)}%</span>
+            {/* Corner handles */}
+            {(['tl','tr','bl','br'] as Handle[]).map(h => (
+              <div
+                key={h}
+                onPointerDown={e => onHandlePointerDown(e, h)}
+                style={{
+                  position: 'absolute',
+                  left: (h === 'tl' || h === 'bl') ? `calc(${crop.l * 100}% - 16px)` : `calc(${crop.r * 100}% - 16px)`,
+                  top: (h === 'tl' || h === 'tr') ? `calc(${crop.t * 100}% - 16px)` : `calc(${crop.b * 100}% - 16px)`,
+                  width: 32, height: 32,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'grab', zIndex: 10, touchAction: 'none',
+                }}
+              >
+                <div style={{
+                  width: 16, height: 16, borderRadius: '50%',
+                  background: '#fff',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                }} />
               </div>
             ))}
+            {/* Instructions */}
+            <div style={{
+              position: 'absolute', bottom: 12, left: 0, right: 0,
+              textAlign: 'center', fontSize: 11,
+              color: 'rgba(255,255,255,0.5)',
+              fontFamily: '-apple-system,system-ui,sans-serif',
+              pointerEvents: 'none',
+            }}>
+              Drag the white handles to adjust the crop
+            </div>
+          </div>
+        ) : (
+          // ── Scanned preview ────────────────────────────────────────────────
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#060606', position: 'relative', minHeight: 0 }}>
+            <div style={{ position: 'relative', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '12px 0' }}>
+              <div style={{ position: 'absolute', width: 90, top: 0, bottom: 0, background: 'radial-gradient(ellipse at center, rgba(255,255,255,0.06) 0%, transparent 70%)', pointerEvents: 'none' }} />
+              <img
+                src={previewUrl}
+                alt="Spine preview"
+                draggable={false}
+                style={{
+                  height: '100%',
+                  maxHeight: 'calc(100vh - 290px)',
+                  maxWidth: '72vw',
+                  objectFit: 'contain',
+                  borderRadius: 3,
+                  display: 'block',
+                  position: 'relative',
+                  boxShadow: '6px 0 16px rgba(0,0,0,0.7), -2px 0 8px rgba(0,0,0,0.4)',
+                  opacity: scanning ? 0.5 : 1,
+                  transition: 'opacity 0.15s',
+                }}
+              />
+            </div>
           </div>
         )}
 
         {/* Bottom bar */}
         <div style={{ flexShrink: 0, background: 'rgba(0,0,0,0.92)', padding: '14px 20px', paddingBottom: 'calc(14px + env(safe-area-inset-bottom,0px))' }}>
-          <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.35)', textAlign: 'center', marginBottom: 12, fontFamily: '-apple-system,system-ui,sans-serif' }}>
-            Scan effect applied · looks good?
-          </div>
+          {!showCropMode && (
+            <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.35)', textAlign: 'center', marginBottom: 12, fontFamily: '-apple-system,system-ui,sans-serif' }}>
+              {scanning ? 'Re-scanning…' : 'Scan applied · looks good?'}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={retake} style={{ flex: 1, padding: '13px 0', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 12, fontSize: 15, color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif' }}>Retake</button>
-            <button onClick={() => onCapture(previewUrl)} style={{ flex: 2, padding: '13px 0', background: '#fff', border: 'none', borderRadius: 12, fontSize: 15, color: '#000', fontWeight: 600, cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif' }}>Use Photo</button>
+            {showCropMode ? (
+              <button onClick={() => {
+                setShowCropMode(false)
+                if (fullFrameRef.current) {
+                  setScanning(true)
+                  setPreviewUrl(cropAndScan(fullFrameRef.current, crop.l, crop.r, crop.t, crop.b))
+                  setScanning(false)
+                }
+              }} style={{ flex: 2, padding: '13px 0', background: '#fff', border: 'none', borderRadius: 12, fontSize: 15, color: '#000', fontWeight: 600, cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif' }}>Apply Crop</button>
+            ) : (
+              <>
+                <button onClick={() => setShowCropMode(true)} style={{ flex: 1, padding: '13px 0', background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: 12, fontSize: 15, color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif' }}>✂ Crop</button>
+                <button onClick={() => onCapture(previewUrl)} style={{ flex: 2, padding: '13px 0', background: '#fff', border: 'none', borderRadius: 12, fontSize: 15, color: '#000', fontWeight: 600, cursor: 'pointer', fontFamily: '-apple-system,system-ui,sans-serif' }}>Use Photo</button>
+              </>
+            )}
           </div>
         </div>
       </div>
     )
   }
 
-  // ── Camera screen ─────────────────────────────────────────────────────────────
+  // ── Camera screen ──────────────────────────────────────────────────────────
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 500, display: 'flex', flexDirection: 'column' }}>
       <div style={{ padding: '52px 20px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>

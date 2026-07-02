@@ -6,13 +6,14 @@ import { supabase } from '../lib/supabase'
 import { getReadingPersonality } from '../services/gemini'
 import type { UserBook, ReadingSession } from '../types'
 
+// Nothing OS monochromatic palettes — pure black, single accent per slide
 const PALETTES = [
-  { bg: '#06010F', grad: 'radial-gradient(ellipse at 60% 30%,#2D0A6A 0%,#06010F 65%)', accent: '#A855F7', accent2: '#EC4899', text: '#fff' },
-  { bg: '#010B1A', grad: 'radial-gradient(ellipse at 40% 70%,#082040 0%,#010B1A 65%)', accent: '#22D3EE', accent2: '#6EE7B7', text: '#fff' },
-  { bg: '#110005', grad: 'radial-gradient(ellipse at 70% 40%,#3D0010 0%,#110005 65%)', accent: '#F87171', accent2: '#FCA5A5', text: '#fff' },
-  { bg: '#010E05', grad: 'radial-gradient(ellipse at 30% 60%,#073D1A 0%,#010E05 65%)', accent: '#34D399', accent2: '#A7F3D0', text: '#fff' },
-  { bg: '#0D0800', grad: 'radial-gradient(ellipse at 50% 30%,#3D2200 0%,#0D0800 65%)', accent: '#FBBF24', accent2: '#FDE68A', text: '#fff' },
-  { bg: '#06000D', grad: 'radial-gradient(ellipse at 50% 50%,#2A0052 0%,#06000D 65%)', accent: '#E879F9', accent2: '#C084FC', text: '#fff' },
+  { bg: '#000000', grad: '#000000', accent: '#FFFFFF', accent2: '#888888', text: '#fff' },
+  { bg: '#000000', grad: '#000000', accent: '#3DFF8F', accent2: '#2BCE6E', text: '#fff' },
+  { bg: '#000000', grad: '#000000', accent: '#FF3D6E', accent2: '#CC2952', text: '#fff' },
+  { bg: '#000000', grad: '#000000', accent: '#3D9EFF', accent2: '#2272CC', text: '#fff' },
+  { bg: '#000000', grad: '#000000', accent: '#FFD03D', accent2: '#CCA422', text: '#fff' },
+  { bg: '#000000', grad: '#000000', accent: '#CC3DFF', accent2: '#9922CC', text: '#fff' },
 ]
 
 const MONTHS_FULL = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -38,68 +39,37 @@ interface YearStats {
   bookCovers: string[]
 }
 
-function StarField({ accent }: { accent: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  useEffect(() => {
-    const canvas = canvasRef.current; if (!canvas) return
-    const ctx = canvas.getContext('2d')!
-    canvas.width = window.innerWidth; canvas.height = window.innerHeight
-    const stars = Array.from({ length: 130 }, () => ({
-      x: Math.random() * canvas.width, y: Math.random() * canvas.height,
-      r: Math.random() * 1.5 + 0.3, speed: Math.random() * 0.3 + 0.05,
-      tw: Math.random() * Math.PI * 2, color: Math.random() > 0.85 ? accent : '#ffffff',
-    }))
-    let raf = 0
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      for (const s of stars) {
-        s.tw += s.speed * 0.04
-        const alpha = 0.25 + 0.75 * Math.abs(Math.sin(s.tw))
-        ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2)
-        ctx.fillStyle = s.color + Math.round(alpha * 255).toString(16).padStart(2, '0')
-        ctx.fill()
-        s.y -= s.speed * 0.12
-        if (s.y < -2) s.y = canvas.height + 2
-      }
-      raf = requestAnimationFrame(draw)
-    }
-    draw()
-    return () => cancelAnimationFrame(raf)
-  }, [accent])
-  return <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
+// Nothing OS-style glyph ring — thin concentric circles with tick marks
+function GlyphRing({ size, color, style }: { size: number; color: string; style?: React.CSSProperties }) {
+  const r = size / 2
+  const ticks = [0, 45, 90, 135, 180, 225, 270, 315]
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none"
+      style={{ position: 'absolute', pointerEvents: 'none', opacity: 0.11, ...style }}>
+      <circle cx={r} cy={r} r={r * 0.98} stroke={color} strokeWidth="0.8"/>
+      <circle cx={r} cy={r} r={r * 0.72} stroke={color} strokeWidth="0.5"/>
+      <circle cx={r} cy={r} r={r * 0.46} stroke={color} strokeWidth="0.5"/>
+      <circle cx={r} cy={r} r={r * 0.22} stroke={color} strokeWidth="0.5"/>
+      {ticks.map(a => {
+        const rad = (a * Math.PI) / 180
+        return <line key={a}
+          x1={r + Math.cos(rad) * r * 0.72} y1={r + Math.sin(rad) * r * 0.72}
+          x2={r + Math.cos(rad) * r * 0.86} y2={r + Math.sin(rad) * r * 0.86}
+          stroke={color} strokeWidth="0.8" />
+      })}
+    </svg>
+  )
 }
 
-function Confetti({ accent }: { accent: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  useEffect(() => {
-    const canvas = canvasRef.current; if (!canvas) return
-    const ctx = canvas.getContext('2d')!
-    canvas.width = window.innerWidth; canvas.height = window.innerHeight
-    const colors = [accent, '#fff', '#FDE68A', '#C084FC', '#6EE7B7', '#F87171']
-    const pieces = Array.from({ length: 90 }, () => ({
-      x: Math.random() * canvas.width, y: Math.random() * canvas.height - canvas.height,
-      w: Math.random() * 9 + 4, h: Math.random() * 5 + 3,
-      color: colors[Math.floor(Math.random() * colors.length)],
-      vx: (Math.random() - 0.5) * 2.5, vy: Math.random() * 3.5 + 1.5,
-      rot: Math.random() * Math.PI * 2, rotV: (Math.random() - 0.5) * 0.13, alpha: 1,
-    }))
-    let raf = 0
-    const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
-      let alive = false
-      for (const p of pieces) {
-        p.x += p.vx; p.y += p.vy; p.rot += p.rotV
-        if (p.y > canvas.height + 20) p.alpha = Math.max(0, p.alpha - 0.025)
-        if (p.alpha <= 0) continue; alive = true
-        ctx.save(); ctx.globalAlpha = p.alpha; ctx.translate(p.x, p.y); ctx.rotate(p.rot)
-        ctx.fillStyle = p.color; ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h); ctx.restore()
-      }
-      if (alive) raf = requestAnimationFrame(draw)
-    }
-    draw()
-    return () => cancelAnimationFrame(raf)
-  }, [accent])
-  return <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 1 }} />
+// Shared background for all slides — dot grid + glyph rings
+function NothingBg({ accent }: { accent: string }) {
+  return (
+    <>
+      <DotGrid color={accent} />
+      <GlyphRing size={380} color={accent} style={{ top: -120, right: -100, zIndex: 0 }} />
+      <GlyphRing size={220} color={accent} style={{ bottom: 80, left: -80, zIndex: 0 }} />
+    </>
+  )
 }
 
 function CountUp({ to, suffix = '', accent, duration = 1800 }: { to: number; suffix?: string; accent: string; duration?: number }) {
@@ -115,7 +85,7 @@ function CountUp({ to, suffix = '', accent, duration = 1800 }: { to: number; suf
     requestAnimationFrame(step)
   }, [to, duration])
   return (
-    <span style={{ background: `linear-gradient(135deg,#fff 30%,${accent})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+    <span style={{ color: '#ffffff' }}>
       {val.toLocaleString()}{suffix}
     </span>
   )
@@ -138,27 +108,22 @@ function FloatingPills({ items, accent }: { items: string[]; accent: string }) {
 function IntroSlide({ year, p, username }: { year: number; p: Palette; username: string }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 32px', position: 'relative' }}>
-      <StarField accent={p.accent} />
-      <FloatingPills items={['reading', 'growth', 'streak', 'new worlds', 'insight', 'curiosity', 'discovery']} accent={p.accent} />
-      <motion.div animate={{ scale: [1, 1.14, 1], opacity: [0.35, 0.65, 0.35] }} transition={{ duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
-        style={{ position: 'absolute', top: '26%', left: '50%', transform: 'translateX(-50%)', width: 280, height: 280, borderRadius: '50%', background: `radial-gradient(circle,${p.accent}55 0%,transparent 70%)`, pointerEvents: 'none', zIndex: 0 }} />
+      <NothingBg accent={p.accent} />
       <div style={{ position: 'relative', zIndex: 3 }}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.7 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', color: `${p.accent}bb`, marginBottom: 20 }}>Your Reading Year</div>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2, duration: 0.6 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 4, textTransform: 'uppercase', color: `${p.accent}99`, marginBottom: 16 }}>Your Reading Year</div>
         </motion.div>
-        <motion.div initial={{ opacity: 0, scale: 0.65 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.35, duration: 0.85, ease: [0.34, 1.56, 0.64, 1] }}>
-          <motion.div
-            animate={{ filter: [`drop-shadow(0 0 30px ${p.accent}44)`, `drop-shadow(0 0 60px ${p.accent}88)`, `drop-shadow(0 0 30px ${p.accent}44)`] }}
-            transition={{ duration: 2.8, repeat: Infinity, ease: 'easeInOut' }}
-            style={{ fontFamily: 'Georgia, serif', fontSize: 100, fontWeight: 400, lineHeight: 1, letterSpacing: -4, marginBottom: 22,
-              background: `linear-gradient(135deg,#fff 40%,${p.accent})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.35, duration: 0.7 }}>
+          <div style={{ fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 96, fontWeight: 300, lineHeight: 1, letterSpacing: -3, marginBottom: 16, color: p.text }}>
             {year}
-          </motion.div>
+          </div>
         </motion.div>
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.85, duration: 0.6 }}>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: `${p.text}cc`, lineHeight: 1.5 }}>
+        <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.55, duration: 0.5 }}
+          style={{ height: 2, background: p.accent, width: 48, borderRadius: 1, marginBottom: 20, transformOrigin: 'left' }} />
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7, duration: 0.6 }}>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: `${p.text}88`, lineHeight: 1.5 }}>
             Here's your story,{' '}
-            <span style={{ background: `linear-gradient(90deg,${p.accent},${p.accent2})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontWeight: 700 }}>{username}</span>
+            <span style={{ color: p.text, fontWeight: 600 }}>{username}</span>
           </div>
         </motion.div>
       </div>
@@ -171,29 +136,21 @@ function IntroSlide({ year, p, username }: { year: number; p: Palette; username:
 function StatSlide({ label, value, suffix = '', subtext, p, icon }: { label: string; value: number; suffix?: string; subtext?: string; p: Palette; icon: React.ReactNode }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px', position: 'relative' }}>
-      <StarField accent={p.accent} />
-      <motion.div animate={{ opacity: [0.25, 0.55, 0.25], scale: [1, 1.12, 1] }} transition={{ duration: 2.8, repeat: Infinity }}
-        style={{ position: 'absolute', bottom: '15%', right: '-12%', width: 320, height: 320, borderRadius: '50%', background: `radial-gradient(circle,${p.accent}45 0%,transparent 65%)`, pointerEvents: 'none', zIndex: 0 }} />
+      <NothingBg accent={p.accent} />
       <div style={{ position: 'relative', zIndex: 3 }}>
         <motion.div initial={{ opacity: 0, x: -40 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.55 }}>
-          <motion.div animate={{ rotate: [0, 10, -5, 0] }} transition={{ delay: 0.7, duration: 1.6 }}
-            style={{ color: p.accent, marginBottom: 22, display: 'inline-block' }}>{icon}</motion.div>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 18 }}>{label}</div>
-          <div style={{ position: 'relative', display: 'inline-block', marginBottom: 20 }}>
-            <motion.div
-              animate={{ scale: [1, 1.15, 1], opacity: [0.15, 0.35, 0.15] }}
-              transition={{ duration: 2.5, repeat: Infinity }}
-              style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 160, height: 160, borderRadius: '50%', background: `radial-gradient(circle,${p.accent} 0%,transparent 70%)`, pointerEvents: 'none' }}
-            />
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: 90, fontWeight: 400, lineHeight: 1, letterSpacing: -4, filter: `drop-shadow(0 0 35px ${p.accent}88)`, position: 'relative' }}>
+          <div style={{ color: p.accent, marginBottom: 18, display: 'inline-block', opacity: 0.8 }}>{icon}</div>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3.5, textTransform: 'uppercase', color: `${p.text}44`, marginBottom: 14 }}>{label}</div>
+          <div style={{ marginBottom: 18 }}>
+            <div style={{ fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 88, fontWeight: 200, lineHeight: 1, letterSpacing: -2, color: p.text }}>
               <CountUp to={value} suffix={suffix} accent={p.accent} />
             </div>
           </div>
         </motion.div>
         {subtext && (
           <motion.div initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.5 }}>
-            <div style={{ width: 50, height: 2, background: `linear-gradient(90deg,${p.accent},transparent)`, borderRadius: 2, marginBottom: 16 }} />
-            <div style={{ fontSize: 17, color: `${p.text}88`, fontFamily: 'Georgia, serif', lineHeight: 1.65 }}>{subtext}</div>
+            <div style={{ width: 36, height: 2, background: p.accent, borderRadius: 1, marginBottom: 14, opacity: 0.7 }} />
+            <div style={{ fontSize: 17, color: `${p.text}66`, fontFamily: 'Georgia, serif', lineHeight: 1.65 }}>{subtext}</div>
           </motion.div>
         )}
       </div>
@@ -204,37 +161,22 @@ function StatSlide({ label, value, suffix = '', subtext, p, icon }: { label: str
 function TopAuthorSlide({ topAuthor, topAuthorCount, p }: { topAuthor: string; topAuthorCount: number; p: Palette }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px', position: 'relative' }}>
-      <StarField accent={p.accent} />
-      <motion.div animate={{ opacity: [0.2, 0.5, 0.2] }} transition={{ duration: 3, repeat: Infinity }}
-        style={{ position: 'absolute', top: '-8%', left: '-12%', width: 280, height: 280, borderRadius: '50%', background: `radial-gradient(circle,${p.accent}50 0%,transparent 65%)`, pointerEvents: 'none', zIndex: 0 }} />
+      <NothingBg accent={p.accent} />
       <div style={{ position: 'relative', zIndex: 3 }}>
-        {/* Large quote-mark SVG decoration */}
-        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.5 }}>
-          <svg width="42" height="34" viewBox="0 0 42 34" fill="none" style={{ marginBottom: 16, opacity: 0.5 }}>
-            <path d="M0 34V20.8C0 14.4 1.6 9.6 4.8 6.4C8 3.2 12.8 1.2 19.2 0.4L20.4 4C16.8 4.8 14 6.4 12 9C10 11.4 9 14.6 9 18.6H18V34H0ZM24 34V20.8C24 14.4 25.6 9.6 28.8 6.4C32 3.2 36.8 1.2 43.2 0.4L44.4 4C40.8 4.8 38 6.4 36 9C34 11.4 33 14.6 33 18.6H42V34H24Z" fill={p.accent}/>
-          </svg>
-        </motion.div>
         <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1, duration: 0.55 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 18 }}>You loved this author</div>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3.5, textTransform: 'uppercase', color: `${p.text}44`, marginBottom: 14 }}>You loved this author</div>
         </motion.div>
-        <motion.div initial={{ opacity: 0, scale: 0.82 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2, duration: 0.7, ease: [0.34, 1.56, 0.64, 1] }}>
-          <div style={{
-            fontFamily: 'Georgia, serif', fontSize: 46, lineHeight: 1.15, letterSpacing: -1.5, marginBottom: 20,
-            background: `linear-gradient(135deg,#fff 30%,${p.accent})`,
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text',
-            filter: `drop-shadow(0 0 28px ${p.accent}66)`,
-          }}>
+        <motion.div initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2, duration: 0.6 }}>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 46, lineHeight: 1.15, letterSpacing: -1.5, marginBottom: 16, color: p.text }}>
             {topAuthor}
           </div>
         </motion.div>
-        <motion.div initial={{ width: 0 }} animate={{ width: '100%' }} transition={{ delay: 0.8, duration: 0.7 }}
-          style={{ height: 2, background: `linear-gradient(90deg,${p.accent},${p.accent2})`, marginBottom: 16 }} />
-        <motion.div initial={{ width: 0 }} animate={{ width: 60 }} transition={{ delay: 0.55, duration: 0.5 }}
-          style={{ height: 3, background: `linear-gradient(90deg,${p.accent},${p.accent2})`, borderRadius: 2, marginBottom: 22 }} />
+        <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.55, duration: 0.5 }}
+          style={{ height: 2, background: p.accent, width: 48, borderRadius: 1, marginBottom: 20, transformOrigin: 'left', opacity: 0.7 }} />
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65, duration: 0.5 }}>
-          <div style={{ fontSize: 17, color: `${p.text}88`, fontFamily: 'Georgia, serif', lineHeight: 1.65 }}>
+          <div style={{ fontSize: 17, color: `${p.text}66`, fontFamily: 'Georgia, serif', lineHeight: 1.65 }}>
             You read{' '}
-            <span style={{ background: `linear-gradient(90deg,${p.accent},${p.accent2})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontWeight: 700 }}>
+            <span style={{ color: p.accent, fontWeight: 700 }}>
               {topAuthorCount} {topAuthorCount === 1 ? 'book' : 'books'}
             </span>
             {' '}by this author this year.
@@ -251,15 +193,13 @@ function MonthlySlide({ monthlyData, bestMonth, p }: { monthlyData: MonthData[];
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px', position: 'relative' }}>
-      <StarField accent={p.accent} />
-      <motion.div animate={{ opacity: [0.2, 0.45, 0.2] }} transition={{ duration: 3.5, repeat: Infinity }}
-        style={{ position: 'absolute', bottom: '10%', right: '-8%', width: 260, height: 260, borderRadius: '50%', background: `radial-gradient(circle,${p.accent}40 0%,transparent 65%)`, pointerEvents: 'none', zIndex: 0 }} />
+      <NothingBg accent={p.accent} />
       <div style={{ position: 'relative', zIndex: 3 }}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 8 }}>Your Reading Rhythm</div>
-          <div style={{ fontSize: 16, color: `${p.text}88`, fontFamily: 'Georgia, serif', marginBottom: 30 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3.5, textTransform: 'uppercase', color: `${p.text}44`, marginBottom: 8 }}>Your Reading Rhythm</div>
+          <div style={{ fontSize: 16, color: `${p.text}66`, fontFamily: 'Georgia, serif', marginBottom: 28 }}>
             Best month:{' '}
-            <span style={{ background: `linear-gradient(90deg,${p.accent},${p.accent2})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontWeight: 700 }}>{bestMonth}</span>
+            <span style={{ color: p.accent, fontWeight: 700 }}>{bestMonth}</span>
           </div>
         </motion.div>
 
@@ -275,17 +215,10 @@ function MonthlySlide({ monthlyData, bestMonth, p }: { monthlyData: MonthData[];
                   transition={{ delay: 0.05 * i, duration: 0.35, ease: 'backOut' }}
                   style={{
                     width: '100%', height: barH, borderRadius: 4,
-                    background: isBest ? `linear-gradient(180deg,${p.accent},${p.accent2})` : `${p.text}22`,
-                    boxShadow: isBest ? `0 0 12px ${p.accent}` : 'none',
+                    background: isBest ? p.accent : `${p.text}18`,
+                    boxShadow: 'none',
                     transformOrigin: 'bottom',
                   }}
-                  {...(isBest ? {
-                    animate: {
-                      scaleY: 1,
-                      boxShadow: [`0 0 12px ${p.accent}88`, `0 0 24px ${p.accent}cc`, `0 0 12px ${p.accent}88`],
-                    },
-                    transition: { scaleY: { delay: 0.05 * i, duration: 0.35, ease: 'backOut' }, boxShadow: { duration: 1.8, repeat: Infinity, delay: 1.5 } },
-                  } : {})}
                 />
                 <div style={{ fontSize: 8, color: isBest ? p.accent : `${p.text}44`, fontWeight: isBest ? 700 : 400, letterSpacing: 0.2 }}>
                   {m.month.slice(0, 1)}
@@ -302,7 +235,7 @@ function MonthlySlide({ monthlyData, bestMonth, p }: { monthlyData: MonthData[];
 function MosaicSlide({ bookCovers, p }: { bookCovers: string[]; p: Palette }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 28px', position: 'relative' }}>
-      <StarField accent={p.accent} />
+      <NothingBg accent={p.accent} />
       <div style={{ position: 'relative', zIndex: 3 }}>
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 6 }}>Your Year in Books</div>
@@ -331,25 +264,22 @@ function MosaicSlide({ bookCovers, p }: { bookCovers: string[]; p: Palette }) {
 function GenreSlide({ topGenre, bookCount, p }: { topGenre: string; bookCount: number; p: Palette }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px', position: 'relative' }}>
-      <StarField accent={p.accent} />
-      <motion.div animate={{ opacity: [0.2, 0.5, 0.2] }} transition={{ duration: 3, repeat: Infinity }}
-        style={{ position: 'absolute', top: '-8%', left: '-12%', width: 280, height: 280, borderRadius: '50%', background: `radial-gradient(circle,${p.accent}50 0%,transparent 65%)`, pointerEvents: 'none', zIndex: 0 }} />
+      <NothingBg accent={p.accent} />
       <div style={{ position: 'relative', zIndex: 3 }}>
         <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 26 }}>Your top genre</div>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3.5, textTransform: 'uppercase', color: `${p.text}44`, marginBottom: 20 }}>Your top genre</div>
         </motion.div>
-        <motion.div initial={{ opacity: 0, scale: 0.72 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.15, duration: 0.7, ease: [0.34, 1.56, 0.64, 1] }}>
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 60, lineHeight: 1.1, letterSpacing: -2, marginBottom: 22,
-            background: `linear-gradient(135deg,#fff 30%,${p.accent})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', filter: `drop-shadow(0 0 25px ${p.accent}66)` }}>
+        <motion.div initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15, duration: 0.6 }}>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 58, lineHeight: 1.1, letterSpacing: -2, marginBottom: 16, color: p.text }}>
             {topGenre}
           </div>
         </motion.div>
-        <motion.div initial={{ width: 0 }} animate={{ width: 68 }} transition={{ delay: 0.55, duration: 0.6 }}
-          style={{ height: 3, background: `linear-gradient(90deg,${p.accent},${p.accent2})`, borderRadius: 2, marginBottom: 24 }} />
+        <motion.div initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.55, duration: 0.5 }}
+          style={{ height: 2, background: p.accent, width: 48, borderRadius: 1, marginBottom: 20, transformOrigin: 'left', opacity: 0.7 }} />
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.65, duration: 0.5 }}>
-          <div style={{ fontSize: 17, color: `${p.text}88`, fontFamily: 'Georgia, serif', lineHeight: 1.65 }}>
+          <div style={{ fontSize: 17, color: `${p.text}66`, fontFamily: 'Georgia, serif', lineHeight: 1.65 }}>
             You read{' '}
-            <span style={{ background: `linear-gradient(90deg,${p.accent},${p.accent2})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text', fontWeight: 700 }}>
+            <span style={{ color: p.accent, fontWeight: 700 }}>
               {bookCount} {bookCount === 1 ? 'book' : 'books'}
             </span>
             {' '}in this genre this year.
@@ -363,27 +293,25 @@ function GenreSlide({ topGenre, bookCount, p }: { topGenre: string; bookCount: n
 function StreakSlide({ streak, p }: { streak: number; p: Palette }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px', position: 'relative' }}>
-      <StarField accent={p.accent} />
-      <motion.div animate={{ scale: [1, 1.18, 1], opacity: [0.22, 0.5, 0.22] }} transition={{ duration: 2.2, repeat: Infinity }}
-        style={{ position: 'absolute', top: '44%', left: '44%', transform: 'translate(-50%,-50%)', width: 380, height: 380, borderRadius: '50%', background: `radial-gradient(circle,${p.accent}45 0%,transparent 60%)`, pointerEvents: 'none', zIndex: 0 }} />
+      <NothingBg accent={p.accent} />
       <div style={{ position: 'relative', zIndex: 3 }}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, textTransform: 'uppercase', color: `${p.text}55`, marginBottom: 18 }}>Longest streak</div>
+          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 3.5, textTransform: 'uppercase', color: `${p.text}44`, marginBottom: 14 }}>Longest streak</div>
         </motion.div>
-        <motion.div initial={{ opacity: 0, scale: 0.55 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.1, duration: 0.75, ease: [0.34, 1.56, 0.64, 1] }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 22 }}>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: 104, fontWeight: 400, lineHeight: 1, letterSpacing: -4, filter: `drop-shadow(0 0 45px ${p.accent})` }}>
+        <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1, duration: 0.6 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginBottom: 16 }}>
+            <div style={{ fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 100, fontWeight: 200, lineHeight: 1, letterSpacing: -3, color: p.text }}>
               <CountUp to={streak} accent={p.accent} />
             </div>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: 30, color: `${p.text}66`, marginBottom: 16 }}>days</div>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: 28, color: `${p.text}55`, marginBottom: 12 }}>days</div>
           </div>
         </motion.div>
-        <div style={{ display: 'flex', gap: 6, marginBottom: 22 }}>
+        <div style={{ display: 'flex', gap: 5, marginBottom: 20 }}>
           {Array.from({ length: Math.min(streak, 7) }).map((_, i) => (
             <motion.div key={i}
               initial={{ opacity: 0, scaleY: 0 }} animate={{ opacity: 1, scaleY: 1 }}
               transition={{ delay: 0.3 + i * 0.07, duration: 0.35, ease: 'backOut' }}
-              style={{ width: 30, height: 30, borderRadius: 9, background: `linear-gradient(180deg,${p.accent},${p.accent2})`, boxShadow: `0 4px 14px ${p.accent}66`, transformOrigin: 'bottom' }} />
+              style={{ width: 28, height: 28, borderRadius: 8, background: i === Math.min(streak, 7) - 1 ? p.accent : `${p.accent}40`, border: `1px solid ${p.accent}60`, transformOrigin: 'bottom' }} />
           ))}
         </div>
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.9 }}>
@@ -399,11 +327,7 @@ function StreakSlide({ streak, p }: { streak: number; p: Palette }) {
 function PersonalitySlide({ personality, p }: { personality: string; p: Palette }) {
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '0 36px', position: 'relative' }}>
-      <StarField accent={p.accent} />
-      <motion.div animate={{ rotate: [0, 360] }} transition={{ duration: 22, repeat: Infinity, ease: 'linear' }}
-        style={{ position: 'absolute', bottom: '4%', right: '-16%', width: 360, height: 360, borderRadius: '50%', border: `1px solid ${p.accent}22`, pointerEvents: 'none', zIndex: 0 }} />
-      <motion.div animate={{ rotate: [360, 0] }} transition={{ duration: 14, repeat: Infinity, ease: 'linear' }}
-        style={{ position: 'absolute', bottom: '10%', right: '-8%', width: 230, height: 230, borderRadius: '50%', border: `1px solid ${p.accent}38`, pointerEvents: 'none', zIndex: 0 }} />
+      <NothingBg accent={p.accent} />
       <div style={{ position: 'relative', zIndex: 3 }}>
         <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.65, ease: [0.34, 1.56, 0.64, 1] }}>
           <div style={{ width: 58, height: 58, borderRadius: 18, background: `linear-gradient(135deg,${p.accent}33,${p.accent2}22)`, border: `1.5px solid ${p.accent}66`, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 26 }}>
@@ -443,9 +367,7 @@ function OutroSlide({ booksFinished, pagesRead, hours, bookCovers, p, year }: { 
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', position: 'relative', overflow: 'hidden' }}>
-      <StarField accent={p.accent} />
-      <Confetti accent={p.accent} />
-      <DotGrid color={p.accent} />
+      <NothingBg accent={p.accent} />
 
       {/* Accent glow */}
       <div style={{ position: 'absolute', top: '30%', left: '50%', transform: 'translate(-50%, -50%)', width: 400, height: 400, borderRadius: '50%', background: `radial-gradient(circle, ${p.accent}28 0%, transparent 65%)`, pointerEvents: 'none', zIndex: 0 }} />
@@ -683,7 +605,7 @@ export default function YearInReviewScreen() {
   if (loading) {
     return (
       <div style={{ position: 'fixed', inset: 0, background: PALETTES[0].bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 22 }}>
-        <StarField accent={PALETTES[0].accent} />
+        <NothingBg accent={PALETTES[0].accent} />
         <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.1, repeat: Infinity, ease: 'linear' }}
           style={{ position: 'relative', zIndex: 3, width: 46, height: 46, borderRadius: '50%', border: `2px solid ${PALETTES[0].accent}44`, borderTopColor: PALETTES[0].accent }} />
         <div style={{ position: 'relative', zIndex: 3, fontSize: 14, color: 'rgba(255,255,255,0.4)', fontFamily: 'Georgia, serif' }}>Building your story…</div>

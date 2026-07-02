@@ -559,39 +559,48 @@ export default function SessionScreen() {
         <div style={{ fontSize: 13, color: muted, marginTop: 5 }}>{userBook?.book?.author ?? ''}</div>
       </div>
 
-      {/* Timer */}
+      {/* Timer — circular ring, fills every 30 min */}
       <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
-        <motion.div
-          animate={playing ? { boxShadow: [`0 0 0px 0px ${fg}00`, `0 0 28px 6px ${fg}18`, `0 0 0px 0px ${fg}00`] } : {}}
-          transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-          style={{ background: dark ? '#111111' : '#F5F5F3', borderRadius: 20, padding: '18px 28px' }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {fmt(secs).split('').map((char, i) => (
-              char === ':' ? (
-                <motion.span
-                  key={`sep-${i}`}
-                  animate={playing ? { opacity: [1, 0.3, 1] } : { opacity: 0.5 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: 'easeInOut' }}
-                  style={{ fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 52, fontWeight: 200, color: fg, lineHeight: 1, width: 16, textAlign: 'center', display: 'inline-block' }}
-                >:</motion.span>
-              ) : (
-                <div key={i} style={{ width: 32, height: 60, overflow: 'hidden', position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.span
-                      key={`${i}-${char}`}
-                      initial={{ y: -20, opacity: 0 }}
-                      animate={{ y: 0, opacity: 1 }}
-                      exit={{ y: 20, opacity: 0 }}
-                      transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-                      style={{ position: 'absolute', fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 52, fontWeight: 200, color: fg, lineHeight: 1 }}
-                    >{char}</motion.span>
-                  </AnimatePresence>
+        {(() => {
+          const SIZE = 186
+          const STROKE = 3
+          const R = (SIZE - STROKE * 2) / 2
+          const C = 2 * Math.PI * R
+          const progress = (secs % 1800) / 1800
+          const dash = C * progress
+          return (
+            <div style={{ position: 'relative', width: SIZE, height: SIZE }}>
+              <svg width={SIZE} height={SIZE} style={{ position: 'absolute', top: 0, left: 0, transform: 'rotate(-90deg)' }}>
+                {/* Track */}
+                <circle cx={SIZE/2} cy={SIZE/2} r={R} stroke={dark ? '#1E1E1E' : '#EBEBEB'} strokeWidth={STROKE} fill="none" />
+                {/* Filled arc */}
+                <motion.circle
+                  cx={SIZE/2} cy={SIZE/2} r={R}
+                  stroke={fg}
+                  strokeWidth={STROKE}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray={C}
+                  animate={{ strokeDashoffset: C - dash }}
+                  transition={{ duration: 0.8, ease: 'linear' }}
+                />
+              </svg>
+              {/* Centre content */}
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <div style={{ fontFamily: '"SF Mono", "Courier New", monospace', fontSize: 38, fontWeight: 200, color: fg, letterSpacing: 1, lineHeight: 1 }}>
+                  {fmt(secs)}
                 </div>
-              )
-            ))}
-          </div>
-        </motion.div>
+                {playing && (
+                  <motion.div
+                    animate={{ opacity: [1, 0.2, 1] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                    style={{ width: 5, height: 5, borderRadius: '50%', background: fg, opacity: 0.5 }}
+                  />
+                )}
+              </div>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Current page — static display; user sets final page in the End modal */}
