@@ -33,8 +33,17 @@ const WALL_PRESETS = [
   { name: 'Warm Stone', bg: '#2a2520' },
 ]
 
-// Decoration types per shelf: 0=none, 1=bookend, 2=plant
+// Decoration types per shelf: 0=none, 1=bookend, 2=cactus, 3=globe, 4=trophy, 5=candle
 const DECO_CYCLE = [0, 1, 2]
+
+const DECO_ITEMS = [
+  { id: 0, label: 'None' },
+  { id: 1, label: 'Bookend' },
+  { id: 2, label: 'Cactus' },
+  { id: 3, label: 'Globe' },
+  { id: 4, label: 'Trophy' },
+  { id: 5, label: 'Candle' },
+]
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type ShelfPos = { shelf: number; left: number; rot: number; scale: number }
@@ -363,6 +372,9 @@ export default function VirtualShelf() {
               <div key={`deco-${r}`} style={{ position: 'absolute', right: 8, bottom: (rows - 1 - r) * ROW_H + BOARD_H, pointerEvents: 'none' }}>
                 {deco === 1 && <BookendSVG />}
                 {deco === 2 && <PlantSVG />}
+                {deco === 3 && <GlobeSVG />}
+                {deco === 4 && <FigurineSVG />}
+                {deco === 5 && <CandleSVG />}
               </div>
             )
           })}
@@ -457,7 +469,7 @@ export default function VirtualShelf() {
       )}
 
       {showStyleSheet && (
-        <StyleSheet config={config} theme={theme} onSave={saveConfig} onClose={() => setShowStyleSheet(false)} />
+        <StyleSheet config={config} theme={theme} onSave={saveConfig} onClose={() => setShowStyleSheet(false)} rows={rows} />
       )}
     </div>
   )
@@ -553,35 +565,88 @@ function AddFromLibSheet({ books, loading, theme, onAdd, onAddWithCapture, onClo
 }
 
 // ─── Style sheet ──────────────────────────────────────────────────────────────
-function StyleSheet({ config, theme, onSave, onClose }: {
-  config: ShelfConfig; theme: Theme; onSave: (c: ShelfConfig) => void; onClose: () => void
+function StyleSheet({ config, theme, onSave, onClose, rows }: {
+  config: ShelfConfig; theme: Theme; onSave: (c: ShelfConfig) => void; onClose: () => void; rows: number
 }) {
+  const [tab, setTab] = useState<'style' | 'decor'>('style')
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 400 }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
-      <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: theme.bg, borderRadius: '22px 22px 0 0', boxShadow: '0 -10px 40px rgba(0,0,0,0.4)', paddingBottom: 'calc(28px + env(safe-area-inset-bottom,0px))' }}>
-        <div style={{ padding: '14px 22px 18px' }}>
+      <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: theme.bg, borderRadius: '22px 22px 0 0', boxShadow: '0 -10px 40px rgba(0,0,0,0.4)', maxHeight: '82vh', display: 'flex', flexDirection: 'column', paddingBottom: 'calc(28px + env(safe-area-inset-bottom,0px))' }}>
+        {/* Header */}
+        <div style={{ padding: '14px 22px 0', flexShrink: 0 }}>
           <div style={{ width: 38, height: 4, borderRadius: 999, background: theme.border, margin: '0 auto 16px' }} />
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, letterSpacing: -0.5, marginBottom: 20 }}>Customize Shelf</div>
-
-          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10, fontFamily: '-apple-system,system-ui,sans-serif' }}>Wood</div>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 22 }}>
-            {WOOD_PRESETS.map((w, i) => (
-              <button key={i} onClick={() => onSave({ ...config, woodIdx: i })} style={{ flex: 1, height: 40, borderRadius: 8, cursor: 'pointer', background: `linear-gradient(to bottom, ${w.top}, ${w.face})`, border: config.woodIdx === i ? `2.5px solid ${theme.fg}` : `2px solid transparent`, outline: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 5 }}>
-                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: '-apple-system,system-ui,sans-serif', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{w.name}</span>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: 20, color: theme.fg, letterSpacing: -0.5, marginBottom: 14 }}>Customize Shelf</div>
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 18, background: theme.bgSecondary, borderRadius: 10, padding: 3 }}>
+            {(['style', 'decor'] as const).map(t => (
+              <button key={t} onClick={() => setTab(t)} style={{ flex: 1, height: 32, borderRadius: 8, border: 'none', cursor: 'pointer', background: tab === t ? theme.bg : 'transparent', color: tab === t ? theme.fg : theme.muted, fontSize: 13, fontWeight: tab === t ? 600 : 400, fontFamily: '-apple-system,system-ui,sans-serif', boxShadow: tab === t ? '0 1px 4px rgba(0,0,0,0.15)' : 'none', textTransform: 'capitalize' }}>
+                {t}
               </button>
             ))}
           </div>
+        </div>
 
-          <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10, fontFamily: '-apple-system,system-ui,sans-serif' }}>Wall</div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {WALL_PRESETS.map((w, i) => (
-              <button key={i} onClick={() => onSave({ ...config, wallIdx: i })} style={{ flex: 1, height: 40, borderRadius: 8, cursor: 'pointer', background: w.bg, border: config.wallIdx === i ? `2.5px solid ${theme.fg}` : `2px solid ${theme.border}`, outline: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 5 }}>
-                <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: '-apple-system,system-ui,sans-serif', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>{w.name}</span>
-              </button>
-            ))}
-          </div>
-
+        {/* Content */}
+        <div style={{ overflowY: 'auto', padding: '0 22px 18px', flex: 1 }}>
+          {tab === 'style' ? (
+            <>
+              <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10, fontFamily: '-apple-system,system-ui,sans-serif' }}>Wood</div>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 22 }}>
+                {WOOD_PRESETS.map((w, i) => (
+                  <button key={i} onClick={() => onSave({ ...config, woodIdx: i })} style={{ flex: 1, height: 40, borderRadius: 8, cursor: 'pointer', background: `linear-gradient(to bottom, ${w.top}, ${w.face})`, border: config.woodIdx === i ? `2.5px solid ${theme.fg}` : `2px solid transparent`, outline: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 5 }}>
+                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: '-apple-system,system-ui,sans-serif', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>{w.name}</span>
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10, fontFamily: '-apple-system,system-ui,sans-serif' }}>Wall</div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {WALL_PRESETS.map((w, i) => (
+                  <button key={i} onClick={() => onSave({ ...config, wallIdx: i })} style={{ flex: 1, height: 40, borderRadius: 8, cursor: 'pointer', background: w.bg, border: config.wallIdx === i ? `2.5px solid ${theme.fg}` : `2px solid ${theme.border}`, outline: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 5 }}>
+                    <span style={{ fontSize: 9, color: 'rgba(255,255,255,0.8)', fontFamily: '-apple-system,system-ui,sans-serif', textShadow: '0 1px 2px rgba(0,0,0,0.9)' }}>{w.name}</span>
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 11.5, color: theme.muted, fontFamily: '-apple-system,system-ui,sans-serif', marginBottom: 16, lineHeight: 1.4 }}>
+                Pick a decoration for each shelf row.
+              </div>
+              {Array.from({ length: rows }).map((_, r) => (
+                <div key={r} style={{ marginBottom: 22 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 8, fontFamily: '-apple-system,system-ui,sans-serif' }}>Shelf {r + 1}</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {DECO_ITEMS.map(item => {
+                      const sel = (config.decos[r] ?? 0) === item.id
+                      return (
+                        <button key={item.id} onClick={() => {
+                          const decos = [...(config.decos ?? [])]
+                          decos[r] = item.id
+                          onSave({ ...config, decos })
+                        }} style={{ flexShrink: 0, width: 52, borderRadius: 10, background: sel ? theme.bgSecondary : 'transparent', border: sel ? `2px solid ${theme.fg}` : `2px solid ${theme.border}`, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 4px 6px', gap: 4 }}>
+                          <div style={{ width: 36, height: 42, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'hidden' }}>
+                            {item.id === 0
+                              ? <span style={{ fontSize: 20, color: theme.muted, paddingBottom: 6 }}>—</span>
+                              : (
+                                <div style={{ transform: 'scale(0.52)', transformOrigin: 'bottom center', flexShrink: 0 }}>
+                                  {item.id === 1 && <BookendSVG />}
+                                  {item.id === 2 && <PlantSVG />}
+                                  {item.id === 3 && <GlobeSVG />}
+                                  {item.id === 4 && <FigurineSVG />}
+                                  {item.id === 5 && <CandleSVG />}
+                                </div>
+                              )}
+                          </div>
+                          <span style={{ fontSize: 8.5, color: sel ? theme.fg : theme.muted, fontFamily: '-apple-system,system-ui,sans-serif', textAlign: 'center', lineHeight: 1.2 }}>{item.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -620,6 +685,55 @@ function PlantSVG() {
           <line x1="21" y1={y} x2="24" y2={y-2} stroke="#5aaa5a" strokeWidth="0.8" />
         </g>
       ))}
+    </svg>
+  )
+}
+
+function GlobeSVG() {
+  return (
+    <svg width="38" height="54" viewBox="0 0 38 54" fill="none" style={{ display: 'block' }}>
+      <circle cx="19" cy="20" r="14" fill="#1e4d7a" />
+      <ellipse cx="15" cy="16" rx="5" ry="7" fill="#2e7d32" />
+      <ellipse cx="25" cy="21" rx="4" ry="5" fill="#2e7d32" />
+      <ellipse cx="20" cy="29" rx="3" ry="2.5" fill="#2e7d32" />
+      <ellipse cx="19" cy="20" rx="14" ry="4.5" stroke="rgba(255,255,255,0.14)" strokeWidth="0.8" fill="none" />
+      <line x1="5" y1="20" x2="33" y2="20" stroke="rgba(255,255,255,0.14)" strokeWidth="0.8" />
+      <ellipse cx="19" cy="20" rx="5" ry="14" stroke="rgba(255,255,255,0.14)" strokeWidth="0.8" fill="none" />
+      <ellipse cx="13" cy="14" rx="4" ry="2.5" fill="rgba(255,255,255,0.10)" />
+      <line x1="19" y1="34" x2="19" y2="42" stroke="#555" strokeWidth="1.5" />
+      <rect x="12" y="42" width="14" height="3" rx="1.5" fill="#666" />
+      <rect x="9" y="45" width="20" height="3" rx="1.5" fill="#555" />
+    </svg>
+  )
+}
+
+function FigurineSVG() {
+  return (
+    <svg width="30" height="56" viewBox="0 0 30 56" fill="none" style={{ display: 'block' }}>
+      <rect x="5" y="48" width="20" height="4" rx="2" fill="#888" />
+      <rect x="9" y="43" width="12" height="6" rx="1.5" fill="#777" />
+      <path d="M11 29 Q15 21 19 29 L18 43 H12 Z" fill="#c8a84b" />
+      <circle cx="15" cy="23" r="5" fill="#c8a84b" />
+      <path d="M11 31 Q5 27 4 21" stroke="#c8a84b" strokeWidth="3.5" strokeLinecap="round" fill="none" />
+      <path d="M19 31 Q25 27 26 21" stroke="#c8a84b" strokeWidth="3.5" strokeLinecap="round" fill="none" />
+      <path d="M15 11 L16.2 14.6 H20 L17 16.8 L18.2 20.4 L15 18.2 L11.8 20.4 L13 16.8 L10 14.6 H13.8 Z" fill="#FFD700" />
+      <ellipse cx="13" cy="21" rx="1.8" ry="1.2" fill="rgba(255,255,255,0.18)" />
+    </svg>
+  )
+}
+
+function CandleSVG() {
+  return (
+    <svg width="22" height="56" viewBox="0 0 22 56" fill="none" style={{ display: 'block' }}>
+      <path d="M11 3 Q14.5 7.5 13.5 13 Q11.5 11 9.5 13 Q8.5 7.5 11 3Z" fill="#FFB800" />
+      <path d="M11 6 Q12.8 9.5 12.2 12 Q11 11 9.8 12 Q9.2 9.5 11 6Z" fill="#FFF4B0" />
+      <line x1="11" y1="13" x2="11" y2="16" stroke="#333" strokeWidth="1.2" />
+      <rect x="7" y="16" width="8" height="32" rx="3" fill="#F0EDE5" />
+      <rect x="7" y="16" width="2" height="32" rx="1" fill="rgba(0,0,0,0.07)" />
+      <rect x="13" y="16" width="2" height="32" rx="1" fill="rgba(0,0,0,0.10)" />
+      <path d="M7 26 Q6 29 7 31" stroke="rgba(255,255,255,0.35)" strokeWidth="1.8" strokeLinecap="round" fill="none" />
+      <ellipse cx="11" cy="48" rx="8" ry="2.5" fill="#DDD" />
+      <rect x="5" y="47" width="12" height="2.5" rx="1" fill="#CCC" />
     </svg>
   )
 }
