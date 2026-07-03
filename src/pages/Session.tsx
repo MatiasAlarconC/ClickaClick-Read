@@ -183,10 +183,10 @@ export default function SessionScreen() {
   }, [playing])
 
   const fmt = (s: number) => {
-    const hh = String(Math.floor(s / 3600)).padStart(2, '0')
+    const hh = Math.floor(s / 3600)
     const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0')
     const ss = String(s % 60).padStart(2, '0')
-    return `${hh}:${mm}:${ss}`
+    return hh > 0 ? `${hh}:${mm}:${ss}` : `${mm}:${ss}`
   }
 
   // ─── Music play / pause ───────────────────────────────────────────────────
@@ -550,13 +550,15 @@ export default function SessionScreen() {
                   })}
                 </svg>
                 {/* Center */}
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  <div style={{ fontFamily: '"SF Mono","Courier New",monospace', fontSize: 52, fontWeight: 200, color: fg, letterSpacing: 3, lineHeight: 1 }}>
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                  <div style={{ fontFamily: '"SF Mono","Courier New",monospace', fontSize: 42, fontWeight: 200, color: fg, letterSpacing: 2, lineHeight: 1 }}>
                     {fmt(secs)}
                   </div>
-                  <div style={{ fontSize: 10.5, color: muted, fontFamily: '-apple-system,system-ui,sans-serif', letterSpacing: 1.5, textTransform: 'uppercase' }}>
-                    {secs === 0 ? 'ready' : `${Math.floor((secs % 3600) / 60)} min`}
-                  </div>
+                  {secs === 0 && (
+                    <div style={{ fontSize: 10.5, color: muted, fontFamily: '-apple-system,system-ui,sans-serif', letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 8 }}>
+                      ready
+                    </div>
+                  )}
                 </div>
               </div>
             )

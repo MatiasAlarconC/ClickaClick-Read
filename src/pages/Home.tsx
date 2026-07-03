@@ -195,7 +195,12 @@ export function HomeScreen() {
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
                     <div style={{ fontFamily: 'Georgia, serif', fontSize: 17, color: theme.fg, lineHeight: 1.3, marginBottom: 3 }}>{activeBook.book?.title}</div>
-                    <div style={{ fontSize: 13, color: theme.muted }}>{activeBook.book?.author}</div>
+                    <div style={{ fontSize: 13, color: theme.muted, marginBottom: 4 }}>{activeBook.book?.author}</div>
+                    {activeBook.current_page ? (
+                      <div style={{ fontSize: 11.5, color: theme.muted, fontFamily: '-apple-system,system-ui,sans-serif', letterSpacing: 0.2 }}>
+                        pg. {activeBook.current_page}{totalPages ? ` / ${totalPages}` : ''}
+                      </div>
+                    ) : null}
                   </div>
                   <ProgressBar progress={progress} theme={theme} height={3} />
                 </div>
