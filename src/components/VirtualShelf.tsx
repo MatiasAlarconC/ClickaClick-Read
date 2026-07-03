@@ -438,7 +438,7 @@ export default function VirtualShelf() {
 
       {/* ── Crown moulding ── */}
       <div style={{ flexShrink: 0, position: 'relative', zIndex: 25 }}>
-        <div style={{ height: 22, background: `${WOOD_GRAIN_V},linear-gradient(to bottom,${board.top},${board.face} 55%,${board.edge})`, boxShadow: '0 5px 12px rgba(0,0,0,0.45)', borderTop: `1px solid ${board.top}` }}/>
+        <div style={{ height: 22, background: `${WOOD_GRAIN_TEX},linear-gradient(to bottom,${board.top},${board.face} 55%,${board.edge})`, boxShadow: '0 5px 12px rgba(0,0,0,0.45)', borderTop: `1px solid ${board.top}` }}/>
         <div style={{ height: 4, background: `linear-gradient(to bottom,${board.edge},${board.face})` }}/>
       </div>
 
@@ -447,10 +447,10 @@ export default function VirtualShelf() {
         <div style={{ position: 'relative' }}>
           {/* Side walls */}
           <div style={{ position:'absolute',top:0,left:0,width:18,bottom:0,zIndex:20,pointerEvents:'none',
-            background:`${WOOD_GRAIN_H},linear-gradient(to right,${board.top},${board.face} 45%,${board.edge})`,
+            background:`${WOOD_GRAIN_TEX},linear-gradient(to right,${board.top},${board.face} 45%,${board.edge})`,
             boxShadow:'inset -5px 0 12px rgba(0,0,0,0.55),inset 1px 0 0 rgba(255,255,255,0.12)' }}/>
           <div style={{ position:'absolute',top:0,right:0,width:18,bottom:0,zIndex:20,pointerEvents:'none',
-            background:`${WOOD_GRAIN_H},linear-gradient(to left,${board.top},${board.face} 45%,${board.edge})`,
+            background:`${WOOD_GRAIN_TEX},linear-gradient(to left,${board.top},${board.face} 45%,${board.edge})`,
             boxShadow:'inset 5px 0 12px rgba(0,0,0,0.55),inset -1px 0 0 rgba(255,255,255,0.12)' }}/>
 
           <div ref={rowsRef} onPointerDown={() => { setSelected(null); setSelectedDeco(null) }}
@@ -462,7 +462,7 @@ export default function VirtualShelf() {
               <div key={r} style={{ position:'absolute',left:-2,right:-2,top:r*ROW_H+DECK_H }}>
                 <div style={{ position:'absolute',bottom:BOARD_H-1,left:0,right:0,height:22,background:'linear-gradient(to top,rgba(0,0,0,0.42),transparent)',pointerEvents:'none' }}/>
                 <div style={{ height:2.5,background:`linear-gradient(to right,${board.edge},${board.top} 20%,${board.top} 80%,${board.edge})`,boxShadow:'0 -1px 2px rgba(255,255,255,0.15)' }}/>
-                <div style={{ height:BOARD_H-2.5,background:`${WOOD_GRAIN_V},linear-gradient(to bottom,${board.top} 0%,${board.face} 42%,${board.edge} 100%)`,borderBottom:'1px solid rgba(0,0,0,0.4)',boxShadow:'0 3px 8px rgba(0,0,0,0.5)' }}/>
+                <div style={{ height:BOARD_H-2.5,background:`${WOOD_GRAIN_TEX},linear-gradient(to bottom,${board.top} 0%,${board.face} 42%,${board.edge} 100%)`,borderBottom:'1px solid rgba(0,0,0,0.4)',boxShadow:'0 3px 8px rgba(0,0,0,0.5)' }}/>
               </div>
             ))}
 
@@ -542,7 +542,7 @@ export default function VirtualShelf() {
         </div>
 
         {/* Baseboard */}
-        <div style={{ height:18,background:`${WOOD_GRAIN_V},linear-gradient(to top,${board.edge},${board.face} 55%,${board.top})`,boxShadow:'0 -5px 12px rgba(0,0,0,0.45)',borderBottom:`1px solid ${board.edge}` }}/>
+        <div style={{ height:18,background:`${WOOD_GRAIN_TEX},linear-gradient(to top,${board.edge},${board.face} 55%,${board.top})`,boxShadow:'0 -5px 12px rgba(0,0,0,0.45)',borderBottom:`1px solid ${board.edge}` }}/>
 
         {/* Row management */}
         <div style={{ display:'flex',borderTop:`1px dashed ${theme.border}` }}>
