@@ -113,7 +113,7 @@ export function SignInScreen() {
   const [forgotStep, setForgotStep] = useState<'email' | 'otp' | 'newpass' | 'done'>('email')
   const [forgotLoading, setForgotLoading] = useState(false)
   const [forgotError, setForgotError] = useState<string | null>(null)
-  const [otpDigits, setOtpDigits] = useState<string[]>(['','','','','',''])
+  const [otpDigits, setOtpDigits] = useState<string[]>(['','','','','','','',''])
   const [resendCooldown, setResendCooldown] = useState(0)
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
   const [newPassword, setNewPassword] = useState('')
@@ -134,20 +134,29 @@ export function SignInScreen() {
     return () => clearTimeout(t)
   }, [resendCooldown])
 
-  const handleSendOtp = async () => {
+  const OTP_LEN = 6
+
+  const handleSendOtp = async (isResend = false) => {
     if (!forgotEmail) return
     setForgotLoading(true); setForgotError(null)
     const { error } = await supabase.auth.signInWithOtp({ email: forgotEmail, options: { shouldCreateUser: false } })
     setForgotLoading(false)
-    if (error) { setForgotError(error.message); return }
+    if (error) {
+      // Supabase rate-limit — intercept the ugly message and start our own timer
+      const secs = parseInt(error.message.match(/(\d+)\s*second/)?.[1] ?? '120', 10)
+      setResendCooldown(isNaN(secs) ? 120 : Math.max(secs, 30))
+      if (isResend || forgotStep === 'otp') return  // already on otp step, just show timer
+      setForgotError('Check your inbox — a code was already sent.')
+      return
+    }
     setResendCooldown(120)
-    setOtpDigits(['','','','','',''])
+    setOtpDigits(Array(OTP_LEN).fill(''))
     setForgotStep('otp')
   }
 
   const handleVerifyOtp = async () => {
     const code = otpDigits.join('')
-    if (code.length !== 6) { setForgotError('Enter the 6-digit code'); return }
+    if (code.length !== OTP_LEN) { setForgotError(`Enter the ${OTP_LEN}-digit code`); return }
     setForgotLoading(true); setForgotError(null)
     const { error } = await supabase.auth.verifyOtp({ email: forgotEmail, token: code, type: 'email' })
     setForgotLoading(false)
@@ -163,7 +172,7 @@ export function SignInScreen() {
     setForgotLoading(false)
     if (error) { setForgotError(error.message); return }
     setForgotStep('done')
-    setTimeout(() => { setShowForgotPw(false); setForgotStep('email'); setOtpDigits(['','','','','','']); setResendCooldown(0); setNewPassword(''); setNewPasswordConfirm(''); setForgotEmail('') }, 2000)
+    setTimeout(() => { setShowForgotPw(false); setForgotStep('email'); setOtpDigits(['','','','','','','','']); setResendCooldown(0); setNewPassword(''); setNewPasswordConfirm(''); setForgotEmail('') }, 2000)
   }
 
   return (
@@ -214,10 +223,10 @@ export function SignInScreen() {
               <>
                 <div style={{ fontFamily: 'Georgia, serif', fontSize: 26, color: theme.fg, marginBottom: 6 }}>Enter code</div>
                 <div style={{ fontSize: 14, color: theme.muted, marginBottom: 28, lineHeight: 1.6 }}>
-                  We sent a 6-digit code to <strong style={{ color: theme.fg }}>{forgotEmail}</strong>. Check your inbox.
+                  We sent an {OTP_LEN}-digit code to <strong style={{ color: theme.fg }}>{forgotEmail}</strong>. Check your inbox.
                 </div>
                 <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, display: 'block', marginBottom: 12 }}>Verification code</label>
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 8 }}>
+                <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 8 }}>
                   {otpDigits.map((d, i) => (
                     <input
                       key={i}
@@ -229,30 +238,29 @@ export function SignInScreen() {
                       onChange={e => {
                         const v = e.target.value.replace(/[^0-9]/g, '').slice(-1)
                         const next = [...otpDigits]; next[i] = v; setOtpDigits(next); setForgotError(null)
-                        if (v && i < 5) otpRefs.current[i + 1]?.focus()
+                        if (v && i < OTP_LEN - 1) otpRefs.current[i + 1]?.focus()
                       }}
                       onKeyDown={e => {
                         if (e.key === 'Backspace' && !otpDigits[i] && i > 0) otpRefs.current[i - 1]?.focus()
                       }}
                       onPaste={e => {
                         e.preventDefault()
-                        const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6)
+                        const pasted = e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, OTP_LEN)
                         const next = [...otpDigits]
-                        pasted.split('').forEach((ch, idx) => { if (idx < 6) next[idx] = ch })
+                        pasted.split('').forEach((ch, idx) => { if (idx < OTP_LEN) next[idx] = ch })
                         setOtpDigits(next)
-                        const focusIdx = Math.min(pasted.length, 5)
-                        otpRefs.current[focusIdx]?.focus()
+                        otpRefs.current[Math.min(pasted.length, OTP_LEN - 1)]?.focus()
                       }}
-                      style={{ width: 46, height: 58, background: theme.bgSecondary, border: `1.5px solid ${d ? theme.fg : theme.border}`, borderRadius: 12, fontSize: 26, fontWeight: 600, color: theme.fg, textAlign: 'center', fontFamily: 'monospace', outline: 'none', caretColor: theme.fg, transition: 'border-color 0.15s' }}
+                      style={{ width: 34, height: 50, background: theme.bgSecondary, border: `1.5px solid ${d ? theme.fg : theme.border}`, borderRadius: 10, fontSize: 22, fontWeight: 600, color: theme.fg, textAlign: 'center', fontFamily: 'monospace', outline: 'none', caretColor: theme.fg, transition: 'border-color 0.15s' }}
                     />
                   ))}
                 </div>
                 {forgotError && <div style={{ fontSize: 13, color: '#ff4444', marginTop: 8, marginBottom: 4 }}>{forgotError}</div>}
-                <PrimaryButton label={forgotLoading ? 'Verifying…' : 'Verify'} onPress={handleVerifyOtp} disabled={forgotLoading || otpDigits.join('').length !== 6} theme={theme} style={{ marginTop: 20 }} />
+                <PrimaryButton label={forgotLoading ? 'Verifying…' : 'Verify'} onPress={handleVerifyOtp} disabled={forgotLoading || otpDigits.join('').length !== OTP_LEN} theme={theme} style={{ marginTop: 20 }} />
                 <button
-                  onClick={resendCooldown > 0 ? undefined : handleSendOtp}
+                  onClick={resendCooldown > 0 ? undefined : () => handleSendOtp(true)}
                   disabled={resendCooldown > 0 || forgotLoading}
-                  style={{ marginTop: 16, background: 'none', border: 'none', color: resendCooldown > 0 ? theme.muted : theme.fg, fontSize: 13, cursor: resendCooldown > 0 ? 'default' : 'pointer', padding: '6px 0', display: 'flex', alignItems: 'center', gap: 6, opacity: resendCooldown > 0 ? 0.6 : 1 }}>
+                  style={{ marginTop: 16, background: 'none', border: 'none', color: resendCooldown > 0 ? theme.muted : theme.fg, fontSize: 13, cursor: resendCooldown > 0 ? 'default' : 'pointer', padding: '6px 0', display: 'flex', alignItems: 'center', gap: 6, opacity: resendCooldown > 0 ? 0.55 : 1 }}>
                   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
                     <path d="M12 7A5 5 0 1 1 9.5 2.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
                     <path d="M9.5 1v2.5H12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
@@ -285,7 +293,7 @@ export function SignInScreen() {
               </div>
             )}
             {forgotStep !== 'done' && (
-              <button onClick={() => { setShowForgotPw(false); setForgotStep('email'); setForgotError(null); setOtpDigits(['','','','','','']); setResendCooldown(0); setNewPassword(''); setNewPasswordConfirm('') }}
+              <button onClick={() => { setShowForgotPw(false); setForgotStep('email'); setForgotError(null); setOtpDigits(['','','','','','','','']); setResendCooldown(0); setNewPassword(''); setNewPasswordConfirm('') }}
                 style={{ marginTop: 20, background: 'none', border: 'none', color: theme.muted, fontSize: 14, cursor: 'pointer', padding: '8px 0' }}>
                 ← Back to sign in
               </button>
