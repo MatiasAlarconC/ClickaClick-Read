@@ -100,6 +100,8 @@ export default function BookDetailScreen() {
   const [pagesSaved, setPagesSaved] = useState(false)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editEndPage, setEditEndPage] = useState('')
+  const [editingDurationId, setEditingDurationId] = useState<string | null>(null)
+  const [editDurationMins, setEditDurationMins] = useState('')
   const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null)
   const [bookDbId, setBookDbId] = useState<string | null>(null)
   const [epubUploading, setEpubUploading] = useState(false)
@@ -349,9 +351,30 @@ export default function BookDetailScreen() {
     await supabase.from('reading_sessions')
       .update({ end_page: newEnd, pages_read: newPagesRead })
       .eq('id', s.id)
-    const updated = sessions.map(r => r.id === s.id ? { ...r, end_page: newEnd, pages_read: newPagesRead } : r)
+
+    // Cascade: update start_page of the immediately next chronological session
+    // Sessions state is sorted descending, so the "next after s" is the one with the
+    // smallest started_at that is still greater than s.started_at
+    const sTime = new Date(s.started_at).getTime()
+    const nextSession = sessions
+      .filter(r => r.id !== s.id && new Date(r.started_at).getTime() > sTime)
+      .sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime())[0]
+
+    let updated = sessions.map(r => r.id === s.id ? { ...r, end_page: newEnd, pages_read: newPagesRead } : r)
+
+    if (nextSession && nextSession.start_page != null && nextSession.end_page != null) {
+      const nextNewPagesRead = Math.max(0, nextSession.end_page - newEnd)
+      await supabase.from('reading_sessions')
+        .update({ start_page: newEnd, pages_read: nextNewPagesRead })
+        .eq('id', nextSession.id)
+      updated = updated.map(r => r.id === nextSession.id
+        ? { ...r, start_page: newEnd, pages_read: nextNewPagesRead }
+        : r)
+    }
+
     setSessions(updated)
     setEditingSessionId(null)
+
     // Sync current_page to the most recent session's end_page
     if (userBook) {
       const lastEndPage = updated
@@ -361,6 +384,17 @@ export default function BookDetailScreen() {
         .update({ current_page: lastEndPage })
         .eq('id', userBook.id)
     }
+  }
+
+  const saveSessionDuration = async (s: ReadingSession) => {
+    const newMins = parseFloat(editDurationMins)
+    if (isNaN(newMins) || newMins < 0) return
+    const newSecs = Math.round(newMins * 60)
+    await supabase.from('reading_sessions')
+      .update({ duration_seconds: newSecs })
+      .eq('id', s.id)
+    setSessions(prev => prev.map(r => r.id === s.id ? { ...r, duration_seconds: newSecs } : r))
+    setEditingDurationId(null)
   }
 
   const deleteSession = async (s: ReadingSession) => {
@@ -850,10 +884,35 @@ export default function BookDetailScreen() {
                           {(s.pages_read ?? 0) > 0 && (
                             <div style={{ fontSize: 14, fontWeight: 500, color: theme.fg }}>+{s.pages_read} pages</div>
                           )}
-                          {dur && <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{dur}</div>}
+
+                          {/* Duration — editable */}
+                          {editingDurationId === s.id ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4, justifyContent: 'flex-end' }}>
+                              <input
+                                autoFocus
+                                type="number"
+                                value={editDurationMins}
+                                onChange={e => setEditDurationMins(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') saveSessionDuration(s); if (e.key === 'Escape') setEditingDurationId(null) }}
+                                style={{ width: 56, padding: '3px 6px', fontSize: 12, borderRadius: 6, border: `1px solid ${theme.accent}`, background: theme.bg, color: theme.fg, textAlign: 'center' }}
+                              />
+                              <span style={{ fontSize: 11, color: theme.muted }}>min</span>
+                              <button onClick={() => saveSessionDuration(s)} style={{ padding: '3px 8px', fontSize: 11, borderRadius: 6, background: theme.accent, color: theme.accentFg, border: 'none', cursor: 'pointer', fontWeight: 600 }}>OK</button>
+                              <button onClick={() => setEditingDurationId(null)} style={{ padding: '3px 6px', fontSize: 11, borderRadius: 6, background: 'none', color: theme.muted, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>×</button>
+                            </div>
+                          ) : dur ? (
+                            <button
+                              onClick={() => { setEditingDurationId(s.id); setEditDurationMins(String(Math.round((s.duration_seconds ?? 0) / 60))); setEditingSessionId(null) }}
+                              style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0', justifyContent: 'flex-end', marginLeft: 'auto' }}>
+                              <span style={{ fontSize: 12, color: theme.muted }}>{dur}</span>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" style={{ color: theme.muted, opacity: 0.5 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            </button>
+                          ) : null}
+
+                          {/* Page range — editable */}
                           {s.start_page != null && s.end_page != null && (
                             editingSessionId === s.id ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4, justifyContent: 'flex-end' }}>
                                 <span style={{ fontSize: 11, color: theme.muted }}>p.{s.start_page}–</span>
                                 <input
                                   autoFocus
@@ -868,7 +927,7 @@ export default function BookDetailScreen() {
                               </div>
                             ) : (
                               <button
-                                onClick={() => { setEditingSessionId(s.id); setEditEndPage(String(s.end_page)) }}
+                                onClick={() => { setEditingSessionId(s.id); setEditEndPage(String(s.end_page)); setEditingDurationId(null) }}
                                 style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 5, background: `${theme.accent}18`, border: `1px solid ${theme.accent}40`, borderRadius: 8, padding: '4px 8px', cursor: 'pointer' }}>
                                 <span style={{ fontSize: 12, color: theme.fg }}>p.{s.start_page}–{s.end_page}</span>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ color: theme.accent, flexShrink: 0 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
