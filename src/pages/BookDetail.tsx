@@ -100,6 +100,8 @@ export default function BookDetailScreen() {
   const [pagesSaved, setPagesSaved] = useState(false)
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [editEndPage, setEditEndPage] = useState('')
+  const [editingStartPageId, setEditingStartPageId] = useState<string | null>(null)
+  const [editStartPage, setEditStartPage] = useState('')
   const [editingDurationId, setEditingDurationId] = useState<string | null>(null)
   const [editDurationMins, setEditDurationMins] = useState('')
   const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null)
@@ -384,6 +386,17 @@ export default function BookDetailScreen() {
         .update({ current_page: lastEndPage })
         .eq('id', userBook.id)
     }
+  }
+
+  const saveSessionStartPage = async (s: ReadingSession) => {
+    const newStart = parseInt(editStartPage)
+    if (isNaN(newStart) || newStart < 0) return
+    const newPagesRead = s.end_page != null ? Math.max(0, s.end_page - newStart) : s.pages_read ?? 0
+    await supabase.from('reading_sessions')
+      .update({ start_page: newStart, pages_read: newPagesRead })
+      .eq('id', s.id)
+    setSessions(prev => prev.map(r => r.id === s.id ? { ...r, start_page: newStart, pages_read: newPagesRead } : r))
+    setEditingStartPageId(null)
   }
 
   const saveSessionDuration = async (s: ReadingSession) => {
@@ -911,28 +924,56 @@ export default function BookDetailScreen() {
 
                           {/* Page range — editable */}
                           {s.start_page != null && s.end_page != null && (
-                            editingSessionId === s.id ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 4, justifyContent: 'flex-end' }}>
-                                <span style={{ fontSize: 11, color: theme.muted }}>p.{s.start_page}–</span>
-                                <input
-                                  autoFocus
-                                  type="number"
-                                  value={editEndPage}
-                                  onChange={e => setEditEndPage(e.target.value)}
-                                  onKeyDown={e => { if (e.key === 'Enter') saveSessionEndPage(s); if (e.key === 'Escape') setEditingSessionId(null) }}
-                                  style={{ width: 60, padding: '3px 6px', fontSize: 12, borderRadius: 6, border: `1px solid ${theme.accent}`, background: theme.bg, color: theme.fg, textAlign: 'center' }}
-                                />
-                                <button onClick={() => saveSessionEndPage(s)} style={{ padding: '3px 8px', fontSize: 11, borderRadius: 6, background: theme.accent, color: theme.accentFg, border: 'none', cursor: 'pointer', fontWeight: 600 }}>OK</button>
-                                <button onClick={() => setEditingSessionId(null)} style={{ padding: '3px 6px', fontSize: 11, borderRadius: 6, background: 'none', color: theme.muted, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>×</button>
-                              </div>
-                            ) : (
-                              <button
-                                onClick={() => { setEditingSessionId(s.id); setEditEndPage(String(s.end_page)); setEditingDurationId(null) }}
-                                style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 5, background: `${theme.accent}18`, border: `1px solid ${theme.accent}40`, borderRadius: 8, padding: '4px 8px', cursor: 'pointer' }}>
-                                <span style={{ fontSize: 12, color: theme.fg }}>p.{s.start_page}–{s.end_page}</span>
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" style={{ color: theme.accent, flexShrink: 0 }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              </button>
-                            )
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                              {/* Start page */}
+                              {editingStartPageId === s.id ? (
+                                <>
+                                  <span style={{ fontSize: 11, color: theme.muted }}>p.</span>
+                                  <input
+                                    autoFocus
+                                    type="number"
+                                    value={editStartPage}
+                                    onChange={e => setEditStartPage(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') saveSessionStartPage(s); if (e.key === 'Escape') setEditingStartPageId(null) }}
+                                    style={{ width: 56, padding: '3px 6px', fontSize: 12, borderRadius: 6, border: `1px solid ${theme.accent}`, background: theme.bg, color: theme.fg, textAlign: 'center' }}
+                                  />
+                                  <button onClick={() => saveSessionStartPage(s)} style={{ padding: '3px 8px', fontSize: 11, borderRadius: 6, background: theme.accent, color: theme.accentFg, border: 'none', cursor: 'pointer', fontWeight: 600 }}>OK</button>
+                                  <button onClick={() => setEditingStartPageId(null)} style={{ padding: '3px 6px', fontSize: 11, borderRadius: 6, background: 'none', color: theme.muted, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>×</button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingStartPageId(s.id); setEditStartPage(String(s.start_page)); setEditingSessionId(null); setEditingDurationId(null) }}
+                                  style={{ background: `${theme.accent}18`, border: `1px solid ${theme.accent}40`, borderRadius: 8, padding: '4px 7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  <span style={{ fontSize: 12, color: theme.fg }}>p.{s.start_page}</span>
+                                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" style={{ color: theme.accent }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                </button>
+                              )}
+
+                              <span style={{ fontSize: 12, color: theme.muted }}>–</span>
+
+                              {/* End page */}
+                              {editingSessionId === s.id ? (
+                                <>
+                                  <input
+                                    autoFocus
+                                    type="number"
+                                    value={editEndPage}
+                                    onChange={e => setEditEndPage(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') saveSessionEndPage(s); if (e.key === 'Escape') setEditingSessionId(null) }}
+                                    style={{ width: 56, padding: '3px 6px', fontSize: 12, borderRadius: 6, border: `1px solid ${theme.accent}`, background: theme.bg, color: theme.fg, textAlign: 'center' }}
+                                  />
+                                  <button onClick={() => saveSessionEndPage(s)} style={{ padding: '3px 8px', fontSize: 11, borderRadius: 6, background: theme.accent, color: theme.accentFg, border: 'none', cursor: 'pointer', fontWeight: 600 }}>OK</button>
+                                  <button onClick={() => setEditingSessionId(null)} style={{ padding: '3px 6px', fontSize: 11, borderRadius: 6, background: 'none', color: theme.muted, border: `1px solid ${theme.border}`, cursor: 'pointer' }}>×</button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingSessionId(s.id); setEditEndPage(String(s.end_page)); setEditingDurationId(null); setEditingStartPageId(null) }}
+                                  style={{ background: `${theme.accent}18`, border: `1px solid ${theme.accent}40`, borderRadius: 8, padding: '4px 7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
+                                  <span style={{ fontSize: 12, color: theme.fg }}>p.{s.end_page}</span>
+                                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" style={{ color: theme.accent }}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
