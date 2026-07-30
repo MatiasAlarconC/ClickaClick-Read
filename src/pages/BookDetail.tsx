@@ -105,6 +105,10 @@ export default function BookDetailScreen() {
   const [editingDurationId, setEditingDurationId] = useState<string | null>(null)
   const [editDurationMins, setEditDurationMins] = useState('')
   const [confirmDeleteSessionId, setConfirmDeleteSessionId] = useState<string | null>(null)
+  const [chapterMap, setChapterMap] = useState<{ name: string; start_page: number }[]>([])
+  const [newChapterName, setNewChapterName] = useState('')
+  const [newChapterPage, setNewChapterPage] = useState('')
+  const [savingChapterMap, setSavingChapterMap] = useState(false)
   const [bookDbId, setBookDbId] = useState<string | null>(null)
   const [epubUploading, setEpubUploading] = useState(false)
   const [epubPath, setEpubPath] = useState<string | null>(null)
@@ -190,6 +194,7 @@ export default function BookDetailScreen() {
               setRating(data.user_rating ?? 0)
               setCustomPages(String(data.custom_pages ?? book.pages ?? ''))
               setEpubPath(data.epub_storage_path ?? null)
+              setChapterMap((data.chapter_map as { name: string; start_page: number }[]) ?? [])
               if (!synopsis && data.book?.synopsis) setSynopsis(data.book.synopsis)
               // Load note summary from DB (cross-device)
               if (data.note_summary) {
@@ -423,6 +428,32 @@ export default function BookDetailScreen() {
         .update({ current_page: lastEndPage })
         .eq('id', userBook.id)
     }
+  }
+
+  const persistChapterMap = async (map: { name: string; start_page: number }[]) => {
+    if (!userBook) return
+    setSavingChapterMap(true)
+    await supabase.from('user_books').update({ chapter_map: map }).eq('id', userBook.id)
+    setUserBook(prev => prev ? { ...prev, chapter_map: map } : prev)
+    setSavingChapterMap(false)
+  }
+
+  const addChapter = async () => {
+    if (!newChapterName.trim() || !newChapterPage) return
+    const pg = parseInt(newChapterPage)
+    if (isNaN(pg)) return
+    const updated = [...chapterMap, { name: newChapterName.trim(), start_page: pg }]
+      .sort((a, b) => a.start_page - b.start_page)
+    setChapterMap(updated)
+    setNewChapterName('')
+    setNewChapterPage('')
+    await persistChapterMap(updated)
+  }
+
+  const deleteChapterEntry = async (idx: number) => {
+    const updated = chapterMap.filter((_, i) => i !== idx)
+    setChapterMap(updated)
+    await persistChapterMap(updated)
   }
 
   const continueReading = async () => {
@@ -716,6 +747,42 @@ export default function BookDetailScreen() {
                 )}
               </div>
             )}
+            {/* Chapter Map editor */}
+            {userBook && (
+              <div style={{ marginBottom: 24, paddingBottom: 24, borderBottom: `1px solid ${theme.border}` }}>
+                <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: theme.muted, marginBottom: 10 }}>Chapter Map</div>
+                <div style={{ fontSize: 12, color: theme.muted, marginBottom: 14, lineHeight: 1.5 }}>
+                  Define chapters so you can log reading progress by chapter instead of exact page number.
+                </div>
+                {chapterMap.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    {chapterMap.map((c, i) => (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: i < chapterMap.length - 1 ? `1px solid ${theme.border}` : 'none' }}>
+                        <div style={{ flex: 1 }}>
+                          <span style={{ fontSize: 13, color: theme.fg }}>{c.name}</span>
+                          <span style={{ fontSize: 12, color: theme.muted, marginLeft: 8 }}>p.{c.start_page}</span>
+                        </div>
+                        <button onClick={() => deleteChapterEntry(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: theme.muted, display: 'flex', alignItems: 'center' }}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input value={newChapterPage} onChange={e => setNewChapterPage(e.target.value)} placeholder="p." type="number"
+                    style={{ width: 60, padding: '9px 10px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 9, fontSize: 13, color: theme.fg, textAlign: 'center' }} />
+                  <input value={newChapterName} onChange={e => setNewChapterName(e.target.value)} placeholder="Chapter name"
+                    onKeyDown={e => e.key === 'Enter' && addChapter()}
+                    style={{ flex: 1, padding: '9px 10px', background: theme.bgSecondary, border: `1px solid ${theme.border}`, borderRadius: 9, fontSize: 13, color: theme.fg }} />
+                  <button onClick={addChapter} disabled={!newChapterName.trim() || !newChapterPage || savingChapterMap}
+                    style={{ padding: '9px 14px', background: theme.accent, color: theme.accentFg, border: 'none', borderRadius: 9, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: !newChapterName.trim() || !newChapterPage ? 0.5 : 1 }}>
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+
             {[
               { label: 'Pages', value: book.pages?.toString() ?? '—', editable: true },
               { label: 'Language', value: 'English', editable: true },
@@ -891,7 +958,15 @@ export default function BookDetailScreen() {
                               </button>
                             )}
                           </div>
-                          <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>{isManual ? 'Manual update' : timeStr}</div>
+                          <div style={{ fontSize: 12, color: theme.muted, marginTop: 2 }}>
+                            {isManual ? 'Manual update' : timeStr}
+                            {s.chapter_label && (
+                              <span style={{ marginLeft: 6, color: theme.muted }}>
+                                · {s.chapter_label}
+                                {s.chapter_position ? ` (${s.chapter_position})` : ''}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           {(s.pages_read ?? 0) > 0 && (

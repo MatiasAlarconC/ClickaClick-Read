@@ -50,6 +50,7 @@ export interface UserBook {
   progress_pct: number | null
   spine_url?: string | null
   shelf_pos?: { shelf: number; left: number; rot: number; scale: number } | null
+  chapter_map?: { name: string; start_page: number }[] | null
   book?: Book
 }
 
@@ -69,6 +70,8 @@ export interface ReadingSession {
   epub_cfi_end?: string | null
   last_sentence?: string | null
   chapter_name?: string | null
+  chapter_label?: string | null
+  chapter_position?: string | null
   book?: Book
 }
 

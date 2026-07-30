@@ -90,6 +90,23 @@ async function retrySupabase(
   return false
 }
 
+// ─── Chapter map helper ───────────────────────────────────────────────────────
+
+function computePageFromChapter(
+  map: { name: string; start_page: number }[],
+  chapterName: string,
+  position: 'start' | 'middle' | 'end',
+  totalPages: number
+): number {
+  const idx = map.findIndex(c => c.name === chapterName)
+  if (idx === -1) return 0
+  const chStart = map[idx].start_page
+  const chEnd = idx < map.length - 1 ? map[idx + 1].start_page - 1 : totalPages
+  if (position === 'start') return chStart
+  if (position === 'end') return chEnd
+  return chStart + Math.floor((chEnd - chStart) / 2)
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function SessionScreen() {
@@ -109,6 +126,13 @@ export default function SessionScreen() {
   const [lastSentence, setLastSentence] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState(false)
+
+  // Chapter map — loaded from userBook passed via nav state
+  const chapterMap: { name: string; start_page: number }[] = (userBook?.chapter_map as { name: string; start_page: number }[]) ?? []
+  const totalPagesForChapter = userBook?.custom_pages ?? (userBook?.book as any)?.pages_default ?? 0
+  const [useChapter, setUseChapter] = useState(false)
+  const [selectedChapter, setSelectedChapter] = useState('')
+  const [selectedPosition, setSelectedPosition] = useState<'start' | 'middle' | 'end'>('end')
 
   // ePub anchor — shown when last session was virtual, to help user locate place in physical book
   interface EpubAnchor { sentence: string; chapter: string; cfi: string; progress: number }
@@ -287,7 +311,9 @@ export default function SessionScreen() {
       ? Math.max(0, Math.floor((now - sessionStartTs.current - totalPausedMs) / 1000))
       : secs
 
-    const resolvedEndPage = endPage || page
+    const resolvedEndPage = useChapter && selectedChapter && chapterMap.length > 0
+      ? String(computePageFromChapter(chapterMap, selectedChapter, selectedPosition, totalPagesForChapter))
+      : endPage || page
     const pagesRead = Math.max(0, parseInt(resolvedEndPage) - parseInt(startPage))
 
     const sessionPayload: Record<string, unknown> = {
@@ -304,6 +330,10 @@ export default function SessionScreen() {
       session_type: 'physical',
     }
     if (lastSentence.trim()) sessionPayload.last_sentence = lastSentence.trim()
+    if (useChapter && selectedChapter) {
+      sessionPayload.chapter_label = selectedChapter
+      sessionPayload.chapter_position = selectedPosition
+    }
 
     // Persist locally before network call — recovered on next visit if needed
     localStorage.setItem('pendingSession', JSON.stringify(sessionPayload))
@@ -588,12 +618,55 @@ export default function SessionScreen() {
             <motion.div initial={{ y: 300 }} animate={{ y: 0 }} exit={{ y: 300 }}
               style={{ width: '100%', maxWidth: 500, background: bg, borderRadius: '24px 24px 0 0', padding: '28px 24px 48px' }}>
               <div style={{ fontFamily: 'Georgia, serif', fontSize: 22, color: fg, marginBottom: 6 }}>End Session</div>
-              <div style={{ fontSize: 14, color: muted, marginBottom: 24 }}>You read for {fmt(secs)}</div>
-              <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: muted, display: 'block', marginBottom: 8 }}>What page did you finish on?</label>
-                <input value={endPage} onChange={e => setEndPage(e.target.value)} type="number" placeholder={page}
-                  style={{ width: '100%', padding: '13px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 16, color: fg }} />
-              </div>
+              <div style={{ fontSize: 14, color: muted, marginBottom: 20 }}>You read for {fmt(secs)}</div>
+
+              {/* Mode toggle — only when chapter map is defined */}
+              {chapterMap.length > 0 && (
+                <div style={{ display: 'flex', gap: 0, marginBottom: 20, background: dark ? '#1A1A1A' : '#F5F5F3', borderRadius: 10, padding: 3 }}>
+                  {(['page', 'chapter'] as const).map(mode => (
+                    <button key={mode} onClick={() => setUseChapter(mode === 'chapter')}
+                      style={{ flex: 1, padding: '9px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, transition: 'background 0.15s',
+                        background: (mode === 'chapter') === useChapter ? fg : 'transparent',
+                        color: (mode === 'chapter') === useChapter ? bg : muted }}>
+                      {mode === 'page' ? 'By Page' : 'By Chapter'}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {useChapter && chapterMap.length > 0 ? (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: muted, display: 'block', marginBottom: 8 }}>Chapter</label>
+                  <select value={selectedChapter} onChange={e => setSelectedChapter(e.target.value)}
+                    style={{ width: '100%', padding: '13px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 15, color: selectedChapter ? fg : muted, appearance: 'none', WebkitAppearance: 'none' }}>
+                    <option value="">Pick a chapter…</option>
+                    {chapterMap.map(c => (
+                      <option key={c.name} value={c.name}>{c.name} (p.{c.start_page})</option>
+                    ))}
+                  </select>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    {(['start', 'middle', 'end'] as const).map(pos => (
+                      <button key={pos} onClick={() => setSelectedPosition(pos)}
+                        style={{ flex: 1, padding: '10px 0', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: selectedPosition === pos ? 600 : 400, transition: 'background 0.15s',
+                          background: selectedPosition === pos ? fg : (dark ? '#1A1A1A' : '#F5F5F3'),
+                          color: selectedPosition === pos ? bg : muted }}>
+                        {pos.charAt(0).toUpperCase() + pos.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedChapter && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: muted }}>
+                      ≈ page {computePageFromChapter(chapterMap, selectedChapter, selectedPosition, totalPagesForChapter)}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: muted, display: 'block', marginBottom: 8 }}>What page did you finish on?</label>
+                  <input value={endPage} onChange={e => setEndPage(e.target.value)} type="number" placeholder={page}
+                    style={{ width: '100%', padding: '13px', background: dark ? '#1A1A1A' : '#F5F5F3', border: 'none', borderRadius: 10, fontSize: 16, color: fg }} />
+                </div>
+              )}
               <div style={{ marginBottom: 16 }}>
                 <label style={{ fontSize: 11, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: muted, display: 'block', marginBottom: 8 }}>Quick note (optional)</label>
                 <textarea value={note} onChange={e => setNote(e.target.value)} placeholder="Any thoughts or highlights…" rows={3}
