@@ -54,8 +54,10 @@ export default function StatsScreen() {
       const effectivePages = (b.current_page && b.current_page < bookPages) ? b.current_page : bookPages
       if (effectivePages > tracked) pagesRead += (effectivePages - tracked)
     }
-    // Timed sessions only (exclude is_manual and zero-duration entries)
+    // Timed sessions: for time-based stats (hours, pace) — requires duration > 0
     const timedSessions = sessions.filter(s => !s.is_manual && (s.duration_seconds ?? 0) > 0)
+    // Page sessions: for page counting — includes chapter-only sessions with 0 duration
+    const pageSessions = sessions.filter(s => !s.is_manual)
     const timedPages = timedSessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
     const timedHours = timedSessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / 3600
     const totalTimedSecs = timedSessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0)
@@ -66,10 +68,11 @@ export default function StatsScreen() {
     // True daily averages: over all days that had timed sessions
     const dailyAvgPages = timedDays > 0 ? Math.round(timedPages / timedDays) : 0
     const avgDailyMins = timedDays > 0 ? Math.round(totalTimedSecs / 60 / timedDays) : 0
-    // Today's progress for goal tracking (timed sessions only)
+    // Today's progress: use pageSessions so chapter sessions with 0 duration are counted
     const todayStr = new Date().toDateString()
+    const todayPageSessions = pageSessions.filter(s => new Date(s.started_at).toDateString() === todayStr)
     const todayTimedSessions = timedSessions.filter(s => new Date(s.started_at).toDateString() === todayStr)
-    const todayPages = todayTimedSessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
+    const todayPages = todayPageSessions.reduce((s, r) => s + (r.pages_read ?? 0), 0)
     const todayMins = Math.round(todayTimedSessions.reduce((s, r) => s + (r.duration_seconds ?? 0), 0) / 60)
     return { booksFinished, pagesRead, hours, dailyAvgPages, pacePerHour, avgDailyMins, todayPages, todayMins }
   }, [sessions, userBooks])
@@ -108,10 +111,10 @@ export default function StatsScreen() {
     return rows.sort((a, b) => b.pages - a.pages)
   }, [sessions, userBooks])
 
-  // Heatmap: last 16 weeks × 7 days (timed sessions only)
+  // Heatmap: last 16 weeks × 7 days
   const WEEKS = 16
   const heatmap = useMemo(() => {
-    const timedOnly = sessions.filter(s => !s.is_manual && (s.duration_seconds ?? 0) > 0)
+    const timedOnly = sessions.filter(s => !s.is_manual)
     const sessionDates = new Set(timedOnly.map(s => new Date(s.started_at).toDateString()))
     const sessionPagesByDate: Record<string, number> = {}
     for (const s of timedOnly) {
